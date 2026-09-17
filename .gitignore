@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+target/
+build/
+logs/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+*.log.gz
+
+# Local env
+application-local.yml
+application-ga.yml
+
+# AI tools
+.claude/
+.codex/
+.codeartsdoer/
+.workbuddy/
+
+# Tests
+coverage/

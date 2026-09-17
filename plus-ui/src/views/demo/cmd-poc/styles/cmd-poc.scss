@@ -1,0 +1,755 @@
+/**
+ * Customer Master Data · POC 工作台样式
+ *
+ * 作用域说明：
+ * - 页面内容位于 .cmd-poc 内部；el-dialog 使用 append-to-body 挂载到 body 下，
+ *   因此弹窗统一带 .poc-dialog 类，二者共用同一套变量与通用样式。
+ * - 主题色 --role-color 由根节点按角色内联注入，未注入时回退主色。
+ */
+
+.cmd-poc,
+.poc-dialog {
+  --g-sidebar: #0f3b5c;
+  --g-content: #f5f7fa;
+  --g-card: #ffffff;
+  --g-divider: #eceff4;
+  --g-text: #30343a;
+  --g-text2: #8a93a0;
+  --g-border: #d9dee5;
+  --btn-primary: #176c9f;
+  --btn-success: #4d944e;
+  --btn-warning: #db7c18;
+  --btn-danger: #d9534f;
+  --role-color: #176c9f;
+}
+
+/* ============================ 布局骨架 ============================ */
+.cmd-poc {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--g-content);
+  color: var(--g-text);
+  font-size: 14px;
+
+  .cmd-body {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+
+    &.sidebar-collapsed {
+      .sidebar {
+        display: none;
+      }
+    }
+  }
+
+  .cmd-main {
+    flex: 1;
+    min-width: 0;
+    overflow: auto;
+    padding: 0 20px 32px;
+  }
+}
+
+/* ============================ 顶部导航 ============================ */
+.cmd-poc {
+  .navbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    height: 56px;
+    padding: 0 18px;
+    background: var(--g-card);
+    border-bottom: 1px solid var(--g-divider);
+    flex-shrink: 0;
+  }
+  .navbar-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+  }
+  .brand-logo {
+    width: 30px;
+    height: 30px;
+    border-radius: 6px;
+    background: var(--role-color);
+    color: #fff;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+  }
+  .brand-title {
+    font-weight: 600;
+    color: var(--g-text);
+    white-space: nowrap;
+  }
+  .env-tag {
+    flex-shrink: 0;
+  }
+  .right-menu {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-left: auto;
+  }
+  .role-label {
+    color: var(--g-text2);
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  .role-select {
+    width: 200px;
+  }
+  .top-avatar {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+/* ============================ 左侧菜单 ============================ */
+.cmd-poc {
+  .sidebar {
+    width: 230px;
+    flex-shrink: 0;
+    background: linear-gradient(#153f65, #0d304e);
+    padding: 16px 12px;
+    color: #fff;
+    overflow: auto;
+  }
+  .side-user {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 8px 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+  }
+  .side-avatar {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    color: #fff;
+  }
+  .side-name {
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .side-scope {
+    font-size: 12px;
+    color: #acd1e5;
+  }
+  .nav-title {
+    font-size: 10px;
+    color: #8fc5dd;
+    letter-spacing: 1px;
+    padding: 18px 10px 8px;
+  }
+  .side-menu {
+    border-right: none;
+    background: transparent;
+  }
+  .side-menu .el-menu-item {
+    height: 42px;
+    line-height: 42px;
+    border-radius: 7px;
+    margin: 3px 0;
+    &:hover,
+    &.is-active {
+      background: rgba(255, 255, 255, 0.12);
+    }
+  }
+  .cn-ico {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.12);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 10px;
+    font-size: 12px;
+  }
+  .cn-txt {
+    font-size: 13px;
+  }
+  .cn-badge {
+    margin-left: auto;
+    background: #d87520;
+    color: #fff;
+    border-radius: 10px;
+    padding: 0 7px;
+    font-size: 11px;
+    line-height: 18px;
+    height: 18px;
+  }
+}
+
+/* ============================ 页面通用 ============================ */
+.cmd-poc {
+  .crumb {
+    height: 48px;
+    display: flex;
+    align-items: center;
+    font-size: 13px;
+  }
+  .page-head {
+    margin-bottom: 14px;
+    h2 {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--g-text);
+    }
+    p {
+      margin: 4px 0 0;
+      font-size: 13px;
+      color: var(--g-text2);
+    }
+  }
+  .page {
+    padding-bottom: 8px;
+  }
+  .page-actions {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  .toolbar {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+  .card-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--g-text);
+  }
+  .card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  /* 统一卡片分区：筛选条件 / 数据列表 / 操作区 */
+  .page-card {
+    margin-bottom: 12px;
+    border-radius: 8px;
+    border: 1px solid var(--g-divider);
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+  .card-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .card-toolbar-right {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .table-foot {
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--g-text2);
+  }
+}
+
+/* 通用数据表：表头浅灰底 + 紧凑行高 */
+.cmd-poc,
+.poc-dialog {
+  .data-table {
+    font-size: 13px;
+    th.el-table__cell {
+      background: #f0f4f8 !important;
+      color: #47576b;
+      font-weight: 600;
+    }
+    td.el-table__cell {
+      padding: 8px 0;
+    }
+  }
+}
+
+/* ============================ 工作台 ============================ */
+.cmd-poc {
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+  .stat-card {
+    position: relative;
+    border-radius: 8px;
+  }
+  .stat-top {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 3px;
+    background: var(--role-color);
+    border-radius: 8px 8px 0 0;
+  }
+  .stat-label {
+    font-size: 13px;
+    color: var(--g-text2);
+  }
+  .stat-value {
+    font-size: 26px;
+    font-weight: 700;
+    color: var(--g-text);
+    margin: 2px 0;
+  }
+  .stat-foot {
+    font-size: 12px;
+    color: var(--g-text2);
+  }
+  .dash-bottom {
+    display: grid;
+    grid-template-columns: 1.6fr 1fr;
+    gap: 12px;
+  }
+  .quick-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px;
+  }
+  .quick-card {
+    cursor: pointer;
+    border-radius: 8px;
+    transition: transform 0.15s;
+    &:hover {
+      transform: translateY(-2px);
+    }
+  }
+  .q-ico {
+    width: 30px;
+    height: 30px;
+    border-radius: 7px;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+  }
+  .q-title {
+    margin-top: 8px;
+    font-weight: 600;
+    font-size: 14px;
+  }
+  .q-desc {
+    margin-top: 2px;
+    font-size: 12px;
+    color: var(--g-text2);
+  }
+  .task {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .task .n {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+  }
+  .task-body {
+    flex: 1;
+    b {
+      display: block;
+      font-size: 13px;
+    }
+    small {
+      color: var(--g-text2);
+      font-size: 12px;
+    }
+  }
+}
+
+/* ============================ 治理 / 审批 / 质量 ============================ */
+.cmd-poc {
+  .score-card {
+    margin-bottom: 12px;
+  }
+  .score-head {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: 12px;
+    b {
+      font-size: 16px;
+      color: var(--btn-warning);
+    }
+    span {
+      font-size: 13px;
+      color: var(--g-text2);
+    }
+  }
+  .compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .flow-compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .flow-card {
+    .flow-steps {
+      margin: 6px 0 10px;
+    }
+  }
+  .flow-remark {
+    font-size: 12px;
+    color: var(--g-text2);
+    margin: 0 0 10px;
+  }
+  .score-layout {
+    display: grid;
+    grid-template-columns: 110px 1fr;
+    gap: 16px;
+    align-items: center;
+  }
+  .score-ring {
+    width: 96px;
+    height: 96px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    font-weight: 800;
+    color: #27653a;
+  }
+  .admin-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .admin-card {
+    h3 {
+      margin: 0 0 6px;
+      font-size: 14px;
+    }
+    p {
+      margin: 0 0 10px;
+      font-size: 12px;
+      color: var(--g-text2);
+      min-height: 32px;
+    }
+  }
+  .hier-tree {
+    .el-tree-node__content {
+      height: 36px;
+    }
+  }
+  .tree-node {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    width: 100%;
+  }
+  .node-label {
+    font-weight: 500;
+  }
+  .node-actions {
+    margin-left: 8px;
+  }
+}
+
+/* DQ 分值着色 */
+.cmd-poc,
+.poc-dialog {
+  .dq-score {
+    font-weight: 700;
+  }
+  .dq-score.s-ok {
+    color: #3f8d52;
+  }
+  .dq-score.s-mid {
+    color: var(--btn-warning);
+  }
+  .dq-score.s-bad {
+    color: var(--btn-danger);
+  }
+}
+
+/* ============================ One ID 编码预览 ============================ */
+.cmd-poc {
+  .pattern-preview {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #102f49;
+    color: #fff;
+    border-radius: 8px;
+    padding: 12px;
+    margin: 10px 0;
+    font-size: 13px;
+  }
+  .pattern-part {
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 6px;
+    padding: 6px 10px;
+  }
+}
+
+/* ============================ 弹窗通用 ============================ */
+.poc-dialog {
+  .poc-dialog-body {
+    padding: 2px 0;
+  }
+  .d-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .section-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--g-text);
+    margin-bottom: 8px;
+  }
+  .kpi-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  .kpi {
+    flex: 1;
+    min-width: 120px;
+    background: var(--g-content);
+    border: 1px solid var(--g-divider);
+    border-radius: 8px;
+    padding: 10px 12px;
+    b {
+      display: block;
+      font-size: 18px;
+      color: var(--g-text);
+    }
+    span {
+      font-size: 12px;
+      color: var(--g-text2);
+    }
+  }
+  .meta-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #edf7fa;
+    border: 1px solid #a9c9d8;
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    font-size: 13px;
+    b {
+      color: #176c9f;
+    }
+  }
+  .form-section {
+    grid-column: 1 / -1;
+    background: #eaf2f8;
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-weight: 700;
+    font-size: 13px;
+    margin: 8px 0 12px;
+  }
+  .form-tip {
+    margin-left: 8px;
+    font-size: 12px;
+    color: var(--g-text2);
+  }
+  .danger-box {
+    margin-top: 12px;
+    border: 1px solid #f3c3c6;
+    background: #fff1f2;
+    color: #9e3c48;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+  .diff-old {
+    color: #9e3c48;
+  }
+  .diff-new {
+    color: #2f7140;
+  }
+  .db-panel {
+    background: #102f49;
+    color: #d9f1ff;
+    border-radius: 8px;
+    padding: 12px;
+    font-family: 'Courier New', Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.7;
+    margin: 0;
+    white-space: pre-wrap;
+  }
+  .ocr-upload {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .upload-name {
+    flex: 1;
+    font-size: 12px;
+    color: var(--g-text2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .timeline-v {
+    border-left: 2px solid #9ab3c6;
+    margin-left: 12px;
+    padding-left: 18px;
+  }
+  .timeline-v .event {
+    position: relative;
+    margin: 12px 0;
+    font-size: 13px;
+    &::before {
+      content: '';
+      position: absolute;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--btn-primary);
+      left: -23px;
+      top: 5px;
+    }
+  }
+  .event-desc {
+    color: var(--g-text2);
+    margin-top: 2px;
+  }
+  .upload-zone {
+    width: 100%;
+  }
+  .upload-inner {
+    padding: 12px;
+  }
+  .upload-ico {
+    font-size: 28px;
+  }
+  .upload-text {
+    font-size: 13px;
+    color: var(--g-text);
+  }
+  .upload-hint {
+    font-size: 12px;
+    color: var(--g-text2);
+    margin-top: 4px;
+  }
+  .btn-row {
+    display: flex;
+    gap: 8px;
+  }
+  .code-panel {
+    background: #102f49;
+    color: #d9f1ff;
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 12px;
+    overflow: auto;
+    .code-head {
+      color: #8fc5dd;
+      margin-bottom: 6px;
+    }
+  }
+  .mini-stat {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .ms {
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 12px;
+  }
+  .ms.ok {
+    background: #e7f5eb;
+    color: #2d7540;
+  }
+  .ms.fail {
+    background: #fff0f2;
+    color: #9e3c48;
+  }
+  .ms.skip {
+    background: #eef1f5;
+    color: #6c8192;
+  }
+}
+
+/* ============================ 间距工具类 ============================ */
+.cmd-poc,
+.poc-dialog {
+  .m-t-12 {
+    margin-top: 12px;
+  }
+  .m-t-16 {
+    margin-top: 16px;
+  }
+  .m-b-12 {
+    margin-bottom: 12px;
+  }
+}
+
+/* ============================ 响应式 ============================ */
+@media (max-width: 1280px) {
+  .cmd-poc {
+    .stat-grid,
+    .admin-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .dash-bottom,
+    .compare,
+    .two-col,
+    .flow-compare {
+      grid-template-columns: 1fr;
+    }
+  }
+}
