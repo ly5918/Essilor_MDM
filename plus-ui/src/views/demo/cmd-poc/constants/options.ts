@@ -94,7 +94,17 @@ export const CHANGE_FIELD_OPTIONS = ['经营地址', '统一社会信用代码']
 export const CHANGE_TYPE_OPTIONS = ['关键属性变更', '一般属性变更'];
 export const DEACTIVATE_STATUS_OPTIONS = ['Inactive', 'Archived'];
 export const DEACTIVATE_REASON_OPTIONS = ['24个月无交易 · 人工填报', '门店关闭', '重复记录'];
-export const HIER_RELATION_OPTIONS = ['Main Account → Door', 'A3 → A2', 'A2 → A1'];
+export const HIER_TYPE_OPTIONS = ['Legal Hierarchy', 'Sales Hierarchy', 'Payer Hierarchy'];
+export const HIER_LEVEL_OPTIONS = ['全部层级', 'A3', 'A2', 'A1'];
+export const HIER_BU_OPTIONS = ['High End', 'Mainstream', 'All Authorized BU'];
+export const HIER_STATUS_OPTIONS = ['Active', 'Future', 'Expired'];
+export const HIER_RELATION_OPTIONS = ['A3 Commercial Entity → A2 Main Account', 'A2 Main Account → A1 Door'];
+export const HIER_VALIDATION_CASE_OPTIONS = [
+  { value: 'pass', label: '通过示例：合法新增关系' },
+  { value: 'same', label: '失败示例：父子节点相同' },
+  { value: 'multiple', label: '失败示例：多父冲突' },
+  { value: 'loop', label: '失败示例：完整路径循环' }
+];
 export const RULE_SET_OPTIONS = ['Door · High End · Frame', 'Door · Mainstream · Lens'];
 export const RE_EVAL_VERSION_OPTIONS = ['v1.5 Draft'];
 export const RE_EVAL_SCOPE_OPTIONS = ['High End · Active Customer', 'Mainstream · Active Customer', 'All Active Customer'];

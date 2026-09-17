@@ -3,21 +3,27 @@
     <!-- 筛选条件 / 操作区 -->
     <el-card class="page-card" shadow="never" :body-style="{ padding: '16px 20px' }">
       <template #header>
-        <div class="card-head">
-          <span class="card-title">筛选条件</span>
-          <div class="card-toolbar-right">
-            <el-button v-if="!readOnly" plain @click="openDialog('ocr')">OCR创建</el-button>
-            <el-button v-if="!readOnly" type="primary" plain icon="Plus" @click="openDialog('newCustomer')">新建客户</el-button>
-            <el-button type="primary" plain icon="Search" @click="onSearch">查询</el-button>
-          </div>
-        </div>
+        <span class="card-title">筛选条件</span>
       </template>
 
-      <div class="card-toolbar">
+      <el-alert class="permission-note poc-note" :type="readOnly ? 'info' : 'success'" :closable="false" show-icon>
+        <template #title>
+          <b>当前数据权限：{{ role.scope }}</b>
+          <span class="note-sep">·</span>
+          <span>{{ readOnly ? '只读查询，不显示创建、编辑、停用按钮。' : '记录、字段和操作按钮按角色与Scope动态控制。' }}</span>
+        </template>
+      </el-alert>
+
+      <div class="card-toolbar m-t-12">
         <el-input v-model="query.keyword" placeholder="名称、One ID、信用代码" clearable style="width: 280px" @keyup.enter="onSearch" />
         <el-select v-model="query.bu" placeholder="全部BU" clearable style="width: 160px">
           <el-option v-for="bu in BU_OPTIONS" :key="bu" :label="bu" :value="bu" />
         </el-select>
+        <el-select v-model="query.status" placeholder="全部状态" clearable style="width: 140px">
+          <el-option label="Active" value="active" />
+          <el-option label="Pending" value="pending" />
+        </el-select>
+        <el-button type="primary" plain icon="Search" @click="onSearch">查询</el-button>
       </div>
     </el-card>
 
@@ -30,16 +36,17 @@
             <el-link type="primary" :underline="false" @click="onViewDetail(row)">{{ row.oneId }}</el-link>
           </template>
         </el-table-column>
-        <el-table-column label="客户名称" prop="legalName" min-width="220" show-overflow-tooltip />
+        <el-table-column label="客户名称" prop="legalName" min-width="200" show-overflow-tooltip />
         <el-table-column label="BU" prop="bu" min-width="180" />
-        <el-table-column label="状态" width="130" align="center">
+        <el-table-column label="来源" prop="sourceSystem" min-width="160" />
+        <el-table-column label="状态" width="120" align="center">
           <template #default="{ row }">
             <el-tag :type="CUSTOMER_STATUS_MAP[row.status].type" size="small">{{ CUSTOMER_STATUS_MAP[row.status].label }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="140" fixed="right" align="center">
+        <el-table-column label="操作" width="120" fixed="right" align="center">
           <template #default="{ row }">
-            <el-button link type="primary" @click="onViewDetail(row)">查看详情</el-button>
+            <el-button link type="primary" @click="onViewDetail(row)">{{ row.status === 'pending' ? '查看申请' : '查看客户' }}</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -55,10 +62,10 @@ import { BU_OPTIONS, CUSTOMER_STATUS_MAP } from '../../constants/options';
 
 defineOptions({ name: 'CmdPocCustomersPanel' });
 
-const { readOnly, openDialog, customers, loadCustomers } = useCmdPoc();
+const { readOnly, role, openDialog, customers, loadCustomers } = useCmdPoc();
 
 const loading = ref(false);
-const query = ref({ keyword: '', bu: '' });
+const query = ref({ keyword: '', bu: '', status: '' });
 
 const tableData = computed(() =>
   customers.value.filter(row => {
@@ -69,7 +76,8 @@ const tableData = computed(() =>
       row.oneId.toLowerCase().includes(keyword) ||
       row.creditCode.toLowerCase().includes(keyword);
     const matchBu = !query.value.bu || row.bu.includes(query.value.bu);
-    return matchKeyword && matchBu;
+    const matchStatus = !query.value.status || row.status === query.value.status;
+    return matchKeyword && matchBu && matchStatus;
   })
 );
 

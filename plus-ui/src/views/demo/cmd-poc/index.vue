@@ -9,19 +9,53 @@
 
       <!-- 主内容区 -->
       <main class="cmd-main">
-        <el-breadcrumb class="crumb" separator="/">
-          <el-breadcrumb-item>CMD POC</el-breadcrumb-item>
+        <div class="crumb-wrap">
+          <el-tooltip content="隐藏/显示菜单" effect="dark" placement="bottom">
+            <div class="hamburger-shell" @click="toggleSidebar">
+              <hamburger :is-active="!sidebarCollapsed" class="hamburger-container" />
+            </div>
+          </el-tooltip>
+          <el-breadcrumb class="crumb" separator="/">
+            <el-breadcrumb-item>CMD POC</el-breadcrumb-item>
           <el-breadcrumb-item v-if="currentSub">{{ currentSubLabel }}</el-breadcrumb-item>
           <el-breadcrumb-item>{{ pageHeadTitle }}</el-breadcrumb-item>
-        </el-breadcrumb>
-
-        <!-- 标签导航：位于内容区标题区域内 -->
-        <PocTagsView @refresh="refreshPanel" />
-
-        <div class="page-head">
-          <h2>{{ pageHeadTitle }}</h2>
-          <p>{{ pageSub }}</p>
+          </el-breadcrumb>
         </div>
+
+        <!-- 页面标题：位于多标签栏上方 -->
+        <div class="page-title">
+          <div class="page-title-text">
+            <h2>{{ pageHeadTitle }}</h2>
+            <p>{{ pageSub }}</p>
+          </div>
+          <div v-if="currentPage === 'customers' && !readOnly" class="page-title-actions">
+            <el-button plain @click="openDialog('ocr')">查看OCR识别结果</el-button>
+            <el-button type="primary" plain icon="Plus" @click="openDialog('newCustomer')">新建客户</el-button>
+          </div>
+          <div v-else-if="currentPage === 'hier' && !readOnly" class="page-title-actions">
+            <el-button
+              v-if="roleKey === 'business'"
+              type="primary"
+              plain
+              icon="Plus"
+              @click="openDialog('hierAdd', { mode: 'request' })"
+            >
+              发起层级关系申请
+            </el-button>
+            <el-button
+              v-else
+              type="primary"
+              plain
+              icon="Plus"
+              @click="openDialog('hierAdd', { mode: 'manage' })"
+            >
+              新增层级关系
+            </el-button>
+          </div>
+        </div>
+
+        <!-- 标签导航：位于页面标题下方 -->
+        <PocTagsView @refresh="refreshPanel" />
 
         <!-- 页面面板：按当前角色菜单动态渲染 -->
         <component :is="currentPanel" :key="`${currentPage}-${panelRefreshTick}`" />
@@ -43,6 +77,7 @@ import PocNavbar from './components/PocNavbar.vue';
 import PocSidebar from './components/PocSidebar.vue';
 import DialogHost from './components/DialogHost.vue';
 import PocTagsView from './components/PocTagsView.vue';
+import Hamburger from '@/components/Hamburger/index.vue';
 
 // 页面面板
 import DashPanel from './components/panels/DashPanel.vue';
@@ -63,7 +98,7 @@ defineOptions({ name: 'CmdPoc' });
 
 const props = defineProps<{ defaultRole?: RoleKey }>();
 
-const { role, roleKey, currentPage, currentSub, currentMenu, pageTitle, sidebarCollapsed, loadCustomers, loadMetadataFields } = createCmdPoc(
+const { role, roleKey, currentPage, currentSub, currentMenu, pageTitle, readOnly, openDialog, sidebarCollapsed, toggleSidebar, loadCustomers, loadMetadataFields } = createCmdPoc(
   (props.defaultRole ?? 'business') as RoleKey
 );
 

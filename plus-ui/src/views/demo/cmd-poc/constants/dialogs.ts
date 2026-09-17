@@ -19,6 +19,7 @@ export type DialogKey =
   | 'permissions'
   | 'search'
   | 'batchResult'
+  | 'batchUpload'
   | 'hierAdd'
   | 'loop'
   | 'integration'
@@ -33,18 +34,21 @@ export type DialogKey =
   | 'reEvaluate'
   | 'ocr';
 
+export type DialogTitle = string | ((payload?: Record<string, unknown>) => string);
+export type DialogButtonText = string | ((payload?: Record<string, unknown>) => string);
+
 export interface DialogMeta {
   key: DialogKey;
-  title: string;
+  title: DialogTitle;
   width: string;
   wide: boolean;
   /** 弹窗底部是否显示「确认」按钮（原型恒为 true） */
   confirmable: boolean;
   /** 确认按钮文案 */
-  confirmText?: string;
+  confirmText?: DialogButtonText;
 }
 
-const define = (key: DialogKey, title: string, wide = false, confirmText = '确认'): DialogMeta => ({
+const define = (key: DialogKey, title: DialogTitle, wide = false, confirmText: DialogButtonText = '确认'): DialogMeta => ({
   key,
   title,
   width: wide ? '900px' : '680px',
@@ -64,7 +68,25 @@ export const DIALOG_MAP: Record<DialogKey, DialogMeta> = {
   permissions: define('permissions', '角色与权限管理', true),
   search: define('search', '客户查询结果', true, '查询'),
   batchResult: define('batchResult', '批量结果分流', true),
-  hierAdd: define('hierAdd', '新增客户层级关系', true, '提交'),
+  batchUpload: define('batchUpload', '新建批量导入任务', true, '提交'),
+  hierAdd: define(
+    'hierAdd',
+    payload => {
+      const mode = payload?.mode as string | undefined;
+      return mode === 'request'
+        ? '发起层级关系申请'
+        : mode === 'edit'
+          ? '编辑层级关系'
+          : mode === 'child'
+            ? '增加子节点'
+            : '新增层级关系';
+    },
+    true,
+    payload => {
+      const mode = payload?.mode as string | undefined;
+      return mode === 'request' ? '提交申请' : mode === 'edit' ? '保存' : '提交审批';
+    }
+  ),
   loop: define('loop', 'Loop Check'),
   integration: define('integration', '集成任务详情', true, 'Retry'),
   auditExport: define('auditExport', '导出审计报告', false, '导出'),

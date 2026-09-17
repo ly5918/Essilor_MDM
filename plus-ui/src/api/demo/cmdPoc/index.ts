@@ -161,6 +161,18 @@ export const listTemplateMappings = (): Promise<TemplateMappingVO[]> =>
 export const getHierarchy = (): Promise<HierarchyNodeVO[]> =>
   USE_MOCK ? delay(mock.mockHierarchy) : unwrap(request({ url: '/cmd/poc/hierarchy/tree', method: 'get' }));
 
+export const getHierarchyNode = (key: string): Promise<HierarchyNodeVO | undefined> =>
+  USE_MOCK ? delay(mock.mockHierarchyNodes[key]) : unwrap(request({ url: `/cmd/poc/hierarchy/node/${key}`, method: 'get' }));
+
+export const searchHierarchy = (keyword: string): Promise<HierarchyNodeVO[]> =>
+  USE_MOCK
+    ? delay(
+        keyword.includes('苏州')
+          ? [mock.mockHierarchyNodes.suzhou]
+          : [mock.mockHierarchyNodes.store, mock.mockHierarchyNodes.legal, mock.mockHierarchyNodes.group]
+      )
+    : unwrap(request({ url: '/cmd/poc/hierarchy/search', method: 'get', params: { keyword } }));
+
 export const addHierarchyRelation = (data: HierarchyRelationForm): Promise<string> =>
   USE_MOCK ? delay('层级关系已提交，Loop Check 通过') : unwrap(request({ url: '/cmd/poc/hierarchy/relation', method: 'post', data }));
 

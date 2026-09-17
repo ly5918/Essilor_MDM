@@ -213,12 +213,14 @@ export const mockBatchResult: BatchResultVO = {
   exact: 42,
   suspected: 18,
   created: 26,
+  review: 16,
   invalid: 14,
   routes: [
-    { result: 'Exact', handling: '关联已有One ID', owner: 'System' },
-    { result: 'Suspected', handling: '进入人工治理', owner: 'BU/GC Steward' },
-    { result: 'New', handling: '审批后生成One ID', owner: 'Steward' },
-    { result: 'Invalid 14', handling: '返回修复', owner: 'Business User' }
+    { result: 'Exact', handling: '关联已有One ID', owner: 'System', detail: '查看42条' },
+    { result: 'Suspected', handling: '进入人工治理', owner: 'BU/GC Steward', detail: '查看18条' },
+    { result: 'Review', handling: '规则或业务复核', owner: 'BU Steward', detail: '查看16条' },
+    { result: 'New', handling: '审批后生成One ID', owner: 'Steward', detail: '查看26条' },
+    { result: 'Invalid', handling: '返回修复', owner: 'Business User', detail: '查看14条' }
   ]
 };
 
@@ -234,25 +236,80 @@ export const mockTemplateMappings: TemplateMappingVO[] = [
 ];
 
 /** ---------------------------------- 客户层级 ---------------------------------- */
-export const mockHierarchy: HierarchyNodeVO[] = [
-  {
+export const mockHierarchyNodes: Record<string, HierarchyNodeVO> = {
+  group: {
     id: 'A3-001',
     level: 'A3',
-    label: 'A3 · 华东商业实体',
+    type: 'Commercial Entity',
+    label: 'A3 · 远见集团',
+    name: '远见集团',
+    oneId: 'CN-CUS-000001',
+    payerId: '—',
+    payerName: '—',
+    childrenCount: 12,
+    descendants: 2186,
+    parent: '无',
+    path: '远见集团',
+    validity: '2026-01-01 → 9999-12-31',
+    status: 'Active'
+  },
+  legal: {
+    id: 'A2-0188',
+    level: 'A2',
+    type: 'Main Account',
+    label: 'A2 · 远见华东法人',
+    name: '远见华东法人',
+    oneId: 'CN-CUS-000021',
+    payerId: 'GC-PY-0091',
+    payerName: '远见集团',
+    childrenCount: 50,
+    descendants: 1286,
+    parent: '远见集团',
+    path: '远见集团 / 远见华东法人',
+    validity: '2026-01-01 → 9999-12-31',
+    status: 'Active'
+  },
+  store: {
+    id: 'A1-000125',
+    level: 'A1',
+    type: 'Door',
+    label: 'A1 · 上海优视门店',
+    name: '上海优视门店',
+    oneId: 'CN-CUS-000125',
+    payerId: 'GC-PY-0092',
+    payerName: 'GC-PY-0092',
+    childrenCount: 0,
+    descendants: 0,
+    parent: '远见华东法人',
+    path: '远见集团 / 远见华东法人 / 上海优视门店',
+    validity: '2026-01-01 → 9999-12-31',
+    status: 'Active'
+  },
+  suzhou: {
+    id: 'A1-000126',
+    level: 'A1',
+    type: 'Door',
+    label: 'A1 · 苏州新锐门店',
+    name: '苏州新锐门店',
+    oneId: 'CN-CUS-000126',
+    payerId: 'GC-PY-0092',
+    payerName: 'GC-PY-0092',
+    childrenCount: 0,
+    descendants: 0,
+    parent: '远见华东法人',
+    path: '远见集团 / 远见华东法人 / 苏州新锐门店',
+    validity: '2026-01-01 → 9999-12-31',
+    status: 'Active'
+  }
+};
+
+export const mockHierarchy: HierarchyNodeVO[] = [
+  {
+    ...mockHierarchyNodes.group,
     children: [
       {
-        id: 'A2-0188',
-        level: 'A2',
-        label: 'A2 · 上海重点客户',
-        children: [
-          {
-            id: 'A1-000128',
-            level: 'A1',
-            label: 'A1 · 上海清视南京西路店 · Payer GC-PY-0092',
-            oneId: 'GC-000128',
-            payerId: 'GC-PY-0092'
-          }
-        ]
+        ...mockHierarchyNodes.legal,
+        children: [mockHierarchyNodes.store, mockHierarchyNodes.suzhou]
       }
     ]
   }

@@ -238,9 +238,10 @@ export interface BatchResultVO {
   exact: number;
   suspected: number;
   created: number;
+  review: number;
   invalid: number;
   /** 分流处理策略 */
-  routes: Array<{ result: string; handling: string; owner: string }>;
+  routes: Array<{ result: string; handling: string; owner: string; detail?: string }>;
 }
 
 /** 导入模板 */
@@ -267,18 +268,38 @@ export interface HierarchyNodeVO {
   id: string;
   /** A1 / A2 / A3 */
   level: string;
+  /** Commercial Entity / Main Account / Door */
+  type: string;
   label: string;
-  oneId?: string;
-  payerId?: string;
+  name: string;
+  oneId: string;
+  payerId: string;
+  payerName?: string;
+  /** 直接子节点数量 */
+  childrenCount: number;
+  /** 全部后代数量 */
+  descendants: number;
+  /** 父节点名称 */
+  parent: string;
+  /** 完整路径 */
+  path: string;
+  /** 有效期 */
+  validity: string;
+  /** 状态 */
+  status: 'Active' | 'Future' | 'Expired';
   children?: HierarchyNodeVO[];
 }
 
 export interface HierarchyRelationForm {
+  hierarchyType: string;
+  relationType: string;
   parentId: string;
   childId: string;
-  relation: string;
+  payerOneId: string;
   effectiveDate: string;
   reason: string;
+  /** 校验示例：pass / same / multiple / loop */
+  validationCase: string;
 }
 
 /** ------------------------------------------------------------------

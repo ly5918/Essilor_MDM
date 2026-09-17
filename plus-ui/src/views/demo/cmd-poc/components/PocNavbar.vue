@@ -2,16 +2,6 @@
   <header class="navbar">
     <!-- 顶部导航栏：品牌 / 环境标识 / 面包屑 / 模拟角色 / 头像（融合 RuoYi 自带能力） -->
     <div class="navbar-left">
-      <el-tooltip content="隐藏/显示菜单" effect="dark" placement="bottom">
-        <div class="hamburger-shell">
-          <hamburger
-            id="hamburger-container"
-            :is-active="!sidebarCollapsed"
-            class="hamburger-container"
-            @toggle-click="toggleSidebar"
-          />
-        </div>
-      </el-tooltip>
       <div class="brand-logo">EL</div>
       <span class="brand-title">Customer Master Data · POC</span>
       <el-tag class="env-tag" size="small" effect="plain">Demo Environment</el-tag>
@@ -65,7 +55,6 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import Settings from '@/layout/components/Settings/index.vue';
-import Hamburger from '@/components/Hamburger/index.vue';
 import Screenfull from '@/components/Screenfull/index.vue';
 import SizeSelect from '@/components/SizeSelect/index.vue';
 import tab from '@/plugins/tab';
@@ -75,7 +64,7 @@ import { ROLE_DROPDOWN_LABELS, ROLE_LIST } from '../constants/roles';
 
 defineOptions({ name: 'CmdPocNavbar' });
 
-const { roleKey, role, pageTitle, goMenu, sidebarCollapsed, toggleSidebar } = useCmdPoc();
+const { roleKey, role, pageTitle, goMenu } = useCmdPoc();
 const router = useRouter();
 const userStore = useUserStore();
 const settingRef = ref<InstanceType<typeof Settings>>();
@@ -120,41 +109,6 @@ const handleCommand = (command: string) => {
 
 <style lang="scss" scoped>
 .navbar-left {
-  .hamburger-shell {
-    width: 30px;
-    height: 30px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 6px;
-    background: var(--g-content);
-    border: 1px solid var(--g-divider);
-    color: var(--g-text2);
-    flex-shrink: 0;
-    cursor: pointer;
-    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
-
-    &:hover {
-      background: var(--g-card);
-      color: var(--g-text);
-      border-color: var(--el-color-primary-light-5);
-    }
-  }
-
-  .hamburger-container {
-    line-height: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-
-    :deep(.hamburger) {
-      width: 18px;
-      height: 18px;
-      fill: currentColor;
-    }
-  }
-
   .navbar-divider {
     width: 1px;
     height: 20px;

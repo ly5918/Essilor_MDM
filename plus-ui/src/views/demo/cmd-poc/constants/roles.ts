@@ -44,6 +44,7 @@ export const ROLE_LIST: PocRole[] = [
       { id: 'dash', label: '工作台', icon: '工' },
       { id: 'customers', label: '客户管理', icon: '客' },
       { id: 'batch', label: '批量导入', icon: '批' },
+      { id: 'hier', label: '客户层级', icon: '层' },
       { id: 'change', label: '变更与停用', icon: '变' }
     ]
   },
@@ -56,12 +57,12 @@ export const ROLE_LIST: PocRole[] = [
     readOnly: false,
     menus: [
       { id: 'dash', label: '工作台', icon: '工' },
+      { id: 'approval', label: '待我审批', badge: '8', icon: '审' },
       { id: 'gov', label: '治理任务', badge: '8', icon: '治' },
       { id: 'customers', label: '客户主档', icon: '客' },
-      { id: 'batch', label: '批量导入', badge: '3', icon: '批' },
+      { id: 'batch', label: '批量治理', badge: '3', icon: '批' },
       { id: 'hier', label: '客户层级', icon: '层' },
-      { id: 'change', label: '变更与停用', icon: '变' },
-      { id: 'approval', label: '审批实例', icon: '审' }
+      { id: 'change', label: '变更与停用', icon: '变' }
     ]
   },
   {
@@ -73,13 +74,13 @@ export const ROLE_LIST: PocRole[] = [
     readOnly: false,
     menus: [
       { id: 'dash', label: '全局工作台', icon: '工' },
+      { id: 'approval', label: '待我决策', badge: '5', icon: '审' },
       { id: 'gov', label: '跨BU治理', badge: '5', icon: '治' },
-      { id: 'customers', label: '客户主档', icon: '客' },
+      { id: 'customers', label: '全局客户主档', icon: '客' },
       { id: 'batch', label: '批量治理', badge: '2', icon: '批' },
       { id: 'hier', label: '客户层级', icon: '层' },
-      { id: 'audit', label: '治理审计', icon: '审' },
       { id: 'change', label: '变更与停用', icon: '变' },
-      { id: 'approval', label: '审批实例', icon: '审' }
+      { id: 'audit', label: '治理审计', icon: '审' }
     ]
   },
   {
@@ -92,9 +93,8 @@ export const ROLE_LIST: PocRole[] = [
     menus: [
       { id: 'dash', label: '管理工作台', icon: '工' },
       { id: 'admin', label: '平台管理', icon: '管' },
-      { id: 'integration', label: '集成监控', badge: '1', icon: '集' },
-      { id: 'audit', label: '管理员日志', icon: '审' },
-      { id: 'coverage', label: '覆盖检查', icon: '盖' }
+      { id: 'integration', label: '集成监控', icon: '集' },
+      { id: 'audit', label: '管理员日志', icon: '审' }
     ]
   },
   {
@@ -108,8 +108,7 @@ export const ROLE_LIST: PocRole[] = [
       { id: 'dash', label: '审计工作台', icon: '工' },
       { id: 'audit', label: '审计中心', icon: '审' },
       { id: 'customers', label: '客户只读查询', icon: '客' },
-      { id: 'hier', label: '层级只读查询', icon: '层' },
-      { id: 'change', label: '变更历史', icon: '变' }
+      { id: 'hier', label: '层级只读查询', icon: '层' }
     ]
   }
 ];
@@ -125,11 +124,11 @@ export const ROLE_DROPDOWN_LABELS: Record<RoleKey, string> = {
 
 /** 工作台标题（按角色区分，对齐原型规则） */
 export const DASHBOARD_TITLES: Record<RoleKey, string> = {
-  business: '我的工作台',
-  bu: 'BU Scope 工作台',
-  gc: 'GC Scope 工作台',
-  admin: 'Platform & Integration工作台',
-  audit: 'Read Only 工作台'
+  business: 'Business User工作台',
+  bu: 'BU Scope治理工作台',
+  gc: 'GC Scope全局治理工作台',
+  admin: 'Platform Admin工作台',
+  audit: 'Auditor工作台'
 };
 
 export const getRole = (key: RoleKey): PocRole => ROLE_LIST.find(item => item.key === key) ?? ROLE_LIST[0];

@@ -7,7 +7,7 @@
           <span class="card-title">操作区</span>
           <div class="card-toolbar-right">
             <el-button plain icon="Download" @click="openDialog('template')">下载模板</el-button>
-            <el-button type="primary" plain icon="Plus" @click="openDialog('batchResult')">新建导入任务</el-button>
+            <el-button type="primary" plain icon="Plus" @click="openDialog('batchUpload')">新建导入任务</el-button>
           </div>
         </div>
       </template>

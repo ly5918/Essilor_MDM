@@ -15,6 +15,12 @@
       </div>
     </div>
 
+    <el-tooltip content="刷新当前" effect="dark" placement="bottom">
+      <div class="tags-action-btn" @click="handleCommand('refresh')">
+        <el-icon><Refresh /></el-icon>
+      </div>
+    </el-tooltip>
+
     <el-dropdown class="tags-action" trigger="click" placement="bottom-end" @command="handleCommand">
       <div class="tags-action-btn">
         <el-icon><ArrowDown /></el-icon>
@@ -44,7 +50,7 @@
 </template>
 
 <script setup lang="ts">
-import { ArrowDown, CircleClose, Close, RefreshRight } from '@element-plus/icons-vue';
+import { ArrowDown, CircleClose, Close, Refresh, RefreshRight } from '@element-plus/icons-vue';
 import { computed, ref, watch } from 'vue';
 import type { PageId } from '@/api/demo/cmdPoc/types';
 import { useCmdPoc } from '../composables/useCmdPoc';

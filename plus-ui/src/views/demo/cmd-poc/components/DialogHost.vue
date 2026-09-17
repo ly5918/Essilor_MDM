@@ -6,7 +6,7 @@
     -->
     <el-dialog
       v-model="visible"
-      :title="meta?.title"
+      :title="displayTitle"
       :width="meta?.width"
       append-to-body
       destroy-on-close
@@ -17,8 +17,8 @@
 
       <template #footer>
         <el-button @click="closeDialog">关闭</el-button>
-        <el-button v-if="meta?.confirmable" type="primary" :loading="submitting" @click="onConfirm">
-          {{ meta?.confirmText ?? '确认' }}
+          <el-button v-if="meta?.confirmable" type="primary" :loading="submitting" @click="onConfirm">
+          {{ confirmText ?? '确认' }}
         </el-button>
       </template>
     </el-dialog>
@@ -43,6 +43,7 @@ import WorkflowDialog from './dialogs/WorkflowDialog.vue';
 import PermissionsDialog from './dialogs/PermissionsDialog.vue';
 import SearchDialog from './dialogs/SearchDialog.vue';
 import BatchResultDialog from './dialogs/BatchResultDialog.vue';
+import BatchUploadDialog from './dialogs/BatchUploadDialog.vue';
 import HierarchyAddDialog from './dialogs/HierarchyAddDialog.vue';
 import LoopCheckDialog from './dialogs/LoopCheckDialog.vue';
 import IntegrationDialog from './dialogs/IntegrationDialog.vue';
@@ -71,6 +72,7 @@ const COMPONENT_MAP: Record<DialogKey, Component> = {
   permissions: PermissionsDialog,
   search: SearchDialog,
   batchResult: BatchResultDialog,
+  batchUpload: BatchUploadDialog,
   hierAdd: HierarchyAddDialog,
   loop: LoopCheckDialog,
   integration: IntegrationDialog,
@@ -106,12 +108,24 @@ const visible = computed({
 const meta = computed(() => (dialog.current ? DIALOG_MAP[dialog.current] : undefined));
 const currentComponent = computed(() => (dialog.current ? COMPONENT_MAP[dialog.current] : undefined));
 
+const payload = computed(() => dialog.payload);
+
+const displayTitle = computed(() => {
+  const t = meta.value?.title;
+  return typeof t === 'function' ? t(payload.value) : t;
+});
+
+const confirmText = computed(() => {
+  const t = meta.value?.confirmText;
+  return typeof t === 'function' ? t(payload.value) : t;
+});
+
 const onConfirm = async () => {
   submitting.value = true;
   try {
     const submit = (bodyRef.value as DialogBody | null)?.submit;
     const message = typeof submit === 'function' ? await submit() : undefined;
-    ElMessage.success(message || `${meta.value?.title ?? '操作'}：模拟操作已完成并写入审计日志`);
+    ElMessage.success(message || `${displayTitle.value ?? '操作'}：模拟操作已完成并写入审计日志`);
     closeDialog();
   } catch (error) {
     // 业务校验失败由子组件自行提示，此处仅兜底
