@@ -27,3 +27,9 @@ yarn.lock
 # 编译生成的文件
 auto-imports.d.ts
 components.d.ts
+
+# AI 工具本地数据
+.claude/
+.codex/
+.codeartsdoer/
+.workbuddy/
