@@ -62,14 +62,15 @@ export const mockNotifications: NotificationVO[] = [
 ];
 
 /** ---------------------------------- 客户主数据 ---------------------------------- */
+/** 1:1 取自原型 customers() 表格三行 */
 export const mockCustomers: CustomerVO[] = [
   {
     oneId: 'GC-000128',
     legalName: '上海清视眼镜有限公司',
     customerType: 'Door',
-    bu: 'High End/Mainstream',
+    bu: 'High End / Mainstream',
     productLine: 'Frame',
-    sourceSystem: 'Cloud',
+    sourceSystem: 'Cloud + DMS+',
     creditCode: '91310000XXXXXXXXXX',
     address: '上海市静安区南京西路XXX号',
     payerId: 'GC-PY-0092',
@@ -87,52 +88,25 @@ export const mockCustomers: CustomerVO[] = [
     sourceSystem: 'DMS+',
     creditCode: '91110000XXXXXXXXXX',
     address: '北京市朝阳区建国路XXX号',
-    status: 'inactive',
+    status: 'active',
     dqScore: 72,
     versionNo: 7,
     updatedAt: '2026-09-15'
   },
   {
-    oneId: 'GC-000311',
-    legalName: '广州睛彩光学有限公司',
+    oneId: 'PENDING',
+    legalName: '苏州新视野眼镜有限公司',
     customerType: 'Door',
     bu: 'High End',
     productLine: 'Frame',
-    sourceSystem: 'Cloud',
-    creditCode: '91440100XXXXXXXXXX',
-    address: '广州市天河区天河路XXX号',
+    sourceSystem: 'Manual',
+    creditCode: '',
+    address: '',
+    payerId: '',
     status: 'pending',
-    dqScore: 81,
-    versionNo: 1,
-    updatedAt: '2026-09-14'
-  },
-  {
-    oneId: 'GC-000402',
-    legalName: '成都视界眼镜连锁有限公司',
-    customerType: 'A2',
-    bu: 'Mainstream',
-    productLine: 'Lens',
-    sourceSystem: 'DMS+',
-    creditCode: '91510100XXXXXXXXXX',
-    address: '成都市锦江区春熙路XXX号',
-    status: 'active',
-    dqScore: 93,
-    versionNo: 3,
-    updatedAt: '2026-09-13'
-  },
-  {
-    oneId: 'GC-000517',
-    legalName: '武汉明视达贸易有限公司',
-    customerType: 'A1',
-    bu: 'Mainstream',
-    productLine: 'Lens',
-    sourceSystem: 'DMS+',
-    creditCode: '91420100XXXXXXXXXX',
-    address: '武汉市江汉区解放大道XXX号',
-    status: 'draft',
-    dqScore: 65,
+    dqScore: 0,
     versionNo: 0,
-    updatedAt: '2026-09-12'
+    updatedAt: '2026-09-14'
   }
 ];
 
@@ -205,10 +179,9 @@ export const mockDuplicateCandidate: DuplicateCandidateVO = {
 };
 
 /** ---------------------------------- 批量导入 ---------------------------------- */
+/** 1:1 取自原型 batch() 表格一行 */
 export const mockImportJobs: ImportJobVO[] = [
-  { jobId: 'IMP-001', fileName: 'Mainstream_Door_0915.xlsx', totalRows: 100, status: 'Waiting for Review', submittedAt: '2026-09-15 10:24', submittedBy: 'Business User' },
-  { jobId: 'IMP-002', fileName: 'HighEnd_Frame_0914.xlsx', totalRows: 60, status: 'Partial Success', submittedAt: '2026-09-14 16:02', submittedBy: 'Business User' },
-  { jobId: 'IMP-003', fileName: 'CrossBU_Backfill_0912.xlsx', totalRows: 240, status: 'Completed', submittedAt: '2026-09-12 09:10', submittedBy: 'Data Steward · GC' }
+  { jobId: 'IMP-001', fileName: 'Mainstream_Door_0915.xlsx', totalRows: 100, status: 'Waiting for Review', submittedAt: '2026-09-15 10:24', submittedBy: 'Business User' }
 ];
 
 export const mockBatchResult: BatchResultVO = {
@@ -574,6 +547,7 @@ export const mockLegacyMappings: LegacyMappingVO[] = [
 ];
 
 /** ---------------------------------- 集成监控 ---------------------------------- */
+/** 1:1 取自原型 integrationPage() 表格一行 */
 export const mockIntegrationRuns: IntegrationRunVO[] = [
   {
     runId: 'OUT-008',
@@ -583,17 +557,14 @@ export const mockIntegrationRuns: IntegrationRunVO[] = [
     detail: 'HTTP 504 Gateway Timeout',
     record: 'GC-000128',
     attempt: '1/3'
-  },
-  { runId: 'IN-021', direction: 'Inbound', system: 'DMS+', status: 'Success', record: 'GC-000402' },
-  { runId: 'OUT-006', direction: 'Outbound', system: 'Cloud', status: 'Retrying', record: 'GC-000311', attempt: '2/3' }
+  }
 ];
 
 /** ---------------------------------- 审计 / 权限 / 覆盖 ---------------------------------- */
+/** 1:1 取自原型 auditPage() 表格两行 */
 export const mockAuditEvents: AuditEventVO[] = [
   { id: 'AU-001', time: '10:18', event: '关联本地客户至GC-000128', role: 'GC Scope', result: 'Success' },
-  { id: 'AU-002', time: '10:05', event: '匹配规则v1.4模拟测试', role: 'Admin', result: 'Tested' },
-  { id: 'AU-003', time: '09:52', event: '导出审计报告（最近30天）', role: 'Auditor', result: 'Success' },
-  { id: 'AU-004', time: '09:31', event: 'Outbound 同步 OUT-008 重试', role: 'System', result: 'Failed' }
+  { id: 'AU-002', time: '10:05', event: '匹配规则v1.4模拟测试', role: 'Admin', result: 'Tested' }
 ];
 
 export const mockPermissionMatrix: PermissionMatrixVO[] = [

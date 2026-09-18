@@ -28,9 +28,18 @@
             <h2>{{ pageHeadTitle }}</h2>
             <p>{{ pageSub }}</p>
           </div>
-          <div v-if="currentPage === 'customers' && !readOnly" class="page-title-actions">
+          <div v-if="currentPage === 'dash' && (roleKey === 'bu' || roleKey === 'gc')" class="page-title-actions">
+            <el-button type="primary" plain @click="goMenu('approval')">
+              {{ roleKey === 'gc' ? '进入待我决策' : '进入待我审批' }}
+            </el-button>
+          </div>
+          <div v-else-if="currentPage === 'customers' && !readOnly" class="page-title-actions">
             <el-button plain @click="openDialog('ocr')">查看OCR识别结果</el-button>
             <el-button type="primary" plain icon="Plus" @click="openDialog('newCustomer')">新建客户</el-button>
+          </div>
+          <div v-else-if="currentPage === 'batch'" class="page-title-actions">
+            <el-button plain @click="openDialog('template')">下载模板</el-button>
+            <el-button type="primary" plain icon="Plus" @click="openDialog('batchUpload')">新建导入任务</el-button>
           </div>
           <div v-else-if="currentPage === 'hier' && !readOnly" class="page-title-actions">
             <el-button
@@ -51,6 +60,13 @@
             >
               新增层级关系
             </el-button>
+          </div>
+          <div v-else-if="currentPage === 'change'" class="page-title-actions">
+            <el-button plain @click="openDialog('changeRequest')">发起属性变更</el-button>
+            <el-button class="poc-btn-orange" plain @click="openDialog('deactivate')">申请逻辑停用</el-button>
+          </div>
+          <div v-else-if="currentPage === 'admin'" class="page-title-actions">
+            <el-button type="primary" plain icon="Promotion" @click="() => publishMetadata()">发布配置版本</el-button>
           </div>
         </div>
 
@@ -98,7 +114,7 @@ defineOptions({ name: 'CmdPoc' });
 
 const props = defineProps<{ defaultRole?: RoleKey }>();
 
-const { role, roleKey, currentPage, currentSub, currentMenu, pageTitle, readOnly, openDialog, sidebarCollapsed, toggleSidebar, loadCustomers, loadMetadataFields } = createCmdPoc(
+const { role, roleKey, currentPage, currentSub, currentMenu, pageTitle, readOnly, openDialog, goMenu, publishMetadata, sidebarCollapsed, toggleSidebar, loadCustomers, loadMetadataFields } = createCmdPoc(
   (props.defaultRole ?? 'business') as RoleKey
 );
 

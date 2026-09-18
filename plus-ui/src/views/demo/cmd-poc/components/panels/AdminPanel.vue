@@ -1,16 +1,5 @@
 <template>
   <section class="page">
-    <!-- 操作区 -->
-    <el-card class="page-card" shadow="never" :body-style="{ padding: '16px 20px' }">
-      <template #header>
-        <div class="card-head">
-          <span class="card-title">操作区</span>
-          <el-button type="primary" plain icon="Promotion" :loading="publishing" @click="onPublish">发布配置版本</el-button>
-        </div>
-      </template>
-      <p class="text-tip">统一管理字段、DQ/匹配规则、导入模板、Workflow、角色权限、One ID 与 DQ Scorecard。</p>
-    </el-card>
-
     <el-alert
       class="platform-scope-note m-b-12"
       type="warning"
@@ -22,7 +11,7 @@
       </template>
     </el-alert>
 
-    <!-- 平台管理 -->
+    <!-- 平台管理：9 张卡片，1:1 对齐原型 admin() 顺序与描述 -->
     <el-card class="page-card" shadow="never" :body-style="{ padding: '16px 18px' }">
       <template #header><span class="card-title">平台管理</span></template>
       <div class="admin-grid">
@@ -62,40 +51,25 @@ interface AdminCard {
   extended?: boolean;
 }
 
-const { openDialog, goMenu, publishMetadata } = useCmdPoc();
+const { openDialog, goMenu } = useCmdPoc();
 
 const publishing = ref(false);
 
+/** 顺序与描述 1:1 取自原型 admin() */
 const adminCards: AdminCard[] = [
-  { title: '字段与值集', desc: '维护GC Core、BU与来源系统字段。', actionText: '管理', dialog: 'fields' },
+  { title: '字段与值集', desc: '配置、版本、测试和发布管理。', actionText: '管理', dialog: 'fields' },
+  { title: 'One ID规则', desc: '编码模式、生命周期与Legacy Code映射。', actionText: '管理', page: 'oneid' },
+  { title: '角色与权限', desc: '技术角色、Scope、字段与操作。', actionText: '管理', dialog: 'permissions' },
   { title: 'DQ规则', desc: '技术规则、业务规则和版本。', actionText: '模拟测试', dialog: 'dq', extended: true },
   { title: '匹配规则', desc: '信用代码、经营地址和辅助线索。', actionText: '模拟测试', dialog: 'match', extended: true },
-  { title: '导入模板', desc: '按业务上下文管理模板与映射。', actionText: '管理', dialog: 'template', extended: true },
+  { title: '导入Template', desc: '按业务上下文管理模板与映射。', actionText: '管理', dialog: 'template', extended: true },
   { title: 'Workflow', desc: '按BU和场景配置审批路由。', actionText: '管理', dialog: 'workflow', extended: true },
-  { title: '角色与权限', desc: '技术角色、Scope、字段与操作。', actionText: '管理', dialog: 'permissions' },
-  { title: 'One ID规则', desc: '编码模式、自动生成、生命周期与Legacy Code映射。', actionText: '管理', page: 'oneid' },
-  { title: 'DQ Scorecard', desc: '质量维度、分数卡、规则版本与历史重评估。', actionText: '查看', page: 'dqscore', extended: true }
+  { title: 'DQ Scorecard', desc: '质量维度、规则版本与历史重评估。', actionText: '查看', page: 'dqscore', extended: true },
+  { title: '集成配置', desc: 'API、File、Batch与Retry策略。', actionText: '管理', page: 'integration', extended: true }
 ];
 
 const onCardAction = (card: AdminCard) => {
   if (card.dialog) openDialog(card.dialog);
   else if (card.page) goMenu(card.page);
 };
-
-const onPublish = async () => {
-  publishing.value = true;
-  try {
-    await publishMetadata();
-  } finally {
-    publishing.value = false;
-  }
-};
 </script>
-
-<style lang="scss" scoped>
-.text-tip {
-  margin: 0;
-  font-size: 13px;
-  color: var(--g-text2);
-}
-</style>
