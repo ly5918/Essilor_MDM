@@ -33,3 +33,6 @@ components.d.ts
 .codex/
 .codeartsdoer/
 .workbuddy/
+
+# 临时文件
+_tmp_*/
