@@ -287,6 +287,17 @@
       gap: 8px;
       flex-shrink: 0;
     }
+
+    /* 原型「申请逻辑停用」橙色按钮（plain 态） */
+    .poc-btn-orange {
+      --el-button-text-color: var(--btn-warning);
+      --el-button-border-color: var(--btn-warning);
+      &:hover {
+        --el-button-hover-text-color: #fff;
+        --el-button-hover-bg-color: var(--btn-warning);
+        --el-button-hover-border-color: var(--btn-warning);
+      }
+    }
   }
 
   /* 单行提示条：标题与说明同排显示，仅在宽度不足时换行 */

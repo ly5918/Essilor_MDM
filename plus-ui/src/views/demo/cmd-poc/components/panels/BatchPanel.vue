@@ -1,20 +1,6 @@
 <template>
   <section class="page">
-    <!-- 操作区 -->
-    <el-card class="page-card" shadow="never" :body-style="{ padding: '16px 20px' }">
-      <template #header>
-        <div class="card-head">
-          <span class="card-title">操作区</span>
-          <div class="card-toolbar-right">
-            <el-button plain icon="Download" @click="openDialog('template')">下载模板</el-button>
-            <el-button type="primary" plain icon="Plus" @click="openDialog('batchUpload')">新建导入任务</el-button>
-          </div>
-        </div>
-      </template>
-      <p class="text-tip">点击「新建导入任务」可模拟上传并查看导入结果；点击「下载模板」可获取标准导入模板。</p>
-    </el-card>
-
-    <!-- 导入任务列表 -->
+    <!-- 导入任务列表（下载模板 / 新建导入任务按钮在页标题区，与原型一致） -->
     <el-card class="page-card" shadow="never" :body-style="{ padding: '0' }">
       <template #header><span class="card-title">导入任务列表</span></template>
       <el-table v-loading="loading" border :data="jobs" class="data-table">
