@@ -450,6 +450,13 @@
                 <version>${revision}</version>
             </dependency>
 
+            <!-- Essilor CMD 客户主数据业务模块 -->
+            <dependency>
+                <groupId>org.dromara</groupId>
+                <artifactId>ruoyi-cmd</artifactId>
+                <version>${revision}</version>
+            </dependency>
+
             <!--  api模块  -->
             <dependency>
                 <groupId>org.dromara</groupId>

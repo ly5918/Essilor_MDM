@@ -21,7 +21,7 @@ export const PAGE_META: Record<PageId, PocPageMeta> = {
   integration: { title: '集成监控', sub: 'Inbound、Outbound、Retry' },
   oneid: { title: 'One ID规则管理', sub: '命名规则、自动生成、稳定性与本地编码映射' },
   change: { title: '客户变更与逻辑停用', sub: 'Update / Delete全生命周期、审批和Before / After' },
-  approval: { title: '审批中心', sub: '本BU创建、变更、停用、层级及批量治理审批' },
+  approval: { sub: '审批、治理与变更统一处理（按角色区分 BU / GC）' },
   dqscore: { title: 'Data Quality Scorecard', sub: '技术规则、业务规则、分数卡与历史重评估' },
   coverage: { title: 'POC覆盖检查', sub: '12个正式Demo Topic与当前交互原型' },
   audit: { title: '审计中心', sub: '变更、审批、合并、权限与管理员操作' }

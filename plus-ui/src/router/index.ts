@@ -53,6 +53,14 @@ export const constantRoutes: RouteRecordRaw[] = [
     hidden: true
   },
   {
+    // CMD POC 登录页：1:1 还原原型（左品牌区 + 右登录卡片）
+    path: '/cmd-poc/login',
+    name: 'CmdPocLogin',
+    component: () => import('@/views/demo/cmd-poc/login.vue'),
+    hidden: true,
+    meta: { title: 'CMD POC 登录', noCache: true }
+  },
+  {
     // CMD POC 工作台：全屏路由（不挂 Layout），原生侧边菜单 / 原生导航栏均不渲染
     path: '/cmd-poc',
     name: 'CmdPoc',
@@ -113,7 +121,7 @@ export const constantRoutes: RouteRecordRaw[] = [
   {
     path: '',
     component: Layout,
-    redirect: '/cmd-poc',
+    redirect: '/cmd-poc/login',
     children: [
       {
         path: '/index',

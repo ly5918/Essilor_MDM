@@ -823,6 +823,139 @@
   }
 }
 
+/* ============================ 治理与审批合并工作台 ============================ */
+.cmd-poc {
+  .ap-kpis {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .ap-kpi {
+    background: var(--g-card);
+    border: 1px solid var(--g-divider);
+    border-left: 3px solid var(--role-color, var(--el-color-primary));
+    border-radius: 8px;
+    padding: 14px 16px;
+    b {
+      display: block;
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--g-text);
+      line-height: 1.2;
+    }
+    span {
+      font-size: 12px;
+      color: var(--g-text2);
+    }
+  }
+  .ap-tabs {
+    margin-bottom: 4px;
+  }
+  .ap-filter {
+    margin: 4px 0 12px;
+    padding: 10px 0;
+    border-top: 1px dashed var(--g-divider);
+  }
+  .ap-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 380px;
+    gap: 12px;
+    align-items: start;
+  }
+  .ap-list-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--g-text);
+    margin-bottom: 10px;
+  }
+  .ap-detail {
+    background: var(--g-card);
+    border: 1px solid var(--g-divider);
+    border-radius: 8px;
+    padding: 16px;
+    position: sticky;
+    top: 0;
+    min-height: 320px;
+  }
+  .ap-detail-head {
+    border-bottom: 1px solid var(--g-divider);
+    padding-bottom: 12px;
+    margin-bottom: 12px;
+    b {
+      font-size: 13px;
+      color: var(--g-text2);
+    }
+    .ap-detail-name {
+      margin: 4px 0 8px;
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--g-text);
+    }
+    .el-tag {
+      margin-right: 6px;
+    }
+  }
+  .ap-detail-body {
+    h4 {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--g-text);
+      margin: 14px 0 8px;
+    }
+    .h-kv {
+      display: grid;
+      grid-template-columns: 88px 1fr;
+      gap: 8px 12px;
+      font-size: 13px;
+      > div:nth-child(odd) {
+        color: var(--g-text2);
+      }
+      > div:nth-child(even) {
+        color: var(--g-text);
+      }
+    }
+    .ap-check {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      div {
+        background: var(--g-content);
+        border: 1px solid var(--g-divider);
+        border-radius: 8px;
+        padding: 10px 12px;
+        font-size: 13px;
+        color: var(--g-text);
+      }
+    }
+    .ap-decisions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .ap-tag {
+      background: #eef3f8;
+      border-color: #c9dcec;
+      color: #2f6088;
+    }
+    .ap-evidence {
+      background: #f7fafc;
+      border: 1px solid var(--g-divider);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 13px;
+      color: var(--g-text);
+      line-height: 1.6;
+    }
+    .ap-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+    }
+  }
+}
+
 /* ============================ 响应式 ============================ */
 @media (max-width: 1280px) {
   .cmd-poc {
@@ -833,8 +966,12 @@
     .dash-bottom,
     .compare,
     .two-col,
-    .flow-compare {
+    .flow-compare,
+    .ap-layout {
       grid-template-columns: 1fr;
+    }
+    .cmd-poc .ap-detail {
+      position: static;
     }
   }
 }

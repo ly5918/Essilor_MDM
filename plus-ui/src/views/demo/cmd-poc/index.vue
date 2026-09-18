@@ -133,7 +133,23 @@ const pageHeadTitle = computed(() => {
   return PAGE_META[currentPage.value]?.title || pageTitle.value;
 });
 
-const pageSub = computed(() => PAGE_META[currentPage.value]?.sub ?? '');
+const DASH_SUB: Record<RoleKey, string> = {
+  business: '根据角色与Scope动态显示',
+  bu: '本BU申请初审、异常治理与SLA管理',
+  gc: '跨BU证据核对、One ID决策与重大治理',
+  admin: '根据角色与Scope动态显示',
+  audit: '根据角色与Scope动态显示'
+};
+
+const pageSub = computed(() => {
+  if (currentPage.value === 'dash') return DASH_SUB[roleKey.value];
+  if (currentPage.value === 'approval') {
+    return roleKey.value === 'gc'
+      ? '跨BU审批、匹配合并、One ID与重大治理任务统一处理'
+      : '本BU审批、DQ复核、疑似重复、层级与批量治理统一处理';
+  }
+  return PAGE_META[currentPage.value]?.sub ?? '';
+});
 
 /** 下钻场景的面包屑上级名称 */
 const currentSubLabel = computed(() => {

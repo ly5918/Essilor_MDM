@@ -22,6 +22,8 @@
         <module>ruoyi-system</module>
         <module>ruoyi-workflow</module>
         <module>ruoyi-ai</module>
+        <!-- Essilor CMD 客户主数据业务模块 -->
+        <module>ruoyi-cmd</module>
     </modules>
 
 </project>

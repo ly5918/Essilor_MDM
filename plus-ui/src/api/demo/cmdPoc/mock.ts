@@ -7,6 +7,9 @@
 import type {
   ApprovalFlowVO,
   ApprovalInstanceVO,
+  ApprovalKpiVO,
+  ApprovalTaskDetailVO,
+  ApprovalTaskVO,
   ApprovalTrailVO,
   AuditEventVO,
   BatchResultVO,
@@ -396,6 +399,148 @@ export const mockApprovalInstances: ApprovalInstanceVO[] = [
   { instanceId: 'WF-HE-0012', bu: 'High End', scenario: 'Frame Customer Create', currentNode: 'BU Steward Review', sla: '1d 4h', status: 'In Progress' },
   { instanceId: 'WF-MS-0009', bu: 'Mainstream', scenario: 'DMS+ Dirty Data', currentNode: 'Return for Correction', sla: '6h', status: 'Returned' }
 ];
+
+/**
+ * 治理与审批合并工作台（原型 2.2「治理与审批合并版」）
+ * BU / GC 两套数据，Tab 与退回 / 已处理通过 detailType 映射详情模板。
+ */
+export const mockApprovalKpis: Record<'bu' | 'gc', ApprovalKpiVO[]> = {
+  bu: [
+    { label: '待我处理', value: 8, hint: 'Demo data' },
+    { label: '临近SLA', value: 3, hint: 'Demo data' },
+    { label: '已超时', value: 1, hint: 'Demo data' },
+    { label: '退回待补充', value: 2, hint: 'Demo data' },
+    { label: '本周已处理', value: 18, hint: 'Demo data' }
+  ],
+  gc: [
+    { label: '待我决策', value: 5, hint: 'Demo data' },
+    { label: '临近SLA', value: 3, hint: 'Demo data' },
+    { label: '已超时', value: 1, hint: 'Demo data' },
+    { label: '退回待补充', value: 2, hint: 'Demo data' },
+    { label: '本周已处理', value: 18, hint: 'Demo data' }
+  ]
+};
+
+export const mockApprovalTasks: Record<'bu' | 'gc', ApprovalTaskVO[]> = {
+  bu: [
+    { taskId: 'REQ-0182', customerName: '上海优视眼镜有限公司', taskType: '客户创建', source: '单条申请', bu: 'High End', dq: 'Warning', match: 'Suspected', sla: '3h', risk: 'High', detailType: 'create' },
+    { taskId: 'HIER-BU-0018', customerName: '上海优视门店', taskType: '层级关系', source: '业务申请', bu: 'High End', dq: 'Pass', match: '—', sla: '8h', risk: 'Medium', detailType: 'hier' },
+    { taskId: 'DQ-BU-0041', customerName: '杭州朗视门店', taskType: 'DQ异常', source: '规则触发', bu: 'High End', dq: 'Block', match: '—', sla: '6h', risk: 'High', detailType: 'create' },
+    { taskId: 'MATCH-BU-0026', customerName: '苏州新视野眼镜有限公司', taskType: '疑似重复', source: '批量导入', bu: 'High End', dq: 'Pass', match: 'Suspected', sla: '4h', risk: 'High', detailType: 'create' },
+    { taskId: 'BATCH-0091', customerName: 'High End门店批量', taskType: '批量治理', source: 'Import Job', bu: 'High End', dq: '16 Review', match: '18 Suspected', sla: '12h', risk: 'Medium', detailType: 'batch' }
+  ],
+  gc: [
+    { taskId: 'GC-DEC-0003', customerName: '上海清视眼镜有限公司', taskType: '跨BU合并', source: 'BU升级', bu: 'Cross-BU', dq: 'Pass', match: 'Suspected', sla: '4h', risk: 'High', detailType: 'gcdup' },
+    { taskId: 'HIER-GC-0003', customerName: '跨BU A2/A3关系', taskType: '层级关系', source: 'BU升级', bu: 'Cross-BU', dq: 'Pass', match: '—', sla: '8h', risk: 'Medium', detailType: 'gchier' },
+    { taskId: 'MATCH-GC-0012', customerName: '广州锐目眼镜门店', taskType: '多候选One ID', source: '系统规则', bu: 'Cross-BU', dq: 'Pass', match: 'Multiple', sla: '5h', risk: 'High', detailType: 'gcdup' },
+    { taskId: 'MERGE-GC-0008', customerName: '北京明眸商业有限公司', taskType: '合并审批', source: '月度Review', bu: 'Cross-BU', dq: 'Pass', match: 'Suspected', sla: '9h', risk: 'High', detailType: 'gcdup' }
+  ]
+};
+
+export const mockApprovalReturned: Record<'bu' | 'gc', ApprovalTaskVO[]> = {
+  bu: [
+    { taskId: 'ESC-BU-0005', customerName: 'Mainstream跨BU候选', taskType: '升级GC', source: 'BU升级', bu: 'Mainstream', dq: 'Pass', match: 'Suspected', sla: '1d', risk: 'Medium', detailType: 'create' }
+  ],
+  gc: [
+    { taskId: 'RET-GC-0002', customerName: '跨BU证据待补充', taskType: '退回BU', source: 'GC退回', bu: 'Cross-BU', dq: '—', match: '—', sla: '1d', risk: 'Medium', detailType: 'gchier' }
+  ]
+};
+
+export const mockApprovalDone: Record<'bu' | 'gc', ApprovalTaskVO[]> = {
+  bu: [
+    { taskId: 'BU-DONE-038', customerName: '成都视界客户创建', taskType: '已批准', source: '审批任务', bu: 'High End', dq: 'Pass', match: 'New', sla: 'Done', risk: 'Low', detailType: 'create' }
+  ],
+  gc: [
+    { taskId: 'GC-DONE-017', customerName: '华东渠道客户合并', taskType: '已合并', source: '治理决策', bu: 'Cross-BU', dq: 'Pass', match: 'Merged', sla: 'Done', risk: 'Low', detailType: 'gcdup' }
+  ]
+};
+
+export const mockApprovalDetail: Record<string, ApprovalTaskDetailVO> = {
+  create: {
+    id: 'REQ-0182',
+    name: '上海优视眼镜有限公司',
+    scene: '客户创建',
+    submitter: 'Business User · High End',
+    currentNode: 'BU Steward Review',
+    sla: '3h',
+    dq: '1 Warning · 0 Block',
+    duplicate: '1个Suspected候选',
+    evidence: '营业执照OCR已完成；信用代码一致；地址相似度需业务确认。',
+    decisions: ['批准本BU申请', '确认非重复', '升级GC Scope', '退回修改'],
+    actions: [
+      { key: 'approve', label: '批准', type: 'primary' },
+      { key: 'escalate', label: '升级GC', type: 'warning' },
+      { key: 'reject', label: '退回修改', type: 'danger' }
+    ]
+  },
+  hier: {
+    id: 'HIER-BU-0018',
+    name: '上海优视门店',
+    scene: '层级关系',
+    submitter: 'Business User · High End',
+    currentNode: 'BU Steward Review',
+    sla: '8h',
+    dq: 'Loop Check Pass',
+    duplicate: '无',
+    evidence: 'A3 → A2 → A1有效；Payer GC-PY-0092；未发现循环路径。',
+    decisions: ['批准本BU申请', '确认非重复', '升级GC Scope', '退回修改'],
+    actions: [
+      { key: 'approve', label: '批准', type: 'primary' },
+      { key: 'escalate', label: '升级GC', type: 'warning' },
+      { key: 'reject', label: '退回修改', type: 'danger' }
+    ]
+  },
+  batch: {
+    id: 'BATCH-0091',
+    name: 'High End门店批量',
+    scene: '批量治理',
+    submitter: 'Business User · High End',
+    currentNode: 'BU Steward Review',
+    sla: '12h',
+    dq: '16 Review / 14 Invalid',
+    duplicate: '18 Suspected',
+    evidence: '有效行继续治理；异常行可退回并下载错误明细。',
+    decisions: ['批准本BU申请', '确认非重复', '升级GC Scope', '退回修改'],
+    actions: [
+      { key: 'approve', label: '批准', type: 'primary' },
+      { key: 'reject', label: '退回修改', type: 'danger' }
+    ]
+  },
+  gcdup: {
+    id: 'GC-DEC-0003',
+    name: '上海清视眼镜有限公司',
+    scene: 'Cross-BU Duplicate',
+    submitter: 'BU Data Steward · High End',
+    currentNode: 'GC Scope Decision',
+    sla: '4h',
+    dq: 'GC Core Pass',
+    duplicate: 'High End与Mainstream候选',
+    evidence: '信用代码一致；经营地址存在差异；需决定关联已有One ID或确认新建One ID。',
+    decisions: ['关联已有One ID', '确认创建新One ID', '确认合并', '排除重复'],
+    actions: [
+      { key: 'link', label: '关联已有One ID', type: 'primary' },
+      { key: 'confirmNew', label: '确认创建新One ID', type: 'success' },
+      { key: 'merge', label: '确认合并', type: 'warning' },
+      { key: 'exclude', label: '排除重复', type: 'danger' }
+    ]
+  },
+  gchier: {
+    id: 'HIER-GC-0003',
+    name: '跨BU A2/A3关系',
+    scene: '层级关系',
+    submitter: 'BU Data Steward · Cross-BU',
+    currentNode: 'GC Scope Decision',
+    sla: '8h',
+    dq: 'Loop Check Pass',
+    duplicate: '无',
+    evidence: 'A3 → A2 → A1有效；Payer GC-PY-0092；未发现循环路径。',
+    decisions: ['关联已有One ID', '确认创建新One ID', '确认合并', '排除重复'],
+    actions: [
+      { key: 'approve', label: '批准', type: 'primary' },
+      { key: 'reject', label: '退回修改', type: 'danger' }
+    ]
+  }
+};
 
 /** ---------------------------------- One ID ---------------------------------- */
 export const mockOneIdRule: OneIdRuleVO = {

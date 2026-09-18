@@ -12,6 +12,9 @@ import type { AxiosPromise } from '@/utils/api-types';
 import type {
   ApprovalFlowVO,
   ApprovalInstanceVO,
+  ApprovalKpiVO,
+  ApprovalTaskDetailVO,
+  ApprovalTaskVO,
   ApprovalTrailVO,
   AuditEventVO,
   AuditExportForm,
@@ -206,6 +209,24 @@ export const getApprovalFlow = (key: string): Promise<ApprovalFlowVO> =>
 
 export const listApprovalInstances = (): Promise<ApprovalInstanceVO[]> =>
   USE_MOCK ? delay(mock.mockApprovalInstances) : unwrap(request({ url: '/cmd/poc/approval/instance/list', method: 'get' }));
+
+/* ---- 治理与审批合并工作台（原型 2.2） ---- */
+export const getApprovalKpis = (scope: 'bu' | 'gc'): Promise<ApprovalKpiVO[]> =>
+  USE_MOCK ? delay(mock.mockApprovalKpis[scope]) : unwrap(request({ url: '/cmd/poc/approval/kpis', method: 'get', params: { scope } }));
+
+export const listApprovalTasks = (scope: 'bu' | 'gc'): Promise<ApprovalTaskVO[]> =>
+  USE_MOCK ? delay(mock.mockApprovalTasks[scope]) : unwrap(request({ url: '/cmd/poc/approval/task/list', method: 'get', params: { scope } }));
+
+export const getApprovalReturned = (scope: 'bu' | 'gc'): Promise<ApprovalTaskVO[]> =>
+  USE_MOCK ? delay(mock.mockApprovalReturned[scope]) : unwrap(request({ url: '/cmd/poc/approval/task/returned', method: 'get', params: { scope } }));
+
+export const getApprovalDone = (scope: 'bu' | 'gc'): Promise<ApprovalTaskVO[]> =>
+  USE_MOCK ? delay(mock.mockApprovalDone[scope]) : unwrap(request({ url: '/cmd/poc/approval/task/done', method: 'get', params: { scope } }));
+
+export const getApprovalTaskDetail = (detailType: string): Promise<ApprovalTaskDetailVO> =>
+  USE_MOCK
+    ? delay(mock.mockApprovalDetail[detailType] ?? mock.mockApprovalDetail.create)
+    : unwrap(request({ url: `/cmd/poc/approval/task/detail/${detailType}`, method: 'get' }));
 
 /* ============================== 10. One ID ============================== */
 export const getOneIdRule = (): Promise<OneIdRuleVO> =>

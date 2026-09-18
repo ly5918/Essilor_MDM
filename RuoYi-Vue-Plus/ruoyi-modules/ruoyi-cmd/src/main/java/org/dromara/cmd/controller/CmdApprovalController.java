@@ -1,0 +1,94 @@
+package org.dromara.cmd.controller;
+
+import cn.dev33.satoken.annotation.SaCheckLogin;
+import lombok.RequiredArgsConstructor;
+import org.dromara.cmd.domain.bo.ApprovalActionBo;
+import org.dromara.cmd.domain.bo.CmdApprovalTaskBo;
+import org.dromara.cmd.domain.vo.CmdApprovalActionVo;
+import org.dromara.cmd.domain.vo.CmdApprovalTaskVo;
+import org.dromara.cmd.service.ICmdApprovalService;
+import org.dromara.common.core.domain.PageResult;
+import org.dromara.common.core.domain.R;
+import org.dromara.common.log.annotation.Log;
+import org.dromara.common.log.enums.BusinessType;
+import org.dromara.common.mybatis.core.page.PageQuery;
+import org.dromara.common.satoken.utils.LoginHelper;
+import org.dromara.common.web.core.BaseController;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.Map;
+
+/**
+ * 统一待办 / 审批 控制层
+ * <p>
+ * 对应页面：治理与审批 approval（我的队列 / 我已处理 / 升级与退回）。
+ *
+ * @author Essilor CMD POC
+ */
+@SaCheckLogin
+@Validated
+@RequiredArgsConstructor
+@RestController
+@RequestMapping("/cmd/approval")
+public class CmdApprovalController extends BaseController {
+
+    private final ICmdApprovalService approvalService;
+
+    /**
+     * 分页查询待办任务列表（页面队列表 + 筛选行）
+     *
+     * @param bo        查询条件
+     * @param pageQuery 分页参数
+     * @return 待办分页结果
+     */
+    @GetMapping("/list")
+    public R<PageResult<CmdApprovalTaskVo>> list(CmdApprovalTaskBo bo, PageQuery pageQuery) {
+        return R.ok(approvalService.selectPageTaskList(bo, pageQuery));
+    }
+
+    /**
+     * 查询待办详情
+     *
+     * @param id 主键
+     * @return 待办详情
+     */
+    @GetMapping("/{id}")
+    public R<CmdApprovalTaskVo> getInfo(@PathVariable Long id) {
+        return R.ok(approvalService.selectTaskById(id));
+    }
+
+    /**
+     * 查询审批轨迹
+     *
+     * @param taskId 待办 ID
+     * @return 轨迹列表
+     */
+    @GetMapping("/action/{taskId}")
+    public R<List<CmdApprovalActionVo>> actionList(@PathVariable Long taskId) {
+        return R.ok(approvalService.selectActionList(taskId));
+    }
+
+    /**
+     * 执行审批动作（批准 / 拒绝 / 退回 / 升级 / 转办 / 认领）
+     *
+     * @param bo 动作入参
+     * @return 操作结果
+     */
+    @Log(title = "治理与审批", businessType = BusinessType.UPDATE)
+    @PostMapping("/action")
+    public R<Void> doAction(@Validated @RequestBody ApprovalActionBo bo) {
+        return toAjax(approvalService.doAction(bo));
+    }
+
+    /**
+     * 查询当前用户的待办统计
+     *
+     * @return 统计结果
+     */
+    @GetMapping("/stats")
+    public R<Map<String, Long>> stats() {
+        return R.ok(approvalService.selectTaskStats(LoginHelper.getUserId()));
+    }
+}

@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <parent>
+        <groupId>org.dromara</groupId>
+        <artifactId>ruoyi-modules</artifactId>
+        <version>${revision}</version>
+    </parent>
+    <modelVersion>4.0.0</modelVersion>
+
+    <artifactId>ruoyi-cmd</artifactId>
+
+    <description>
+        Essilor CMD（Customer Master Data）业务模块
+        ------------------------------------------------------------------
+        职责：客户主数据治理的业务逻辑实现（Controller / Service / Mapper 三层）
+        边界：本模块【不包含】任何数据库连接配置，数据源统一由 ruoyi-admin 的
+              application-*.yml 通过 dynamic-datasource 管理，模块内仅用 @DS 指定数据源名称。
+        数据库：独立 schema `essilor_cmd`（与框架库 ruoyi_plus 物理隔离）
+    </description>
+
+    <dependencies>
+
+        <!-- 通用工具 -->
+        <dependency>
+            <groupId>org.dromara</groupId>
+            <artifactId>ruoyi-common-core</artifactId>
+        </dependency>
+
+        <!-- JSON 工具（版本快照序列化） -->
+        <dependency>
+            <groupId>org.dromara</groupId>
+            <artifactId>ruoyi-common-json</artifactId>
+        </dependency>
+
+        <!-- 数据库服务（MyBatis-Plus + 动态数据源） -->
+        <dependency>
+            <groupId>org.dromara</groupId>
+            <artifactId>ruoyi-common-mybatis</artifactId>
+        </dependency>
+
+        <!-- web服务 -->
+        <dependency>
+            <groupId>org.dromara</groupId>
+            <artifactId>ruoyi-common-web</artifactId>
+        </dependency>
+
+        <!-- 安全模块（Sa-Token 权限注解） -->
+        <dependency>
+            <groupId>org.dromara</groupId>
+            <artifactId>ruoyi-common-security</artifactId>
+        </dependency>
+
+        <!-- 日志记录 -->
+        <dependency>
+            <groupId>org.dromara</groupId>
+            <artifactId>ruoyi-common-log</artifactId>
+        </dependency>
+
+        <!-- excel 导入导出 -->
+        <dependency>
+            <groupId>org.dromara</groupId>
+            <artifactId>ruoyi-common-excel</artifactId>
+        </dependency>
+
+        <!-- 接口文档 -->
+        <dependency>
+            <groupId>org.dromara</groupId>
+            <artifactId>ruoyi-common-doc</artifactId>
+        </dependency>
+
+        <!-- 缓存服务 -->
+        <dependency>
+            <groupId>org.dromara</groupId>
+            <artifactId>ruoyi-common-redis</artifactId>
+        </dependency>
+
+    </dependencies>
+
+</project>

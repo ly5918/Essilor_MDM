@@ -90,12 +90,8 @@ const logout = async () => {
   });
   await userStore.logout();
   tab.closeAllPage();
-  router.replace({
-    path: '/login',
-    query: {
-      redirect: encodeURIComponent(router.currentRoute.value.fullPath || '/')
-    }
-  });
+  // 退出后回到 CMD POC 登录页
+  router.replace('/cmd-poc/login');
 };
 
 const commandMap: Record<string, () => void> = {

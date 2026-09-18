@@ -388,6 +388,60 @@ export interface ApprovalInstanceVO {
 }
 
 /** ------------------------------------------------------------------
+ * 8.1 治理与审批合并工作台（原型 2.2「治理与审批合并版」）
+ * ------------------------------------------------------------------ */
+/** 顶部 KPI 卡片 */
+export interface ApprovalKpiVO {
+  label: string;
+  value: number | string;
+  hint: string;
+}
+
+/** 统一任务清单行（审批 / 治理复核 / 升级退回 / 已处理 共用） */
+export interface ApprovalTaskVO {
+  /** 任务编号 */
+  taskId: string;
+  /** 客户名称或主题 */
+  customerName: string;
+  /** 任务类型：客户创建 / 层级关系 / DQ异常 / 疑似重复 / 批量治理 / 跨BU合并 / 合并审批 */
+  taskType: string;
+  /** 来源：单条申请 / 业务申请 / 规则触发 / 批量导入 / Import Job / BU升级 / 系统规则 / 月度Review */
+  source: string;
+  /** BU：High End / Mainstream / Cross-BU */
+  bu: string;
+  /** 数据质量结论：Pass / Warning / Block / 16 Review */
+  dq: string;
+  /** 匹配结论：Suspected / Multiple / — / New / Merged */
+  match: string;
+  /** SLA */
+  sla: string;
+  /** 风险等级 */
+  risk: 'High' | 'Medium' | 'Low';
+  /** 详情模板类型：create / hier / batch / gcdup / gchier */
+  detailType: string;
+}
+
+/** 任务详情（右侧面板） */
+export interface ApprovalTaskDetailVO {
+  id: string;
+  name: string;
+  scene: string;
+  submitter: string;
+  currentNode: string;
+  sla: string;
+  /** DQ 自动检查结果 */
+  dq: string;
+  /** 重复检查 / 匹配结论 */
+  duplicate: string;
+  /** 治理证据 */
+  evidence: string;
+  /** 决策 / 判断标签（BU 初审判断 或 GC 治理决策） */
+  decisions: string[];
+  /** 操作按钮组 */
+  actions: Array<{ key: string; label: string; type: 'primary' | 'success' | 'warning' | 'danger' | 'info' }>;
+}
+
+/** ------------------------------------------------------------------
  * 9. One ID
  * ------------------------------------------------------------------ */
 export interface OneIdRuleVO {

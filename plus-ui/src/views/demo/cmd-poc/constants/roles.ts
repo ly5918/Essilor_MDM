@@ -57,11 +57,10 @@ export const ROLE_LIST: PocRole[] = [
     readOnly: false,
     menus: [
       { id: 'dash', label: '工作台', icon: '工' },
-      { id: 'approval', label: '待我审批', badge: '8', icon: '审' },
-      { id: 'gov', label: '治理任务', badge: '8', icon: '治' },
+      { id: 'approval', label: '治理与审批', badge: '8', icon: '审' },
       { id: 'customers', label: '客户主档', icon: '客' },
-      { id: 'batch', label: '批量治理', badge: '3', icon: '批' },
       { id: 'hier', label: '客户层级', icon: '层' },
+      { id: 'batch', label: '批量治理', badge: '3', icon: '批' },
       { id: 'change', label: '变更与停用', icon: '变' }
     ]
   },
@@ -74,11 +73,10 @@ export const ROLE_LIST: PocRole[] = [
     readOnly: false,
     menus: [
       { id: 'dash', label: '全局工作台', icon: '工' },
-      { id: 'approval', label: '待我决策', badge: '5', icon: '审' },
-      { id: 'gov', label: '跨BU治理', badge: '5', icon: '治' },
+      { id: 'approval', label: '全局治理决策', badge: '5', icon: '审' },
       { id: 'customers', label: '全局客户主档', icon: '客' },
-      { id: 'batch', label: '批量治理', badge: '2', icon: '批' },
       { id: 'hier', label: '客户层级', icon: '层' },
+      { id: 'batch', label: '批量治理', badge: '2', icon: '批' },
       { id: 'change', label: '变更与停用', icon: '变' },
       { id: 'audit', label: '治理审计', icon: '审' }
     ]

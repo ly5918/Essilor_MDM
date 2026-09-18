@@ -104,6 +104,12 @@
             <artifactId>ruoyi-workflow</artifactId>
         </dependency>
 
+        <!--  Essilor CMD 客户主数据业务模块  -->
+        <dependency>
+            <groupId>org.dromara</groupId>
+            <artifactId>ruoyi-cmd</artifactId>
+        </dependency>
+
         <!-- Spring Boot Admin 客户端 -->
         <dependency>
             <groupId>de.codecentric</groupId>

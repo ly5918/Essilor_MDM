@@ -103,6 +103,17 @@ spring:
           url: jdbc:mysql://localhost:3306/ruoyi_plus?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=true&serverTimezone=GMT%2B8&autoReconnect=true&rewriteBatchedStatements=true&allowPublicKeyRetrieval=true&nullCatalogMeansCurrent=true
           username: root
           password: root
+        # =====================================================================
+        # Essilor CMD 业务表：与框架表同库（ruoyi_plus / master），不再独立建 schema
+        #   隔离方式：业务表统一使用 cmd_ / md_ / dq_ / match_ / oneid_ / int_ /
+        #            audit_ / cfg_ / poc_ 前缀，与框架 sys_ / flow_ / gen_ / sj_ 区分
+        #   同库原因：审批需 JOIN Warm-Flow 的 flow_* 表与 sys_user / sys_dept 系统表，
+        #            且业务写操作需与流程引擎同事务；独立 schema 会导致跨库无法 JOIN、
+        #            @Transactional 失效、备份迁移复杂
+        #   建表脚本：Essilor_MDM/docs/cmd-poc/Essilor_CMD_POC_完整建表脚本.sql
+        #   业务逻辑：一律在 ruoyi-modules/ruoyi-cmd 模块实现，此处只放【连接配置】
+        #   备注：如未来确需读写分离，可在此追加从库数据源并在对应 Service 标注 @DS
+        # =====================================================================
 #        # 从库数据源
 #        slave:
 #          lazy: true
