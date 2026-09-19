@@ -55,8 +55,10 @@ import ChangeDetailDialog from './dialogs/ChangeDetailDialog.vue';
 import DeactivateResultDialog from './dialogs/DeactivateResultDialog.vue';
 import ApprovalHeDialog from './dialogs/ApprovalHeDialog.vue';
 import ApprovalMsDialog from './dialogs/ApprovalMsDialog.vue';
+import FlowTraceDialog from './dialogs/FlowTraceDialog.vue';
 import ReEvaluateDialog from './dialogs/ReEvaluateDialog.vue';
 import OcrDialog from './dialogs/OcrDialog.vue';
+import FlowGraphDialog from './dialogs/FlowGraphDialog.vue';
 
 defineOptions({ name: 'CmdPocDialogHost' });
 
@@ -84,8 +86,10 @@ const COMPONENT_MAP: Record<DialogKey, Component> = {
   deactivateResult: DeactivateResultDialog,
   approvalHE: ApprovalHeDialog,
   approvalMS: ApprovalMsDialog,
+  flowTrace: FlowTraceDialog,
   reEvaluate: ReEvaluateDialog,
-  ocr: OcrDialog
+  ocr: OcrDialog,
+  flowGraph: FlowGraphDialog
 };
 
 /** 弹窗内容组件约定：可选暴露 submit()，返回成功提示文案 */

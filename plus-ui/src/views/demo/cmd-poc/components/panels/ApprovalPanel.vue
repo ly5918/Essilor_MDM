@@ -75,6 +75,8 @@
               <div>
                 <el-tag size="small" type="primary">{{ detail.scene }}</el-tag>
                 <el-tag size="small" :type="isGc ? 'warning' : 'info'">{{ isGc ? 'GC Scope' : 'BU Scope' }}</el-tag>
+                <!-- 流程跟踪：泳道图步骤条 + Warm-Flow 实例进度（场景泳道图可视化） -->
+                <el-button link type="primary" icon="Share" @click="onOpenFlowTrace">流程跟踪</el-button>
               </div>
             </div>
 
@@ -134,14 +136,15 @@ import {
   getApprovalKpis,
   getApprovalReturned,
   getApprovalTaskDetail,
-  listApprovalTasks
+  listApprovalTasks,
+  submitApprovalAction
 } from '@/api/demo/cmdPoc';
 import type { ApprovalKpiVO, ApprovalTaskDetailVO, ApprovalTaskVO, RoleKey } from '@/api/demo/cmdPoc/types';
 import { useCmdPoc } from '../../composables/useCmdPoc';
 
 defineOptions({ name: 'CmdPocApprovalPanel' });
 
-const { roleKey } = useCmdPoc();
+const { roleKey, openDialog } = useCmdPoc();
 /** 仅 BU / GC 拥有审批菜单；其余角色理论上不会进入本面板 */
 const isGc = computed(() => roleKey.value === 'gc');
 const scope = computed<'bu' | 'gc'>(() => (isGc.value ? 'gc' : 'bu'));
@@ -175,6 +178,7 @@ const doneTasks = ref<ApprovalTaskVO[]>([]);
 const loading = ref(false);
 const activeTab = ref<(typeof TABS)[number]['key']>('all');
 const selectedId = ref('');
+const selectedRow = ref<ApprovalTaskVO | null>(null);
 const detail = ref<ApprovalTaskDetailVO | null>(null);
 const comment = ref('');
 const submitting = ref(false);
@@ -213,6 +217,7 @@ const visibleTasks = computed<ApprovalTaskVO[]>(() => {
 
 const onTabChange = () => {
   selectedId.value = '';
+  selectedRow.value = null;
   detail.value = null;
   comment.value = '';
 };
@@ -224,14 +229,31 @@ const applyFilter = () => {
 const onRowSelect = async (row: ApprovalTaskVO | null) => {
   if (!row) return;
   selectedId.value = row.taskId;
-  detail.value = await getApprovalTaskDetail(row.detailType);
+  selectedRow.value = row;
+  detail.value = await getApprovalTaskDetail(row.taskId);
 };
 
-const onAction = async (act: { key: string; label: string }) => {
+/** 打开流程跟踪弹窗（泳道图步骤条 + Warm-Flow 实例进度） */
+const onOpenFlowTrace = () => {
+  const row = selectedRow.value;
+  if (!row) return;
+  openDialog('flowTrace', { taskNo: row.taskId, detailType: row.detailType });
+};
+
+const onAction = async (act: { key: string; label: string; type?: string }) => {
+  if (!detail.value) return;
   submitting.value = true;
   try {
-    ElMessage.success(`已执行「${act.label}」${comment.value ? `，意见：${comment.value}` : ''}（模拟写入审计日志）`);
+    await submitApprovalAction({
+      taskId: detail.value.id,
+      actionType: act.key,
+      opinion: comment.value
+    });
+    ElMessage.success(`已执行「${act.label}」${comment.value ? `，意见：${comment.value}` : ''}`);
     comment.value = '';
+    detail.value = null;
+    selectedId.value = '';
+    await loadData();
   } finally {
     submitting.value = false;
   }

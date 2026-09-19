@@ -54,6 +54,10 @@ public class CmdCustomerVo implements Serializable {
     /** 客户层级 */
     private String customerLevel;
 
+    /** 产品线（页面 Product Line 列） */
+    @ExcelProperty(value = "产品线")
+    private String productLine;
+
     /** 归属 BU */
     @ExcelProperty(value = "归属BU")
     private String buScope;
@@ -63,6 +67,9 @@ public class CmdCustomerVo implements Serializable {
 
     /** 地址 */
     private String address;
+
+    /** Payer 编码 */
+    private String payerId;
 
     /** 联系人 */
     private String contactName;

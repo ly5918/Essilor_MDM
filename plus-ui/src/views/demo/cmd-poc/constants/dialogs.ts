@@ -31,8 +31,10 @@ export type DialogKey =
   | 'deactivateResult'
   | 'approvalHE'
   | 'approvalMS'
+  | 'flowTrace'
   | 'reEvaluate'
-  | 'ocr';
+  | 'ocr'
+  | 'flowGraph';
 
 export type DialogTitle = string | ((payload?: Record<string, unknown>) => string);
 export type DialogButtonText = string | ((payload?: Record<string, unknown>) => string);
@@ -63,7 +65,7 @@ export const DIALOG_MAP: Record<DialogKey, DialogMeta> = {
   newCustomer: define('newCustomer', '新建客户申请', true, '提交申请'),
   dq: define('dq', 'DQ规则模拟测试', true, '开始测试'),
   match: define('match', '匹配规则模拟测试', true, '开始测试'),
-  template: define('template', '导入模板管理', true),
+  template: define('template', '下载模板', true),
   workflow: define('workflow', 'Workflow配置', true),
   permissions: define('permissions', '角色与权限管理', true),
   search: define('search', '客户查询结果', true, '查询'),
@@ -97,6 +99,15 @@ export const DIALOG_MAP: Record<DialogKey, DialogMeta> = {
   deactivateResult: define('deactivateResult', '逻辑停用 · 数据库结果', true),
   approvalHE: define('approvalHE', 'High End审批实例', true),
   approvalMS: define('approvalMS', 'Mainstream审批实例', true),
+  flowTrace: define('flowTrace', payload => `流程跟踪 · ${payload?.taskNo ?? ''}`, true),
+  flowGraph: {
+    ...define(
+      'flowGraph',
+      payload => (payload?.taskNo ? `泳道图 · ${payload.taskNo}` : `泳道图 · ${payload?.sceneName ?? ''}`),
+      true
+    ),
+    width: '90%'
+  },
   reEvaluate: define('reEvaluate', '历史DQ重评估', true, '执行重评估'),
   ocr: define('ocr', 'OCR识别结果', false, '写回表单')
 };

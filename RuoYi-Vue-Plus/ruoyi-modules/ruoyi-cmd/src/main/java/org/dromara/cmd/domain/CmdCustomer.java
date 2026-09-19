@@ -61,6 +61,9 @@ public class CmdCustomer extends BaseEntity {
     /** 客户层级（A1 / A2 / A3） */
     private String customerLevel;
 
+    /** 产品线（High End / Mainstream） */
+    private String productLine;
+
     /** 归属 BU（数据权限隔离维度） */
     private String buScope;
 
@@ -78,6 +81,9 @@ public class CmdCustomer extends BaseEntity {
 
     /** 注册地址 */
     private String address;
+
+    /** Payer 编码（层级视图回款方） */
+    private String payerId;
 
     /** 邮编 */
     private String postalCode;

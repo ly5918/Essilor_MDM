@@ -23,6 +23,13 @@ import type {
   DqScorecardVO,
   DqSimulateResultVO,
   DuplicateCandidateVO,
+  FlowTraceStepVO,
+  FlowTraceVO,
+  FlowGraphEdgeVO,
+  FlowGraphNodeVO,
+  FlowGraphVO,
+  FlowInstanceVO,
+  FlowSceneVO,
   HierarchyNodeVO,
   ImportJobVO,
   ImportTemplateVO,
@@ -33,6 +40,7 @@ import type {
   ModelVersionVO,
   NotificationVO,
   OcrResultVO,
+  OcrLicenseVO,
   OneIdEventVO,
   OneIdPolicyVO,
   OneIdRuleVO,
@@ -201,8 +209,30 @@ export const mockBatchResult: BatchResultVO = {
 };
 
 export const mockImportTemplates: ImportTemplateVO[] = [
-  { name: 'Door_Mainstream_Lens', context: 'Mainstream·Lens·DMS+', version: 'v1.3', fieldCount: 56, status: 'Published' },
-  { name: 'Door_HighEnd_Frame', context: 'High End·Frame·Cloud', version: 'v1.2', fieldCount: 61, status: 'Draft' }
+  {
+    templateCode: 'TPL_DOOR_MAINSTREAM',
+    name: 'Door_Mainstream_Lens',
+    context: 'Mainstream·Lens·DMS+',
+    version: 'v1.3',
+    fieldCount: 5,
+    status: 'Published',
+    customerType: 'Door',
+    bu: 'Mainstream',
+    productLine: 'Lens',
+    sourceSystem: 'DMS+'
+  },
+  {
+    templateCode: 'TPL_DOOR_HIGHEND',
+    name: 'Door_HighEnd_Frame',
+    context: 'High End·Frame·Cloud',
+    version: 'v1.2',
+    fieldCount: 3,
+    status: 'Draft',
+    customerType: 'Door',
+    bu: 'High End',
+    productLine: 'Frame',
+    sourceSystem: 'Cloud'
+  }
 ];
 
 export const mockTemplateMappings: TemplateMappingVO[] = [
@@ -213,8 +243,8 @@ export const mockTemplateMappings: TemplateMappingVO[] = [
 
 /** ---------------------------------- 客户层级 ---------------------------------- */
 export const mockHierarchyNodes: Record<string, HierarchyNodeVO> = {
-  group: {
-    id: 'A3-001',
+  'CN-CUS-000001': {
+    id: 'CN-CUS-000001',
     level: 'A3',
     type: 'Commercial Entity',
     label: 'A3 · 远见集团',
@@ -222,31 +252,34 @@ export const mockHierarchyNodes: Record<string, HierarchyNodeVO> = {
     oneId: 'CN-CUS-000001',
     payerId: '—',
     payerName: '—',
-    childrenCount: 12,
-    descendants: 2186,
+    childrenCount: 1,
+    descendants: 3,
     parent: '无',
     path: '远见集团',
+    ancestorIds: [],
     validity: '2026-01-01 → 9999-12-31',
     status: 'Active'
   },
-  legal: {
-    id: 'A2-0188',
+  'CN-CUS-000021': {
+    id: 'CN-CUS-000021',
     level: 'A2',
     type: 'Main Account',
     label: 'A2 · 远见华东法人',
     name: '远见华东法人',
     oneId: 'CN-CUS-000021',
     payerId: 'GC-PY-0091',
-    payerName: '远见集团',
-    childrenCount: 50,
-    descendants: 1286,
-    parent: '远见集团',
+    payerName: 'GC-PY-0091',
+    childrenCount: 2,
+    descendants: 2,
+    parent: 'CN-CUS-000001',
+    parentName: '远见集团',
     path: '远见集团 / 远见华东法人',
+    ancestorIds: ['CN-CUS-000001'],
     validity: '2026-01-01 → 9999-12-31',
     status: 'Active'
   },
-  store: {
-    id: 'A1-000125',
+  'CN-CUS-000125': {
+    id: 'CN-CUS-000125',
     level: 'A1',
     type: 'Door',
     label: 'A1 · 上海优视门店',
@@ -256,13 +289,15 @@ export const mockHierarchyNodes: Record<string, HierarchyNodeVO> = {
     payerName: 'GC-PY-0092',
     childrenCount: 0,
     descendants: 0,
-    parent: '远见华东法人',
+    parent: 'CN-CUS-000021',
+    parentName: '远见华东法人',
     path: '远见集团 / 远见华东法人 / 上海优视门店',
+    ancestorIds: ['CN-CUS-000001', 'CN-CUS-000021'],
     validity: '2026-01-01 → 9999-12-31',
     status: 'Active'
   },
-  suzhou: {
-    id: 'A1-000126',
+  'CN-CUS-000126': {
+    id: 'CN-CUS-000126',
     level: 'A1',
     type: 'Door',
     label: 'A1 · 苏州新锐门店',
@@ -272,8 +307,64 @@ export const mockHierarchyNodes: Record<string, HierarchyNodeVO> = {
     payerName: 'GC-PY-0092',
     childrenCount: 0,
     descendants: 0,
-    parent: '远见华东法人',
+    parent: 'CN-CUS-000021',
+    parentName: '远见华东法人',
     path: '远见集团 / 远见华东法人 / 苏州新锐门店',
+    ancestorIds: ['CN-CUS-000001', 'CN-CUS-000021'],
+    validity: '2026-01-01 → 9999-12-31',
+    status: 'Active'
+  },
+  // 第二个分支：Mainstream · 明眸集团
+  'CN-CUS-000101': {
+    id: 'CN-CUS-000101',
+    level: 'A3',
+    type: 'Commercial Entity',
+    label: 'A3 · 明眸集团',
+    name: '明眸集团',
+    oneId: 'CN-CUS-000101',
+    payerId: '—',
+    payerName: '—',
+    childrenCount: 1,
+    descendants: 2,
+    parent: '无',
+    path: '明眸集团',
+    ancestorIds: [],
+    validity: '2026-01-01 → 9999-12-31',
+    status: 'Active'
+  },
+  'CN-CUS-000121': {
+    id: 'CN-CUS-000121',
+    level: 'A2',
+    type: 'Main Account',
+    label: 'A2 · 明眸华北法人',
+    name: '明眸华北法人',
+    oneId: 'CN-CUS-000121',
+    payerId: 'GC-PY-0093',
+    payerName: 'GC-PY-0093',
+    childrenCount: 1,
+    descendants: 1,
+    parent: 'CN-CUS-000101',
+    parentName: '明眸集团',
+    path: '明眸集团 / 明眸华北法人',
+    ancestorIds: ['CN-CUS-000101'],
+    validity: '2026-01-01 → 9999-12-31',
+    status: 'Active'
+  },
+  'GC-000245': {
+    id: 'GC-000245',
+    level: 'A1',
+    type: 'Door',
+    label: 'A1 · 北京明眸门店',
+    name: '北京明眸门店',
+    oneId: 'GC-000245',
+    payerId: 'GC-PY-0093',
+    payerName: 'GC-PY-0093',
+    childrenCount: 0,
+    descendants: 0,
+    parent: 'CN-CUS-000121',
+    parentName: '明眸华北法人',
+    path: '明眸集团 / 明眸华北法人 / 北京明眸门店',
+    ancestorIds: ['CN-CUS-000101', 'CN-CUS-000121'],
     validity: '2026-01-01 → 9999-12-31',
     status: 'Active'
   }
@@ -281,11 +372,20 @@ export const mockHierarchyNodes: Record<string, HierarchyNodeVO> = {
 
 export const mockHierarchy: HierarchyNodeVO[] = [
   {
-    ...mockHierarchyNodes.group,
+    ...mockHierarchyNodes['CN-CUS-000001'],
     children: [
       {
-        ...mockHierarchyNodes.legal,
-        children: [mockHierarchyNodes.store, mockHierarchyNodes.suzhou]
+        ...mockHierarchyNodes['CN-CUS-000021'],
+        children: [mockHierarchyNodes['CN-CUS-000125'], mockHierarchyNodes['CN-CUS-000126']]
+      }
+    ]
+  },
+  {
+    ...mockHierarchyNodes['CN-CUS-000101'],
+    children: [
+      {
+        ...mockHierarchyNodes['CN-CUS-000121'],
+        children: [mockHierarchyNodes['GC-000245']]
       }
     ]
   }
@@ -296,6 +396,7 @@ export const mockChangeRequests: ChangeRequestVO[] = [
   {
     requestId: 'CHG-0018',
     oneId: 'GC-000128',
+    customerName: '上海清视眼镜有限公司',
     changeType: 'Update',
     content: '经营地址',
     status: 'Under Review',
@@ -305,6 +406,7 @@ export const mockChangeRequests: ChangeRequestVO[] = [
   {
     requestId: 'DEL-0007',
     oneId: 'GC-000245',
+    customerName: '北京明眸商业有限公司',
     changeType: 'Deactivate',
     content: '24个月无交易 · 人工填报',
     status: 'Inactive',
@@ -515,6 +617,167 @@ export const mockApprovalDetail: Record<string, ApprovalTaskDetailVO> = {
   }
 };
 
+/** ---------------------------------- 流程跟踪 ---------------------------------- */
+/**
+ * 泳道图场景一模板（总设计：单条客户创建，发现 BU 匹配重复并关联已有 One ID）。
+ * 7 阶段 × 11 步，与后端 CmdFlowTraceServiceImpl.createSceneTemplate 保持一致。
+ */
+const FLOW_SCENE1_STEPS: Array<Pick<FlowTraceStepVO, 'phase' | 'phaseName' | 'lane' | 'nodeCode' | 'nodeName' | 'nodeType' | 'note'>> = [
+  { phase: 1, phaseName: '发起', lane: 'Business User', nodeCode: 'APPLY', nodeName: '创建客户申请', nodeType: 'MANUAL', note: '选择客户类型、BU、产品线与来源系统' },
+  { phase: 2, phaseName: '数据准备', lane: 'Business User', nodeCode: 'INPUT', nodeName: '录入与附件', nodeType: 'MANUAL', note: 'OCR Core + 营业执照上传' },
+  { phase: 2, phaseName: '数据准备', lane: '系统自动处理', nodeCode: 'OCR', nodeName: 'OCR 与智能补全', nodeType: 'AUTO', note: '提取工商名称、注册代码与地址标准化' },
+  { phase: 3, phaseName: '自动校验', lane: '系统自动处理', nodeCode: 'DQ', nodeName: '技术与业务 DQ', nodeType: 'AUTO', note: '必填、格式、值域、GC Core、合规校验' },
+  { phase: 4, phaseName: '匹配分流', lane: '系统自动处理', nodeCode: 'DUP', nodeName: 'Duplicate Check', nodeType: 'GATEWAY', note: 'SUSPECT 进入人工治理' },
+  { phase: 5, phaseName: '人工治理', lane: 'Data Steward BU Scope', nodeCode: 'BU_REVIEW', nodeName: 'BU Scope 初审', nodeType: 'MANUAL', note: '确认 Same-BU 或升级 Cross-BU' },
+  { phase: 5, phaseName: '人工治理', lane: 'Data Steward GC Scope', nodeCode: 'GC_REVIEW', nodeName: 'GC Scope 决策', nodeType: 'MANUAL', note: '决定关联已有或新创新数据 One ID' },
+  { phase: 6, phaseName: '审批发布', lane: '系统自动处理', nodeCode: 'RESULT', nodeName: '生成 / 关联结果', nodeType: 'AUTO', note: '建立 BU 本地组织映射' },
+  { phase: 6, phaseName: '审批发布', lane: 'Platform Admin', nodeCode: 'PUBLISH', nodeName: '发布前下游', nodeType: 'MANUAL', note: '失败即 Retry / Resubmit' },
+  { phase: 7, phaseName: '追踪审计', lane: 'Platform Admin', nodeCode: 'TRACE', nodeName: '运行追踪', nodeType: 'AUTO', note: '任务状态、失败原因、重发布记录' },
+  { phase: 7, phaseName: '追踪审计', lane: 'Auditor（只读）', nodeCode: 'AUDIT', nodeName: '审计查询', nodeType: 'AUTO', note: 'Before / After 审查证据' }
+];
+
+/**
+ * 流程跟踪演示数据：按任务 detailType 推导当前节点，
+ * 已完成步骤补系统轨迹时间，与后端实时推导口径一致。
+ */
+export const buildMockFlowTrace = (taskNo: string, detailType = 'create'): FlowTraceVO => {
+  const isGc = detailType.startsWith('gc');
+  const isDone = detailType === 'done';
+  const currentNode = isDone ? '_DONE_' : isGc ? 'GC_REVIEW' : 'BU_REVIEW';
+
+  // 已完成节点的时间线（演示用固定时刻）
+  const doneTimes: Record<string, { operator: string; actionTime: string; opinion?: string }> = {
+    APPLY: { operator: '王视野', actionTime: '2026-09-15 10:12:00', opinion: '提交客户创建申请（High End · 镜片）' },
+    INPUT: { operator: '王视野', actionTime: '2026-09-15 10:12:30' },
+    OCR: { operator: '系统任务', actionTime: '2026-09-15 10:13:05' },
+    DQ: { operator: '系统任务', actionTime: '2026-09-15 10:13:40', opinion: 'DQ 52 分：1 Warning（地址相似度低）' },
+    DUP: { operator: '系统任务', actionTime: '2026-09-15 10:14:02', opinion: '命中 1 个 SUSPECT 候选（GC-000128 相似度 0.87）' },
+    BU_REVIEW: { operator: 'BU Steward', actionTime: '2026-09-16 09:30:00', opinion: 'Same-BU 证据充分，升级 Cross-BU' },
+    GC_REVIEW: { operator: 'GC Steward', actionTime: '2026-09-16 15:20:00', opinion: '关联已有 One ID：GC-000128' },
+    RESULT: { operator: '系统任务', actionTime: '2026-09-16 15:20:10' },
+    PUBLISH: { operator: 'Platform Admin', actionTime: '2026-09-16 15:25:00', opinion: 'DMS+ / SAP 下发成功' },
+    TRACE: { operator: '系统任务', actionTime: '2026-09-16 15:25:05' },
+    AUDIT: { operator: 'Auditor', actionTime: '2026-09-16 16:00:00' }
+  };
+
+  const order = ['APPLY', 'INPUT', 'OCR', 'DQ', 'DUP', 'BU_REVIEW', 'GC_REVIEW', 'RESULT', 'PUBLISH', 'TRACE', 'AUDIT'];
+  const currentIdx = order.indexOf(currentNode);
+
+  const steps: FlowTraceStepVO[] = FLOW_SCENE1_STEPS.map((tpl, i) => {
+    const done = currentIdx < 0 || i < currentIdx || (isDone && i <= order.length);
+    const trace = doneTimes[tpl.nodeCode];
+    return {
+      ...tpl,
+      order: i + 1,
+      status: (done ? 'COMPLETED' : i === currentIdx ? 'CURRENT' : 'PENDING') as FlowTraceStepVO['status'],
+      assignee: tpl.nodeCode === 'BU_REVIEW' ? 'BU_STEWARD' : tpl.nodeCode === 'GC_REVIEW' ? 'GC_STEWARD' : undefined,
+      operator: done ? trace?.operator : undefined,
+      actionTime: done ? trace?.actionTime : undefined,
+      opinion: done ? trace?.opinion : undefined
+    };
+  });
+
+  const completedSteps = steps.filter(s => s.status === 'COMPLETED').length;
+  return {
+    taskNo,
+    bizTitle: '上海优视眼镜有限公司',
+    bizType: isGc ? '跨BU合并' : '客户创建',
+    sceneCode: isGc ? 'MERGE' : 'CUSTOMER_CREATE',
+    sceneName: isGc ? '客户合并' : '客户创建',
+    status: isDone ? 'APPROVED' : 'PENDING',
+    currentNodeName: isDone ? '已完成' : isGc ? 'GC Steward决策' : 'BU Steward初审',
+    assigneeName: isGc ? 'GC Steward' : 'BU Steward',
+    assigneeRole: isGc ? 'GC_STEWARD' : 'BU_STEWARD',
+    buScope: isGc ? 'Cross-BU' : 'High End',
+    riskLevel: 'High',
+    slaState: 'OVERDUE',
+    submitTime: '2026-09-15 10:12:00',
+    slaDue: '2026-09-17 10:12:00',
+    flowCode: isGc ? 'cmd_customer_merge' : 'cmd_customer_create',
+    flowName: isGc ? '客户合并审批流' : '客户创建审批流',
+    slaHours: isGc ? 24 : 48,
+    flowInstanceId: 1801,
+    flowStatus: '1',
+    totalSteps: steps.length,
+    completedSteps,
+    progressPercent: Math.round((completedSteps * 100) / steps.length),
+    engineBound: true,
+    graph: buildMockGraph(isGc ? 'GC_REVIEW' : 'BU_REVIEW', isDone),
+    bypass: {
+      lane: 'Platform Admin',
+      nodeName: '规则与参数配置',
+      note: '配置 DQ 规则、匹配规则和审批试验，参数配置不打断主流程'
+    },
+    steps,
+    contextVars: [
+      { name: 'record', value: `${taskNo} / 上海优视眼镜有限公司` },
+      { name: 'dataset', value: 'customer' },
+      { name: 'scene', value: isGc ? 'MERGE' : 'CUSTOMER_CREATE' },
+      { name: 'flowDefinition', value: isGc ? 'cmd_customer_merge' : 'cmd_customer_create' },
+      { name: 'buScope', value: isGc ? 'Cross-BU' : 'High End' },
+      { name: 'riskLevel', value: 'High' },
+      { name: 'dqScore', value: '52.00' },
+      { name: 'duplicateState', value: 'SUSPECTED' },
+      { name: 'crossBu', value: isGc ? 'Y' : 'N' },
+      { name: 'mergeRequestStatus', value: 'PENDING' },
+      { name: 'oneId', value: isGc ? 'GC-000128' : '[not defined]' },
+      { name: 'assignee', value: isGc ? 'GC Steward' : 'BU Steward' },
+      { name: 'submitTime', value: '2026-09-15T10:12:00' },
+      { name: 'slaDue', value: '2026-09-17T10:12:00' },
+      { name: 'flowInstanceId', value: '1801' }
+    ],
+    actions: [
+      { actionType: 'SUBMIT', actionName: '创建客户申请', operatorName: '王视野', operatorRole: 'BUSINESS_USER', actionTime: '2026-09-15 10:12:00' },
+      { actionType: 'SYSTEM', actionName: 'OCR 与智能补全', operatorName: '系统任务', operatorRole: 'SYSTEM', actionTime: '2026-09-15 10:13:05' },
+      { actionType: 'SYSTEM', actionName: '技术与业务 DQ', operatorName: '系统任务', operatorRole: 'SYSTEM', actionTime: '2026-09-15 10:13:40', opinion: 'DQ 52 分：1 Warning' },
+      { actionType: 'SYSTEM', actionName: 'Duplicate Check', operatorName: '系统任务', operatorRole: 'SYSTEM', actionTime: '2026-09-15 10:14:02', opinion: 'SUSPECT → BU Scope 初审' },
+      { actionType: 'CLAIM', actionName: '初审认领', operatorName: 'BU Steward', operatorRole: 'BU_STEWARD', actionTime: '2026-09-15 10:30:00' }
+    ]
+  };
+};
+
+/** BPMN 风格流程图（引擎 flow_node / flow_skip 结构，与后端 CmdFlowEngineServiceImpl.buildNodes 一致） */
+export const buildMockGraph = (currentNode: string, isDone = false): FlowGraphVO => {
+  const order = ['START', 'APPLY', 'BU_REVIEW', 'GC_REVIEW', 'END'];
+  const currentIdx = order.indexOf(currentNode);
+  const pos: Record<string, { x: number; y: number }> = {
+    START: { x: 60, y: 90 },
+    APPLY: { x: 180, y: 90 },
+    BU_REVIEW: { x: 310, y: 90 },
+    GC_REVIEW: { x: 440, y: 90 },
+    END: { x: 570, y: 90 }
+  };
+  const names: Record<string, string> = {
+    START: '开始',
+    APPLY: '创建客户申请',
+    BU_REVIEW: 'BU Scope 初审',
+    GC_REVIEW: 'GC Scope 决策',
+    END: '结束'
+  };
+  return {
+    definitionId: 1,
+    flowCode: 'cmd_customer_create',
+    nodes: order.map(code => {
+      const idx = order.indexOf(code);
+      return {
+        nodeCode: code,
+        nodeName: names[code],
+        shape: (code === 'START' || code === 'END' ? 'CIRCLE' : 'RECT') as FlowGraphNodeVO['shape'],
+        x: pos[code].x,
+        y: pos[code].y,
+        status: (isDone || idx < currentIdx ? 'COMPLETED' : idx === currentIdx ? 'CURRENT' : 'PENDING') as FlowGraphNodeVO['status']
+      };
+    }),
+    edges: [
+      { from: 'START', to: 'APPLY', label: '提交', skipType: 'PASS', passed: true },
+      { from: 'APPLY', to: 'BU_REVIEW', label: '进入 BU 初审', skipType: 'PASS', passed: true },
+      { from: 'BU_REVIEW', to: 'GC_REVIEW', label: '升级 Cross-BU', skipType: 'PASS', passed: currentNode === 'GC_REVIEW' || isDone },
+      { from: 'BU_REVIEW', to: 'END', label: '批准', skipType: 'PASS', passed: isDone },
+      { from: 'GC_REVIEW', to: 'END', label: '决策完成', skipType: 'PASS', passed: isDone }
+    ]
+  };
+};
+
 /** ---------------------------------- One ID ---------------------------------- */
 export const mockOneIdRule: OneIdRuleVO = {
   ruleName: 'GC Customer One ID',
@@ -607,10 +870,28 @@ export const mockWorkflow: WorkflowConfigVO = {
 };
 
 /** ---------------------------------- OCR ---------------------------------- */
+/**
+ * 营业执照原件信息（对应原型「营业执照预览」4 行）
+ * 取值与测试素材 docs/cmd-poc/测试素材/营业执照/license_01.png 一致，
+ * 与后端 CmdOcrServiceImpl 的默认演示结果保持同一套数据。
+ */
+export const mockOcrLicense: OcrLicenseVO = {
+  creditCode: '91310106MA1FL2X78K',
+  name: '上海清视眼镜有限公司',
+  type: '有限责任公司（自然人投资或控股）',
+  address: '上海市静安区南京西路1266号恒隆广场二期28层'
+};
+
+/**
+ * 字段识别值（对应弹窗底部表格）
+ * field 必须与客户模型元数据 md_field.field_name 完全一致，前端据此回填新建客户表单。
+ */
 export const mockOcrResults: OcrResultVO[] = [
-  { field: '工商名称', value: '上海清视眼镜有限公司', confidence: '98%' },
-  { field: '信用代码', value: '91310000XXXXXXXXXX', confidence: '99%' },
-  { field: '注册地址', value: '上海市静安区南京西路XXX号', confidence: '93%' }
+  { code: 'legal_name', field: '客户法定名称', value: '上海清视眼镜有限公司', confidence: '98%' },
+  { code: 'credit_code', field: '统一社会信用代码', value: '91310106MA1FL2X78K', confidence: '99%' },
+  { code: 'address', field: '注册地址', value: '上海市静安区南京西路1266号恒隆广场二期28层', confidence: '93%' },
+  { code: 'province', field: '省份', value: '上海市', confidence: '96%' },
+  { code: 'city', field: '城市', value: '上海市', confidence: '91%' }
 ];
 
 /** 历史重评估影响预估（Demo） */
@@ -619,3 +900,146 @@ export const mockReEvaluateImpact: ReEvaluateImpactVO[] = [
   { label: '预计新增异常 · Demo', value: '37' },
   { label: '旧分数与规则版本', value: '保留' }
 ];
+
+/** ---------------------------------- 流程中心（所有 CMD 工作流） ---------------------------------- */
+/** 流程中心：全部 CMD 业务场景（来自 V6.1 总设计业务流，已部署到 Warm-Flow） */
+export const mockFlowScenes: FlowSceneVO[] = [
+  { sceneCode: 'CUSTOMER_CREATE', sceneName: '客户创建', flowCode: 'cmd_customer_create', flowName: '客户创建审批流', slaHours: 48, deployed: true, definitionId: 1001, version: 1, nodeCount: 5 },
+  { sceneCode: 'CUSTOMER_CHANGE', sceneName: '客户属性变更', flowCode: 'cmd_customer_change', flowName: '客户变更审批流', slaHours: 48, deployed: true, definitionId: 1002, version: 1, nodeCount: 5 },
+  { sceneCode: 'DEACTIVATE', sceneName: '客户逻辑停用', flowCode: 'cmd_customer_deactivate', flowName: '客户停用审批流', slaHours: 72, deployed: true, definitionId: 1003, version: 1, nodeCount: 5 },
+  { sceneCode: 'HIER_RELATION', sceneName: '层级关系变更', flowCode: 'cmd_hier_relation', flowName: '层级关系审批流', slaHours: 48, deployed: true, definitionId: 1004, version: 1, nodeCount: 5 },
+  { sceneCode: 'IMPORT_BATCH', sceneName: '批量导入确认', flowCode: 'cmd_import_batch', flowName: '批量导入确认流', slaHours: 24, deployed: true, definitionId: 1005, version: 1, nodeCount: 5 },
+  { sceneCode: 'MERGE', sceneName: '客户合并', flowCode: 'cmd_customer_merge', flowName: '客户合并审批流', slaHours: 24, deployed: true, definitionId: 1006, version: 1, nodeCount: 5 }
+];
+
+/** 流程中心：按场景构造演示用 BPMN 风格图形（节点均为待执行，定义视图） */
+export const buildMockSceneGraph = (sceneCode: string): FlowGraphVO => {
+  const flowCode = mockFlowScenes.find(s => s.sceneCode === sceneCode)?.flowCode ?? 'cmd_customer_create';
+  const definitionId = mockFlowScenes.find(s => s.sceneCode === sceneCode)?.definitionId ?? 1001;
+
+  // 与后端 CmdFlowEngineServiceImpl.buildSwimlane 保持一致：7 阶段（列） × 6 泳道（行）
+  const BASE_X = 300;
+  const COL_GAP = 168;
+  const BASE_Y = 70;
+  const LANE_GAP = 92;
+
+  const lanes = ['Business User', '系统自动处理', 'Data Steward BU Scope', 'Data Steward GC Scope', 'Platform Admin', 'Auditor（只读）'];
+  const phaseNames = ['发起', '数据准备', '自动校验', '匹配分流', '人工治理', '审批发布', '追踪审计'];
+
+  type Tpl = [number, number, string, string, string, string];
+  // [阶段, 泳道序号, 节点编码, 节点名称, 节点类型, 说明]
+  const createTpl: Tpl[] = [
+    [1, 0, 'APPLY', '创建客户申请', 'MANUAL', '选择客户类型、BU、产品线与来源系统，保存草稿或提交'],
+    [2, 0, 'INPUT', '录入与附件', 'MANUAL', '填写 GC Core、BU 与来源系统字段，上传营业执照'],
+    [2, 1, 'OCR', 'OCR 与智能补全', 'AUTO', '提取工商名称、信用代码和地址；底表检索与地址标准化'],
+    [3, 1, 'DQ', '技术与业务 DQ', 'AUTO', '必填、格式、值集、GC Core、层级与 Payer 校验'],
+    [4, 1, 'DUP', 'Duplicate Check', 'GATEWAY', '以信用代码和经营地址为主依据；SUSPECT 进入人工治理'],
+    [5, 2, 'BU_REVIEW', 'BU Scope 初审', 'MANUAL', '查看申请与候选证据；确认 Same-BU 或升级 Cross-BU'],
+    [5, 3, 'GC_REVIEW', 'GC Scope 决策', 'MANUAL', '核对跨 BU 证据；决定关联现有或创建新 One ID'],
+    [6, 1, 'RESULT', '生成 / 关联结果', 'AUTO', '关联已有 One ID；建立 BU 本地码映射并激活主档'],
+    [6, 4, 'PUBLISH', '发布到下游', 'MANUAL', '通过 API / 实时 / 批量发布；失败时 Retry / Resubmit'],
+    [7, 4, 'TRACE', '运行追踪', 'AUTO', '查看任务状态、失败原因、重试与发布记录'],
+    [7, 5, 'AUDIT', '审计查询', 'AUTO', '记录谁、何时、做了什么及 Before / After 与审批证据']
+  ];
+  const genericTpl: Tpl[] = [
+    [1, 0, 'APPLY', '提交业务申请', 'MANUAL', 'Business User 发起申请'],
+    [2, 1, 'INPUT', '数据装配', 'AUTO', '装配申请数据与证据快照'],
+    [3, 1, 'DQ', '自动校验', 'AUTO', 'DQ 规则与前置校验（Loop Check / 关联检查等）'],
+    [4, 1, 'DUP', '条件分流', 'GATEWAY', '按规则变量路由（Same-BU / Cross-BU / 风险等级）'],
+    [5, 2, 'BU_REVIEW', 'BU Scope 初审', 'MANUAL', '本 BU 数据管家初审'],
+    [5, 3, 'GC_REVIEW', 'GC Scope 决策', 'MANUAL', '跨 BU 或高风险升级 GC 决策'],
+    [6, 1, 'RESULT', '执行与生效', 'AUTO', '审批通过后执行业务结果并生成版本'],
+    [6, 4, 'PUBLISH', '发布下游', 'MANUAL', '通知 API / 文件 / 批量发布；失败即 Retry / Resubmit'],
+    [7, 4, 'TRACE', '运行追踪', 'AUTO', '任务状态与失败原因追踪'],
+    [7, 5, 'AUDIT', '审计查询', 'AUTO', 'Before / After 证据审查']
+  ];
+
+  const tpl = sceneCode === 'CUSTOMER_CREATE' ? createTpl : genericTpl;
+  const nodes: FlowGraphNodeVO[] = tpl.map(([phase, laneIdx, nodeCode, nodeName, nodeType, note], i) => ({
+    nodeCode,
+    nodeName,
+    shape: (i === 0 || i === tpl.length - 1 ? 'CIRCLE' : nodeType === 'GATEWAY' ? 'DIAMOND' : 'RECT') as FlowGraphNodeVO['shape'],
+    nodeType: nodeType === 'GATEWAY' ? 3 : 1,
+    lane: lanes[laneIdx],
+    phase,
+    phaseName: phaseNames[phase - 1],
+    note,
+    x: BASE_X + (phase - 1) * COL_GAP,
+    y: BASE_Y + laneIdx * LANE_GAP,
+    status: 'PENDING'
+  }));
+
+  const edges: FlowGraphEdgeVO[] = nodes.slice(0, -1).map((n, i) => ({
+    from: n.nodeCode,
+    to: nodes[i + 1].nodeCode,
+    label: '',
+    skipType: 'PASS',
+    passed: false
+  }));
+
+  return { definitionId, flowCode, lanes, nodes, edges };
+};
+
+/** 流程中心：流程实例记录（每一次执行过的工作流都留一条；USE_MOCK 时的演示数据） */
+export const mockFlowInstances: FlowInstanceVO[] = [
+  {
+    id: 1001, taskNo: 'AP-20260915-0001', bizTitle: '苏州新视野眼镜有限公司', bizType: '客户创建',
+    sceneCode: 'CUSTOMER_CREATE', sceneName: '客户创建', flowName: '客户创建审批流', flowCode: 'cmd_customer_create',
+    engineBound: false, applicantName: '王视野', assigneeName: 'BU Steward', assigneeRole: 'BU_STEWARD',
+    priority: 'High', status: 'PENDING', currentNodeName: 'BU Steward初审',
+    completedSteps: 1, totalSteps: 11, progressPercent: 9, slaState: 'OVERDUE', createTime: '2026-09-15 09:20:00'
+  },
+  {
+    id: 1003, taskNo: 'AP-20260916-0003', bizTitle: '成都明视眼镜有限公司', bizType: '疑似重复',
+    sceneCode: 'CUSTOMER_CREATE', sceneName: '客户创建', flowName: '客户创建审批流', flowCode: 'cmd_customer_create',
+    engineBound: false, applicantName: '系统规则', assigneeName: 'BU Steward', assigneeRole: 'BU_STEWARD',
+    priority: 'High', status: 'APPROVED', currentNodeName: '已完成',
+    completedSteps: 11, totalSteps: 11, progressPercent: 100, slaState: 'DUE_SOON',
+    submitTime: '2026-09-16 10:05:00', finishTime: '2026-09-16 15:30:00', durationHours: 5, createTime: '2026-09-16 10:05:00'
+  },
+  {
+    id: 1005, taskNo: 'AP-20260914-0005', bizTitle: '上海清视眼镜有限公司', bizType: '客户变更',
+    sceneCode: 'CUSTOMER_CHANGE', sceneName: '客户属性变更', flowName: '客户变更审批流', flowCode: 'cmd_customer_change',
+    engineBound: false, applicantName: '张清', assigneeName: '王视野', assigneeRole: 'BUSINESS_USER',
+    priority: 'Medium', status: 'RETURNED', currentNodeName: '退回申请人补充',
+    completedSteps: 1, totalSteps: 10, progressPercent: 10, slaState: 'OVERDUE', createTime: '2026-09-14 14:10:00'
+  },
+  {
+    id: 1007, taskNo: 'AP-20260915-0007', bizTitle: '上海清视眼镜有限公司跨BU合并申请', bizType: '跨BU合并',
+    sceneCode: 'MERGE', sceneName: '客户合并', flowName: '客户合并审批流', flowCode: 'cmd_customer_merge',
+    engineBound: false, applicantName: 'BU Steward', assigneeName: 'GC Steward', assigneeRole: 'GC_STEWARD',
+    priority: 'High', status: 'PENDING', currentNodeName: 'GC Steward决策',
+    completedSteps: 5, totalSteps: 10, progressPercent: 50, slaState: 'DUE_SOON', createTime: '2026-09-15 11:00:00'
+  }
+];
+
+/** 流程中心：在场景图形上按实例进度点亮节点（Mock 版，与后端 applyStepStatus 口径一致） */
+export const buildMockInstanceGraph = (sceneCode: string, taskNo: string): FlowGraphVO => {
+  const graph = buildMockSceneGraph(sceneCode);
+  const inst = mockFlowInstances.find(i => i.taskNo === taskNo);
+  if (!inst) return graph;
+  const name = inst.currentNodeName ?? '';
+  const currentCode =
+    inst.status === 'APPROVED' || inst.status === 'COMPLETED' || name.includes('已完成')
+      ? '_DONE_'
+      : name.includes('GC')
+        ? 'GC_REVIEW'
+        : name.includes('BU')
+          ? 'BU_REVIEW'
+          : name.includes('退回')
+            ? 'INPUT'
+            : 'APPLY';
+  const finished = currentCode === '_DONE_';
+  const stopped = inst.status === 'REJECTED' || inst.status === 'CANCELLED';
+  const currentIdx = graph.nodes.findIndex(n => n.nodeCode === currentCode);
+
+  graph.nodes = graph.nodes.map((n, i) => {
+    if (finished) return { ...n, status: 'COMPLETED' as const };
+    if (stopped && i > currentIdx) return { ...n, status: 'TERMINATED' as const };
+    if (i === currentIdx) return { ...n, status: 'CURRENT' as const };
+    if (i < currentIdx) return { ...n, status: 'COMPLETED' as const };
+    return { ...n, status: 'PENDING' as const };
+  });
+  graph.edges = graph.edges.map((e, i) => ({ ...e, passed: graph.nodes[i]?.status === 'COMPLETED' }));
+  return graph;
+};

@@ -109,6 +109,7 @@ import IntegrationPanel from './components/panels/IntegrationPanel.vue';
 import AdminPanel from './components/panels/AdminPanel.vue';
 import AuditPanel from './components/panels/AuditPanel.vue';
 import CoveragePanel from './components/panels/CoveragePanel.vue';
+import WorkflowCenterPanel from './components/panels/WorkflowCenterPanel.vue';
 
 defineOptions({ name: 'CmdPoc' });
 
@@ -132,7 +133,8 @@ const PANEL_MAP: Record<PageId, Component> = {
   integration: IntegrationPanel,
   admin: AdminPanel,
   audit: AuditPanel,
-  coverage: CoveragePanel
+  coverage: CoveragePanel,
+  flowCenter: WorkflowCenterPanel
 };
 
 const currentPanel = computed(() => PANEL_MAP[currentPage.value] ?? DashPanel);
@@ -151,8 +153,8 @@ const pageHeadTitle = computed(() => {
 
 const DASH_SUB: Record<RoleKey, string> = {
   business: '根据角色与Scope动态显示',
-  bu: '本BU申请初审、异常治理与SLA管理',
-  gc: '跨BU证据核对、One ID决策与重大治理',
+  bu: '本BU申请初审，异常治理与SLA管理',
+  gc: '跨BU证据核对，One ID决策与重大治理',
   admin: '根据角色与Scope动态显示',
   audit: '根据角色与Scope动态显示'
 };

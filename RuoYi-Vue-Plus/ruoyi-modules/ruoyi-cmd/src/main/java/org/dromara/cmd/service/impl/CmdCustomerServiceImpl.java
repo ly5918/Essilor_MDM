@@ -5,15 +5,23 @@ import cn.hutool.core.util.ObjectUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.dromara.cmd.common.CmdConstants;
+import org.dromara.cmd.domain.CmdApprovalAction;
+import org.dromara.cmd.domain.CmdApprovalTask;
 import org.dromara.cmd.domain.CmdCustomer;
 import org.dromara.cmd.domain.CmdCustomerVersion;
 import org.dromara.cmd.domain.bo.CmdCustomerBo;
+import org.dromara.cmd.domain.vo.CmdCustomerSubmitVo;
 import org.dromara.cmd.domain.vo.CmdCustomerVersionVo;
 import org.dromara.cmd.domain.vo.CmdCustomerVo;
+import org.dromara.cmd.mapper.CmdApprovalActionMapper;
+import org.dromara.cmd.mapper.CmdApprovalTaskMapper;
 import org.dromara.cmd.mapper.CmdCustomerMapper;
 import org.dromara.cmd.mapper.CmdCustomerVersionMapper;
+import org.dromara.cmd.mapper.CmdFlowSceneMapper;
 import org.dromara.cmd.service.ICmdCustomerService;
+import org.dromara.cmd.service.ICmdFlowEngineService;
 import org.dromara.common.core.domain.PageResult;
 import org.dromara.common.core.exception.ServiceException;
 import org.dromara.common.json.utils.JsonUtils;
@@ -21,12 +29,17 @@ import org.dromara.common.core.utils.MapstructUtils;
 import org.dromara.common.core.utils.StringUtils;
 import org.dromara.common.mybatis.core.page.PageQuery;
 import org.dromara.common.mybatis.core.query.QueryBuilder;
+import org.dromara.common.satoken.utils.LoginHelper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -43,12 +56,37 @@ import java.util.Objects;
  *
  * @author Essilor CMD POC
  */
+@Slf4j
 @RequiredArgsConstructor
 @Service
 public class CmdCustomerServiceImpl implements ICmdCustomerService {
 
     private final CmdCustomerMapper customerMapper;
     private final CmdCustomerVersionMapper versionMapper;
+    private final CmdApprovalTaskMapper approvalTaskMapper;
+    private final CmdApprovalActionMapper approvalActionMapper;
+    private final CmdFlowSceneMapper flowSceneMapper;
+    private final ICmdFlowEngineService flowEngineService;
+
+    /** 新建客户申请的业务场景（cmd_flow_scene.scene_code，同时决定泳道图模板与流程定义） */
+    private static final String SCENE_CUSTOMER_CREATE = CmdConstants.SCENE_CUSTOMER_CREATE;
+
+    /** 首次提交后的业务节点名（含 BU 关键字，引擎启动后据此定位到 BU_REVIEW 节点） */
+    private static final String NODE_NAME_BU_REVIEW = "BU Scope 初审";
+
+    /** 首次提交的处理角色（Data Steward BU Scope） */
+    private static final String ROLE_BU_STEWARD = "BU_STEWARD";
+    private static final String NAME_BU_STEWARD = "BU Steward";
+
+    /** 场景未配置 SLA 时的兜底时长（小时） */
+    private static final long DEFAULT_SLA_HOURS = 48L;
+
+    /** POC 免登录：申请人取当前登录人，取不到时用演示账号兜底 */
+    private static final Long DEMO_APPLICANT_ID = 1L;
+    private static final String DEMO_APPLICANT_NAME = "Business User";
+
+    /** 申请编号日期段格式（AP-yyyyMMdd-0001） */
+    private static final DateTimeFormatter TASK_NO_DAY = DateTimeFormatter.ofPattern("yyyyMMdd");
 
     /**
      * {@inheritDoc}
@@ -92,8 +130,131 @@ public class CmdCustomerServiceImpl implements ICmdCustomerService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public String insertCustomer(CmdCustomerBo bo) {
+        return insertCustomerEntity(bo).getOneId();
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public CmdCustomerSubmitVo submitApplication(CmdCustomerBo bo) {
+        // 1) 主档落库（One ID 服务端生成 + 首版本快照）
+        CmdCustomer customer = insertCustomerEntity(bo);
+
+        // 2) 自动检查（对应泳道图「技术/业务 DQ」与「Duplicate Check」两个自动阶段）：
+        //    POC 阶段用确定性规则替代独立校验引擎，接入规则引擎后此处改为调用其接口，落库字段不变。
+        BigDecimal dqScore = calcDqScore(customer);
+        String matchState = CmdConstants.MATCH_NEW;
+        String riskLevel = resolveRisk(dqScore);
+
+        CmdCustomer checkPatch = new CmdCustomer();
+        checkPatch.setId(customer.getId());
+        checkPatch.setStatus(CmdConstants.CUST_STATUS_PENDING);
+        checkPatch.setDqScore(dqScore);
+        checkPatch.setDqGrade(gradeOf(dqScore));
+        checkPatch.setMatchState(matchState);
+        checkPatch.setDuplicateFlag(CmdConstants.NO);
+        customerMapper.updateById(checkPatch);
+        customer.setStatus(CmdConstants.CUST_STATUS_PENDING);
+        customer.setDqScore(dqScore);
+        customer.setMatchState(matchState);
+
+        // 3) 生成统一待办（进入 Data Steward BU Scope 队列）
+        Applicant applicant = resolveApplicant();
+        long slaHours = resolveSlaHours();
+        LocalDateTime now = LocalDateTime.now();
+        CmdApprovalTask task = new CmdApprovalTask();
+        task.setTaskNo(generateTaskNo());
+        task.setTaskCategory(CmdConstants.APPR_CAT_APPROVAL);
+        task.setBizType(bizTypeOf(bo));
+        task.setBizId(String.valueOf(customer.getId()));
+        task.setBizTitle(customer.getLegalName());
+        task.setOneId(customer.getOneId());
+        task.setSceneCode(SCENE_CUSTOMER_CREATE);
+        task.setApplicantId(applicant.id());
+        task.setApplicantName(applicant.name());
+        task.setBuScope(customer.getBuScope());
+        task.setScope(CmdConstants.SCOPE_BU);
+        task.setCurrentNodeCode("BU_REVIEW");
+        task.setCurrentNodeName(NODE_NAME_BU_REVIEW);
+        task.setAssigneeName(NAME_BU_STEWARD);
+        task.setAssigneeRole(ROLE_BU_STEWARD);
+        task.setStatus(CmdConstants.APPR_STATUS_PENDING);
+        task.setRiskLevel(riskLevel);
+        task.setDqScore(dqScore);
+        task.setDuplicateState(matchState);
+        task.setCrossBuFlag(CmdConstants.NO);
+        task.setSubmitTime(now);
+        task.setSlaDue(now.plusHours(slaHours));
+        task.setSlaState(CmdConstants.SLA_NORMAL);
+        task.setEvidenceJson(evidenceOf(customer, dqScore, matchState));
+        task.setBizSnapshotJson(JsonUtils.toJsonString(customer));
+        task.setRemark(bo.getRemark());
+        approvalTaskMapper.insert(task);
+
+        // 4) 业务侧轨迹：提交申请（与引擎 flow_his_task 互补）
+        CmdApprovalAction action = new CmdApprovalAction();
+        action.setTaskId(task.getId());
+        action.setTaskNo(task.getTaskNo());
+        action.setActionType(CmdConstants.ACTION_SUBMIT);
+        action.setActionName("提交申请");
+        action.setFromNodeCode("APPLY");
+        action.setToNodeCode("BU_REVIEW");
+        action.setOperatorId(applicant.id());
+        action.setOperatorName(applicant.name());
+        action.setOperatorRole(ROLE_BU_STEWARD);
+        action.setActionTime(now);
+        action.setBeforeState(CmdConstants.APPR_STATUS_DRAFT);
+        action.setAfterState(CmdConstants.APPR_STATUS_PENDING);
+        action.setEvidenceJson(task.getEvidenceJson());
+        approvalActionMapper.insert(action);
+
+        // 5) 拉起 Warm-Flow：部署流程定义 → 启动实例 → 定位到业务当前节点 → 回写 flow_* 镜像
+        flowEngineService.startInstance(task.getTaskNo());
+        CmdApprovalTask started = approvalTaskMapper.selectOne(new LambdaQueryWrapper<CmdApprovalTask>()
+            .eq(CmdApprovalTask::getTaskNo, task.getTaskNo())
+            .last("LIMIT 1"));
+        if (started != null) {
+            task = started;
+        }
+
+        // 6) 主档回写流程实例 ID：客户详情可直接跳「流程跟踪」
+        CmdCustomer flowPatch = new CmdCustomer();
+        flowPatch.setId(customer.getId());
+        flowPatch.setFlowInstanceId(task.getFlowInstanceId());
+        customerMapper.updateById(flowPatch);
+        log.info("[CMD][CUSTOMER] 客户新建申请已提交：oneId={} taskNo={} node={}",
+            customer.getOneId(), task.getTaskNo(), task.getCurrentNodeName());
+
+        CmdCustomerSubmitVo vo = new CmdCustomerSubmitVo();
+        vo.setCustomerId(customer.getId());
+        vo.setOneId(customer.getOneId());
+        vo.setTaskNo(task.getTaskNo());
+        vo.setSceneCode(SCENE_CUSTOMER_CREATE);
+        vo.setSceneName(sceneName());
+        vo.setStatus(customer.getStatus());
+        vo.setTaskStatus(task.getStatus());
+        vo.setCurrentNodeCode(task.getCurrentNodeCode());
+        vo.setCurrentNodeName(task.getCurrentNodeName());
+        vo.setAssigneeRole(task.getAssigneeRole());
+        vo.setDqScore(dqScore);
+        vo.setRiskLevel(riskLevel);
+        vo.setSlaDue(task.getSlaDue());
+        vo.setFlowInstanceId(task.getFlowInstanceId());
+        vo.setFlowStatus(task.getFlowStatus());
+        return vo;
+    }
+
+    /**
+     * 主档落库（One ID 由服务端生成，前端不可指定；同时写入首版本快照）
+     *
+     * @param bo 客户信息
+     * @return 落库后的客户实体（含主键 / One ID）
+     */
+    private CmdCustomer insertCustomerEntity(CmdCustomerBo bo) {
         CmdCustomer customer = MapstructUtils.convert(bo, CmdCustomer.class);
-        // One ID 由服务端按规则生成，前端不可指定（保证 One ID 稳定性）
+        customer.setId(null);
         customer.setOneId(generateOneId());
         customer.setVersionNo(1);
         customer.setStatus(StringUtils.blankToDefault(bo.getStatus(), CmdConstants.CUST_STATUS_DRAFT));
@@ -103,7 +264,152 @@ public class CmdCustomerServiceImpl implements ICmdCustomerService {
         customerMapper.insert(customer);
         // 首版本快照：beforeJson 为空
         appendVersion(customer, null, "CREATE", bo.getRemark());
-        return customer.getOneId();
+        return customer;
+    }
+
+    /**
+     * 提交时的质量分（POC 确定性规则：关键字段缺失即扣分，最低 0 分）
+     * <p>
+     * 生产环境应由 DQ 规则引擎（dq_rule）计算，此处仅保证演示数据有可解释的分值。
+     *
+     * @param customer 客户实体
+     * @return 质量分
+     */
+    private BigDecimal calcDqScore(CmdCustomer customer) {
+        BigDecimal score = new BigDecimal("100");
+        if (StringUtils.isBlank(customer.getCreditCode())) {
+            score = score.subtract(new BigDecimal("12"));
+        }
+        if (StringUtils.isBlank(customer.getAddress())) {
+            score = score.subtract(new BigDecimal("8"));
+        }
+        if (StringUtils.isBlank(customer.getProvince()) || StringUtils.isBlank(customer.getCity())) {
+            score = score.subtract(new BigDecimal("4"));
+        }
+        if (StringUtils.isBlank(customer.getContactName())) {
+            score = score.subtract(new BigDecimal("4"));
+        }
+        if (StringUtils.isBlank(customer.getContactPhone())) {
+            score = score.subtract(new BigDecimal("4"));
+        }
+        return score.max(BigDecimal.ZERO);
+    }
+
+    /**
+     * 质量分 → 等级
+     *
+     * @param score 质量分
+     * @return A / B / C / D
+     */
+    private String gradeOf(BigDecimal score) {
+        double value = score.doubleValue();
+        if (value >= 90) {
+            return "A";
+        }
+        return value >= 75 ? "B" : value >= 60 ? "C" : "D";
+    }
+
+    /**
+     * 质量分 → 风险等级（风险等级决定审批页「BU初审判断」提示与是否建议升级 GC）
+     *
+     * @param score 质量分
+     * @return High / Medium / Low
+     */
+    private String resolveRisk(BigDecimal score) {
+        double value = score.doubleValue();
+        if (value < 60) {
+            return CmdConstants.RISK_HIGH;
+        }
+        return value < 85 ? CmdConstants.RISK_MEDIUM : CmdConstants.RISK_LOW;
+    }
+
+    /**
+     * 生成申请编号：AP-yyyyMMdd-####（当日流水，从 0001 起递增且保证唯一）
+     *
+     * @return 申请编号
+     */
+    private String generateTaskNo() {
+        String prefix = "AP-" + LocalDate.now().format(TASK_NO_DAY) + "-";
+        for (int seq = 1; seq <= 9999; seq++) {
+            String taskNo = prefix + String.format("%04d", seq);
+            Long exists = approvalTaskMapper.lambda().eq(CmdApprovalTask::getTaskNo, taskNo).count();
+            if (exists == null || exists == 0) {
+                return taskNo;
+            }
+        }
+        throw new ServiceException("申请编号生成失败：当日流水号已用尽");
+    }
+
+    /**
+     * 解析申请人：优先当前登录人，POC 免登录取不到时使用演示账号
+     *
+     * @return 申请人（ID + 姓名）
+     */
+    private Applicant resolveApplicant() {
+        try {
+            if (LoginHelper.isLogin()) {
+                return new Applicant(LoginHelper.getUserId(),
+                    StringUtils.blankToDefault(LoginHelper.getUsername(), DEMO_APPLICANT_NAME));
+            }
+        } catch (Exception e) {
+            log.debug("[CMD][CUSTOMER] 未获取到登录人，使用演示申请人：{}", e.getMessage());
+        }
+        return new Applicant(DEMO_APPLICANT_ID, DEMO_APPLICANT_NAME);
+    }
+
+    /**
+     * 读取场景 SLA 时长（cmd_flow_scene.sla_hours）
+     *
+     * @return SLA 时长（小时）
+     */
+    private long resolveSlaHours() {
+        Map<String, Object> scene = flowSceneMapper.selectSceneByCode(SCENE_CUSTOMER_CREATE);
+        Object hours = scene == null ? null : scene.get("sla_hours");
+        return hours instanceof Number number ? number.longValue() : DEFAULT_SLA_HOURS;
+    }
+
+    /**
+     * 场景名称（cmd_flow_scene.scene_name），用于回执文案
+     *
+     * @return 场景名称
+     */
+    private String sceneName() {
+        Map<String, Object> scene = flowSceneMapper.selectSceneByCode(SCENE_CUSTOMER_CREATE);
+        Object name = scene == null ? null : scene.get("scene_name");
+        return name == null ? "客户创建" : String.valueOf(name);
+    }
+
+    /**
+     * 业务类型（审批页「任务类型」列）：OCR 来源标记为客户新建 - OCR，便于演示区分
+     *
+     * @param bo 客户信息
+     * @return 业务类型
+     */
+    private String bizTypeOf(CmdCustomerBo bo) {
+        return StringUtils.isNotBlank(bo.getSourceSystem()) && "OCR".equalsIgnoreCase(bo.getSourceSystem())
+            ? "客户新建 - OCR" : "客户新建";
+    }
+
+    /**
+     * 治理证据快照（审批详情页「治理证据」区展示）
+     *
+     * @param customer   客户实体
+     * @param dqScore    质量分
+     * @param matchState 匹配结论
+     * @return JSON 字符串
+     */
+    private String evidenceOf(CmdCustomer customer, BigDecimal dqScore, String matchState) {
+        Map<String, Object> evidence = new java.util.LinkedHashMap<>(8);
+        evidence.put("自动检查", "必填 / 格式 / 值集校验");
+        evidence.put("质量分", dqScore);
+        evidence.put("重复检查", matchState);
+        evidence.put("信用代码", StringUtils.blankToDefault(customer.getCreditCode(), "未提供"));
+        evidence.put("注册地址", StringUtils.blankToDefault(customer.getAddress(), "未提供"));
+        return JsonUtils.toJsonString(evidence);
+    }
+
+    /** 申请人（登录人 / 演示账号） */
+    private record Applicant(Long id, String name) {
     }
 
     /**

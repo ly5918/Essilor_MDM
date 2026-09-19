@@ -44,8 +44,8 @@
             <div
               v-for="node in searchResults"
               :key="node.id"
-              :class="['hier-result', { on: currentKey === keyOf(node.id) }]"
-              @click="locateNode(keyOf(node.id))"
+              :class="['hier-result', { on: currentNode?.id === node.id }]"
+              @click="locateNode(node.id)"
             >
               <b>{{ node.name }}</b>
               <small>{{ node.oneId }} · {{ node.level }} · {{ node.status }}</small>
@@ -60,8 +60,8 @@
         <div class="hier-panel-head">
           <span>Legal Hierarchy</span>
           <div class="hier-center-tools">
-            <el-button text size="small" icon="Back" @click="locateNode('group')">返回根节点</el-button>
-            <el-button text size="small" icon="Location" @click="locateNode(currentKey ?? 'store')">定位当前节点</el-button>
+            <el-button text size="small" icon="Back" @click="locateRoot()">返回根节点</el-button>
+            <el-button text size="small" icon="Location" @click="locateNode(currentNode?.id ?? treeData[0]?.id)">定位当前节点</el-button>
             <el-button text size="small" icon="Fold" @click="toggleAll(false)">收起其他分支</el-button>
           </div>
         </div>
@@ -124,7 +124,7 @@
               </div>
               <div class="hier-kv-row">
                 <span>当前父节点</span>
-                <span>{{ currentNode.parent }}</span>
+                <span>{{ currentNode.parentName || currentNode.parent }}</span>
               </div>
               <div class="hier-kv-row">
                 <span>直接子节点</span>
@@ -155,7 +155,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import type { ElTree } from 'element-plus';
 import { getHierarchy, getHierarchyNode, searchHierarchy } from '@/api/demo/cmdPoc';
 import type { HierarchyNodeVO } from '@/api/demo/cmdPoc/types';
@@ -177,9 +177,8 @@ const treeProps = { label: 'label', children: 'children' };
 
 const searchKeyword = ref('上海优视');
 const searchResults = ref<HierarchyNodeVO[]>([]);
-const currentKey = ref<string>('store');
 const currentNode = ref<HierarchyNodeVO | null>(null);
-const expandedKeys = ref<string[]>(['A3-001', 'A2-0188']);
+const expandedKeys = ref<string[]>([]);
 
 const filters = reactive({
   hierarchyType: 'Legal Hierarchy',
@@ -209,20 +208,13 @@ const buOptions = computed(() => {
   return HIER_BU_OPTIONS;
 });
 
-const keyOf = (id: string) => {
-  if (id === 'A3-001') return 'group';
-  if (id === 'A2-0188') return 'legal';
-  if (id === 'A1-000126') return 'suzhou';
-  return 'store';
-};
-
 const levelTagType = (level: string) => (level === 'A3' ? 'primary' : level === 'A2' ? 'warning' : 'success');
 
-const loadNode = async (key: string) => {
+const loadNode = async (key?: string) => {
+  if (!key) return;
   const node = await getHierarchyNode(key);
   if (node) {
     currentNode.value = node;
-    currentKey.value = key;
   }
 };
 
@@ -231,25 +223,25 @@ const onSearch = async () => {
   searchResults.value = res;
 };
 
-const locateNode = async (key: string) => {
+const locateNode = async (key?: string) => {
+  if (!key) return;
   await loadNode(key);
-  const id = currentNode.value?.id;
-  if (id) {
-    treeRef.value?.setCurrentKey(id);
-    if (!expandedKeys.value.includes(id)) {
-      expandedKeys.value = [...expandedKeys.value, id];
-    }
-    // 展开父节点
-    const parentId = currentNode.value?.parent === '远见集团' ? 'A3-001' : 'A2-0188';
-    if (parentId && !expandedKeys.value.includes(parentId)) {
-      expandedKeys.value = [...expandedKeys.value, parentId];
-    }
-  }
+  const node = currentNode.value;
+  if (!node) return;
+  // 展开从根到当前节点的整条路径
+  const keys = new Set([...(node.ancestorIds ?? []), node.id]);
+  expandedKeys.value = Array.from(keys);
+  await nextTick();
+  treeRef.value?.setCurrentKey(node.id);
+};
+
+const locateRoot = () => {
+  const root = treeData.value.find(n => !n.parent || n.parent === '无');
+  locateNode(root?.id);
 };
 
 const handleNodeClick = (data: HierarchyNodeVO) => {
-  const key = keyOf(data.id);
-  loadNode(key);
+  loadNode(data.id);
 };
 
 const toggleAll = (collapse: boolean) => {
@@ -271,7 +263,7 @@ const toggleAll = (collapse: boolean) => {
 };
 
 const openRelation = (mode: 'request' | 'manage' | 'child' | 'edit') => {
-  openDialog('hierAdd', { mode, nodeKey: currentKey.value });
+  openDialog('hierAdd', { mode, nodeKey: currentNode.value?.id });
 };
 
 watch(
@@ -284,8 +276,16 @@ watch(
 
 onMounted(async () => {
   treeData.value = await getHierarchy();
+  // 默认展开前两层的根分支
+  const firstLevel = treeData.value.map(n => n.id);
+  const secondLevel = treeData.value.flatMap(n => n.children?.map(c => c.id) ?? []);
+  expandedKeys.value = [...firstLevel, ...secondLevel];
   await onSearch();
-  await loadNode('store');
+  if (searchResults.value.length) {
+    await locateNode(searchResults.value[0].id);
+  } else if (treeData.value.length) {
+    await locateNode(treeData.value[0].id);
+  }
 });
 </script>
 

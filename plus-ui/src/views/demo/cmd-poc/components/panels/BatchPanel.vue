@@ -23,7 +23,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, watch } from 'vue';
 import { listImportJobs } from '@/api/demo/cmdPoc';
 import type { ImportJobVO } from '@/api/demo/cmdPoc/types';
 import { useCmdPoc } from '../../composables/useCmdPoc';
@@ -31,7 +31,7 @@ import { IMPORT_STATUS_MAP } from '../../constants/options';
 
 defineOptions({ name: 'CmdPocBatchPanel' });
 
-const { openDialog } = useCmdPoc();
+const { openDialog, dialog } = useCmdPoc();
 
 const loading = ref(false);
 const jobs = ref<ImportJobVO[]>([]);
@@ -46,6 +46,16 @@ const loadJobs = async () => {
 };
 
 onMounted(loadJobs);
+
+// 新建导入任务上传成功后刷新列表（弹窗关闭即触发一次重查）
+watch(
+  () => dialog.current,
+  (cur, prev) => {
+    if (cur === '' && prev === 'batchUpload') {
+      void loadJobs();
+    }
+  }
+);
 </script>
 
 <style lang="scss" scoped>

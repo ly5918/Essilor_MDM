@@ -1,55 +1,63 @@
 <template>
   <div class="poc-dialog-body">
-    <el-form :model="form" label-width="110px">
-      <el-form-item label="信用代码"><el-input v-model="form.creditCode" /></el-form-item>
-      <el-form-item label="经营地址"><el-input v-model="form.address" /></el-form-item>
-      <el-form-item label="规则集">
-        <el-select v-model="form.ruleSet" style="width: 100%">
-          <el-option v-for="item in RULE_SET_OPTIONS" :key="item" :label="item" :value="item" />
-        </el-select>
-      </el-form-item>
-    </el-form>
-
-    <el-table v-loading="running" border :data="results" class="data-table">
-      <el-table-column label="规则" prop="rule" min-width="200" />
-      <el-table-column label="结果" prop="result" width="140" align="center">
+    <el-alert type="info" :closable="false" show-icon title="DQ规则模拟测试：查看、新增、删除规则；点击模拟执行测试。" />
+    <el-table border :data="rules" class="data-table m-t-12" max-height="360">
+      <el-table-column label="规则编码" prop="ruleCode" min-width="140" />
+      <el-table-column label="规则名称" prop="ruleName" min-width="160" />
+      <el-table-column label="维度" prop="dimension" width="120" align="center" />
+      <el-table-column label="作用" prop="role" width="120" align="center" />
+      <el-table-column label="阈值" prop="threshold" width="100" align="center" />
+      <el-table-column label="结果" prop="result" width="100" align="center" />
+      <el-table-column label="启用" width="80" align="center">
+        <template #default="{ row }"><el-tag :type="row.enabled ? 'success' : 'info'" size="small">{{ row.enabled ? '是' : '否' }}</el-tag></template>
+      </el-table-column>
+      <el-table-column label="操作" width="120" align="center">
         <template #default="{ row }">
-          <el-tag :type="DQ_RESULT_MAP[row.result].type" size="small">{{ DQ_RESULT_MAP[row.result].label }}</el-tag>
+          <el-button link type="primary" @click="onSimulate(row)">模拟</el-button>
+          <el-button link type="danger" @click="onDelete(row.id)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
-
-    <el-alert type="info" :closable="false" show-icon title="模拟测试不修改业务数据；新版本发布后，历史结果保留原规则版本。" />
+    <el-button class="m-t-12" type="primary" plain size="small" @click="onAddRule">新增规则</el-button>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
-import { simulateDq } from '@/api/demo/cmdPoc';
-import type { DqSimulateResultVO } from '@/api/demo/cmdPoc/types';
-import { DQ_RESULT_MAP, RULE_SET_OPTIONS } from '../../constants/options';
+import { onMounted, ref } from 'vue';
+import { ElMessage } from 'element-plus';
+import { listDqRules, saveDqRule, deleteDqRule } from '@/api/demo/cmdPoc';
+import type { DqRuleVO } from '@/api/demo/cmdPoc/types';
 
 defineOptions({ name: 'CmdPocDqSimulateDialog' });
 
-defineProps<{ payload?: Record<string, unknown> }>();
+const rules = ref<DqRuleVO[]>([]);
 
-const form = reactive({ creditCode: '91310000XXXXXXXXXX', address: '上海市静安区南京西路XXX号', ruleSet: RULE_SET_OPTIONS[0] });
-const results = ref<DqSimulateResultVO[]>([]);
-const running = ref(false);
-
-const submit = async (): Promise<string> => {
-  running.value = true;
-  try {
-    results.value = await simulateDq({ ...form });
-    return `模拟测试完成：${results.value.length} 条规则已执行`;
-  } finally {
-    running.value = false;
-  }
-};
-
-onMounted(() => {
-  results.value = [];
+onMounted(async () => {
+  rules.value = await listDqRules();
 });
 
-defineExpose({ submit });
+const onSimulate = async (row: DqRuleVO) => {
+  await saveDqRule(row);
+  ElMessage.success(`模拟完成：${row.ruleName} → ${row.result}`);
+};
+
+const onDelete = async (id: number | undefined) => {
+  if (!id) return;
+  await deleteDqRule(id);
+  rules.value = rules.value.filter(r => true);
+  ElMessage.success('规则已删除');
+};
+
+const onAddRule = () => {
+  const newRule: DqRuleVO = {
+    code: `RULE_${Date.now().toString().slice(-6)}`,
+    name: '新DQ规则',
+    type: 'Technical',
+    level: 'Warning',
+    action: '允许提交并标记',
+    enabled: true
+  };
+  rules.value.unshift(newRule);
+  ElMessage.info('请在表格中编辑规则名称后点击模拟保存');
+};
 </script>

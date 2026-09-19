@@ -24,5 +24,6 @@ export const PAGE_META: Record<PageId, PocPageMeta> = {
   approval: { sub: '审批、治理与变更统一处理（按角色区分 BU / GC）' },
   dqscore: { title: 'Data Quality Scorecard', sub: '技术规则、业务规则、分数卡与历史重评估' },
   coverage: { title: 'POC覆盖检查', sub: '12个正式Demo Topic与当前交互原型' },
-  audit: { title: '审计中心', sub: '变更、审批、合并、权限与管理员操作' }
+  audit: { title: '审计中心', sub: '变更、审批、合并、权限与管理员操作' },
+  flowCenter: { title: '流程中心', sub: 'CMD 业务工作流（V6.1）部署与流程图查看' }
 };

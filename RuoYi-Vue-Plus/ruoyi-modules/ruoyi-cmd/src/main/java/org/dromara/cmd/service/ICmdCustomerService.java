@@ -1,6 +1,7 @@
 package org.dromara.cmd.service;
 
 import org.dromara.cmd.domain.bo.CmdCustomerBo;
+import org.dromara.cmd.domain.vo.CmdCustomerSubmitVo;
 import org.dromara.cmd.domain.vo.CmdCustomerVersionVo;
 import org.dromara.cmd.domain.vo.CmdCustomerVo;
 import org.dromara.common.core.domain.PageResult;
@@ -59,6 +60,21 @@ public interface ICmdCustomerService {
      * @return 生成的 One ID
      */
     String insertCustomer(CmdCustomerBo bo);
+
+    /**
+     * 提交客户新建申请：落主档 + 自动检查（DQ / 重复）+ 生成统一待办 + 拉起 Warm-Flow 流程实例
+     * <p>
+     * 对应页面：「新建客户申请」弹窗「提交申请」。与 insertCustomer 的差异：
+     * <ul>
+     *   <li>主档状态直接置为 pending（待审批），并写入 DQ 分与匹配结论；</li>
+     *   <li>生成 cmd_approval_task 待办（scope=BU，当前节点 BU Scope 初审），进入 Data Steward 队列；</li>
+     *   <li>调用 Warm-Flow 部署并启动流程实例，回写 flow_instance_id / flow_task_id / 当前节点镜像。</li>
+     * </ul>
+     *
+     * @param bo 客户信息（含业务上下文与动态字段值）
+     * @return 提交结果（One ID / 申请编号 / 当前节点 / 流程实例）
+     */
+    CmdCustomerSubmitVo submitApplication(CmdCustomerBo bo);
 
     /**
      * 修改客户信息（自动追加版本快照）

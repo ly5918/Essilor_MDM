@@ -3,6 +3,8 @@ package org.dromara.cmd.controller;
 import cn.dev33.satoken.annotation.SaCheckLogin;
 import lombok.RequiredArgsConstructor;
 import org.dromara.cmd.domain.bo.CmdCustomerBo;
+import org.dromara.cmd.domain.bo.CmdCustomerDeactivateBo;
+import org.dromara.cmd.domain.vo.CmdCustomerSubmitVo;
 import org.dromara.cmd.domain.vo.CmdCustomerVersionVo;
 import org.dromara.cmd.domain.vo.CmdCustomerVo;
 import org.dromara.cmd.service.ICmdCustomerService;
@@ -81,16 +83,15 @@ public class CmdCustomerController extends BaseController {
     }
 
     /**
-     * 新增客户
+     * 提交客户新建申请：落主档 + 自动检查 + 生成统一待办 + 拉起 Warm-Flow 流程实例
      *
-     * @param bo 客户信息
-     * @return 操作结果
+     * @param bo 客户信息（业务上下文 + 动态字段值）
+     * @return 提交结果（One ID / 申请编号 / 当前节点 / 流程实例）
      */
     @Log(title = "客户主档", businessType = BusinessType.INSERT)
     @PostMapping
-    public R<Void> add(@Validated @RequestBody CmdCustomerBo bo) {
-        customerService.insertCustomer(bo);
-        return R.ok();
+    public R<CmdCustomerSubmitVo> add(@Validated @RequestBody CmdCustomerBo bo) {
+        return R.ok(customerService.submitApplication(bo));
     }
 
     /**
@@ -108,14 +109,14 @@ public class CmdCustomerController extends BaseController {
     /**
      * 客户逻辑停用（无物理删除，写 status=inactive + effectiveTo）
      *
-     * @param oneId  客户 One ID
-     * @param reason 停用原因
+     * @param oneId 客户 One ID
+     * @param bo    停用入参（停用原因）
      * @return 操作结果
      */
     @Log(title = "客户主档", businessType = BusinessType.UPDATE)
     @PutMapping("/deactivate/{oneId}")
-    public R<Void> deactivate(@PathVariable String oneId, @RequestParam(required = false) String reason) {
-        return toAjax(customerService.deactivateCustomer(oneId, reason));
+    public R<Void> deactivate(@PathVariable String oneId, @RequestBody(required = false) CmdCustomerDeactivateBo bo) {
+        return toAjax(customerService.deactivateCustomer(oneId, bo == null ? null : bo.getReason()));
     }
 
     /**

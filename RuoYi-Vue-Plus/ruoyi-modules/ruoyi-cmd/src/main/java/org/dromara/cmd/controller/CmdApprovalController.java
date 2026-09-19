@@ -5,6 +5,8 @@ import lombok.RequiredArgsConstructor;
 import org.dromara.cmd.domain.bo.ApprovalActionBo;
 import org.dromara.cmd.domain.bo.CmdApprovalTaskBo;
 import org.dromara.cmd.domain.vo.CmdApprovalActionVo;
+import org.dromara.cmd.domain.vo.CmdApprovalDetailVo;
+import org.dromara.cmd.domain.vo.CmdApprovalKpiVo;
 import org.dromara.cmd.domain.vo.CmdApprovalTaskVo;
 import org.dromara.cmd.service.ICmdApprovalService;
 import org.dromara.common.core.domain.PageResult;
@@ -90,5 +92,27 @@ public class CmdApprovalController extends BaseController {
     @GetMapping("/stats")
     public R<Map<String, Long>> stats() {
         return R.ok(approvalService.selectTaskStats(LoginHelper.getUserId()));
+    }
+
+    /**
+     * 查询治理与审批页顶部 KPI 指标
+     *
+     * @param scope 审批范围（BU / GC）
+     * @return 指标列表
+     */
+    @GetMapping("/kpi")
+    public R<List<CmdApprovalKpiVo>> kpi(@RequestParam(required = false) String scope) {
+        return R.ok(approvalService.selectKpi(scope));
+    }
+
+    /**
+     * 按任务编号查询处理详情（含决策标签与操作按钮）
+     *
+     * @param taskNo 任务编号
+     * @return 处理详情
+     */
+    @GetMapping("/task/{taskNo}/detail")
+    public R<CmdApprovalDetailVo> detail(@PathVariable String taskNo) {
+        return R.ok(approvalService.selectDetailByTaskNo(taskNo));
     }
 }

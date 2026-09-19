@@ -3,6 +3,8 @@ package org.dromara.cmd.service;
 import org.dromara.cmd.domain.bo.ApprovalActionBo;
 import org.dromara.cmd.domain.bo.CmdApprovalTaskBo;
 import org.dromara.cmd.domain.vo.CmdApprovalActionVo;
+import org.dromara.cmd.domain.vo.CmdApprovalDetailVo;
+import org.dromara.cmd.domain.vo.CmdApprovalKpiVo;
 import org.dromara.cmd.domain.vo.CmdApprovalTaskVo;
 import org.dromara.common.core.domain.PageResult;
 import org.dromara.common.mybatis.core.page.PageQuery;
@@ -61,4 +63,20 @@ public interface ICmdApprovalService {
      * @return 统计结果（key: myTodo / myDone / returned / slaOverdue）
      */
     Map<String, Long> selectTaskStats(Long userId);
+
+    /**
+     * 查询治理与审批页顶部 KPI 指标
+     *
+     * @param scope 审批范围（BU / GC），为空时统计全部
+     * @return 指标列表（待我处理 / 临近SLA / 已超时 / 退回待补充 / 本周已处理）
+     */
+    List<CmdApprovalKpiVo> selectKpi(String scope);
+
+    /**
+     * 按任务编号查询处理详情（含决策标签与可执行按钮）
+     *
+     * @param taskNo 任务编号
+     * @return 详情
+     */
+    CmdApprovalDetailVo selectDetailByTaskNo(String taskNo);
 }

@@ -45,7 +45,8 @@ export const ROLE_LIST: PocRole[] = [
       { id: 'customers', label: '客户管理', icon: '客' },
       { id: 'batch', label: '批量导入', icon: '批' },
       { id: 'hier', label: '客户层级', icon: '层' },
-      { id: 'change', label: '变更与停用', icon: '变' }
+      { id: 'change', label: '变更与停用', icon: '变' },
+      { id: 'flowCenter', label: '流程中心', icon: '流' }
     ]
   },
   {
@@ -61,7 +62,8 @@ export const ROLE_LIST: PocRole[] = [
       { id: 'customers', label: '客户主档', icon: '客' },
       { id: 'hier', label: '客户层级', icon: '层' },
       { id: 'batch', label: '批量治理', badge: '3', icon: '批' },
-      { id: 'change', label: '变更与停用', icon: '变' }
+      { id: 'change', label: '变更与停用', icon: '变' },
+      { id: 'flowCenter', label: '流程中心', icon: '流' }
     ]
   },
   {
@@ -78,6 +80,7 @@ export const ROLE_LIST: PocRole[] = [
       { id: 'hier', label: '客户层级', icon: '层' },
       { id: 'batch', label: '批量治理', badge: '2', icon: '批' },
       { id: 'change', label: '变更与停用', icon: '变' },
+      { id: 'flowCenter', label: '流程中心', icon: '流' },
       { id: 'audit', label: '治理审计', icon: '审' }
     ]
   },
@@ -92,6 +95,7 @@ export const ROLE_LIST: PocRole[] = [
       { id: 'dash', label: '管理工作台', icon: '工' },
       { id: 'admin', label: '平台管理', icon: '管' },
       { id: 'integration', label: '集成监控', icon: '集' },
+      { id: 'flowCenter', label: '流程中心', icon: '流' },
       { id: 'audit', label: '管理员日志', icon: '审' }
     ]
   },
@@ -106,7 +110,8 @@ export const ROLE_LIST: PocRole[] = [
       { id: 'dash', label: '审计工作台', icon: '工' },
       { id: 'audit', label: '审计中心', icon: '审' },
       { id: 'customers', label: '客户只读查询', icon: '客' },
-      { id: 'hier', label: '层级只读查询', icon: '层' }
+      { id: 'hier', label: '层级只读查询', icon: '层' },
+      { id: 'flowCenter', label: '流程中心', icon: '流' }
     ]
   }
 ];

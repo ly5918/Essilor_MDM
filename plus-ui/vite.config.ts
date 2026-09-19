@@ -25,6 +25,7 @@ export default defineConfig(({ mode, command }) => {
       }
     },
     server: {
+      allowedHosts: true,  // 内存穿透
       host: '0.0.0.0',
       port: Number(env.VITE_APP_PORT),
       open: true,

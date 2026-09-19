@@ -141,15 +141,15 @@ const onReload = () => {
   // 重新触发上下文过滤即可（字段源为共享缓存，发布后自动包含新字段）
 };
 
-/** OCR 结果回填：按识别字段名称匹配动态字段标签 */
+/** OCR 结果回填：按识别字段名称匹配动态字段标签（名称取自元数据 md_field.field_name） */
 const onApplyOcr = (results: OcrResultVO[]) => {
   results.forEach(item => {
     const target = dynamicFields.value.find(field => field.label === item.field);
     if (target) {
       form.dynamicValues[target.code] = item.value;
     }
-    if (item.field === '工商名称') form.legalName = item.value;
-    if (item.field === '信用代码') form.creditCode = item.value;
+    if (item.field === '客户法定名称') form.legalName = item.value;
+    if (item.field === '统一社会信用代码') form.creditCode = item.value;
     if (item.field === '注册地址') form.address = item.value;
   });
   ocrVisible.value = false;
@@ -159,7 +159,7 @@ const onApplyOcr = (results: OcrResultVO[]) => {
 const CORE_FIELD_MAP: Record<string, keyof CustomerForm> = {
   legal_name: 'legalName',
   credit_code: 'creditCode',
-  business_address: 'address',
+  address: 'address',
   payer_id: 'payerId'
 };
 

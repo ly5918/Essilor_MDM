@@ -2,19 +2,15 @@
   <div class="poc-dialog-body">
     <el-form ref="formRef" :model="form" label-width="130px">
       <el-row :gutter="12">
-        <el-col :span="12">
-          <el-form-item label="业务场景" prop="context">
-            <el-select v-model="form.context" style="width: 100%">
-              <el-option v-for="item in SCENE_OPTIONS" :key="item" :label="item" :value="item" />
+        <el-col :span="24">
+          <el-form-item label="导入模板" prop="templateCode">
+            <el-select v-model="form.templateCode" style="width: 100%" @change="onTemplateChange">
+              <el-option v-for="item in templates" :key="item.templateCode" :label="templateLabel(item)" :value="item.templateCode" />
             </el-select>
-          </el-form-item>
-        </el-col>
-        <el-col :span="12">
-          <el-form-item label="模板版本" prop="templateVersion">
-            <el-select v-model="form.templateVersion" style="width: 100%">
-              <el-option label="v1.3 Published" value="v1.3 Published" />
-              <el-option label="v1.2 Draft" value="v1.2 Draft" />
-            </el-select>
+            <div v-if="currentTemplate" class="tpl-hint">
+              业务上下文：{{ templateContext(currentTemplate) }} · 字段数 {{ currentTemplate.fieldCount }} · 版本
+              {{ currentTemplate.version }}
+            </div>
           </el-form-item>
         </el-col>
         <el-col :span="24">
@@ -24,12 +20,14 @@
               action="#"
               :auto-upload="false"
               :on-change="onFileChange"
+              :on-remove="onFileRemove"
               :limit="1"
+              accept=".xlsx,.xls,.csv"
               class="upload-zone"
             >
               <el-icon class="upload-ico"><UploadFilled /></el-icon>
               <div class="upload-text">点击或拖拽文件到此处上传</div>
-              <div class="upload-hint">支持 .xlsx / .csv，单个文件不超过 10MB</div>
+              <div class="upload-hint">请使用「下载模板」得到的表头填写，单个文件不超过 10MB</div>
             </el-upload>
           </el-form-item>
         </el-col>
@@ -54,44 +52,76 @@
       type="info"
       :closable="false"
       show-icon
-      title="提交后依次执行文件级预检、行级DQ、批次内去重和存量匹配。"
+      title="提交后文件落盘并按字段映射解析：文件级写入 cmd_import_job，行级写入 cmd_import_row，随后进入 DQ 与去重分流。"
     />
   </div>
 </template>
 
 <script setup lang="ts">
 import { UploadFilled } from '@element-plus/icons-vue';
-import type { FormInstance } from 'element-plus';
-import { reactive, ref } from 'vue';
-import { createImportJob } from '@/api/demo/cmdPoc';
+import type { FormInstance, UploadFile } from 'element-plus';
+import { computed, onMounted, reactive, ref } from 'vue';
+import { listImportTemplates, uploadImportJob } from '@/api/demo/cmdPoc';
+import type { ImportTemplateVO } from '@/api/demo/cmdPoc/types';
 import { ERROR_STRATEGY_OPTIONS } from '../../constants/options';
 
 defineOptions({ name: 'CmdPocBatchUploadDialog' });
 
 defineProps<{ payload?: Record<string, unknown> }>();
 
-const SCENE_OPTIONS = ['Door · Mainstream · Lens', 'Door · High End · Frame', 'Payer · High End · Lens'];
 const DUPLICATE_STRATEGY_OPTIONS = ['Exact自动关联，Suspect进入治理', '全部进入人工复核', '拒绝重复行'];
 
 const formRef = ref<FormInstance>();
-const fileName = ref('');
+const templates = ref<ImportTemplateVO[]>([]);
+const file = ref<File | null>(null);
 
 const form = reactive({
-  context: 'Door · Mainstream · Lens',
-  templateVersion: 'v1.3 Published',
-  errorStrategy: '部分成功，异常行独立处理',
-  duplicateStrategy: 'Exact自动关联，Suspect进入治理'
+  templateCode: '',
+  errorStrategy: ERROR_STRATEGY_OPTIONS[0],
+  duplicateStrategy: DUPLICATE_STRATEGY_OPTIONS[0]
 });
 
-const onFileChange = (_file: unknown, files: unknown[]) => {
-  const list = files as { name: string }[];
-  fileName.value = list[list.length - 1]?.name ?? '';
+const currentTemplate = computed(() => templates.value.find(item => item.templateCode === form.templateCode));
+
+const templateLabel = (item: ImportTemplateVO) => `${item.name} · ${item.version}（${item.status}）`;
+
+const templateContext = (item: ImportTemplateVO) =>
+  [item.customerType, item.bu, item.productLine, item.sourceSystem].filter(Boolean).join(' · ') || item.context;
+
+const onTemplateChange = () => {
+  // 模板切换仅影响落库时的字段映射，无需额外处理
+};
+
+const onFileChange = (uploadFile: UploadFile) => {
+  file.value = (uploadFile.raw as File) ?? null;
+};
+
+const onFileRemove = () => {
+  file.value = null;
 };
 
 const submit = async (): Promise<string> => {
   await formRef.value?.validate();
-  return createImportJob(fileName.value || 'uploaded_file.xlsx');
+  if (!form.templateCode) {
+    throw new Error('请选择导入模板');
+  }
+  if (!file.value) {
+    throw new Error('请选择要上传的文件');
+  }
+  return uploadImportJob({
+    file: file.value,
+    templateCode: form.templateCode,
+    errorStrategy: form.errorStrategy,
+    duplicateStrategy: form.duplicateStrategy
+  });
 };
+
+onMounted(async () => {
+  templates.value = await listImportTemplates();
+  // 默认选中第一个已发布模板，没有则取第一个
+  const published = templates.value.find(item => item.status === 'Published');
+  form.templateCode = published?.templateCode ?? templates.value[0]?.templateCode ?? '';
+});
 
 defineExpose({ submit });
 </script>
@@ -120,5 +150,11 @@ defineExpose({ submit });
   font-size: 12px;
   color: var(--g-text2);
   margin-top: 4px;
+}
+
+.tpl-hint {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--g-text2);
 }
 </style>

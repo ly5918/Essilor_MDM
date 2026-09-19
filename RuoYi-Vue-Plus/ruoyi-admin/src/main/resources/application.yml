@@ -30,6 +30,10 @@ logging:
   level:
     org.dromara: @logging.level@
     org.springframework: warn
+    # CMD POC 调试：mapper 层打印 MyBatis 原生 SQL（与下方 mybatis-plus.sql-log 互补）
+    org.dromara.cmd.mapper: debug
+    # 框架自带完整 SQL 拦截器（SQL_FULL logger，含参数与耗时）
+    org.dromara.common.mybatis.interceptor.SqlLogInterceptor: debug
     org.mybatis.spring.mapper: error
     org.apache.fury: warn
   config: classpath:logback-plus.xml
@@ -111,6 +115,16 @@ security:
     - /warm-flow-ui/config
     - /snail-chat/**
     - /api/snail/chat/**
+    # CMD POC 演示接口：POC 阶段免登录联调，正式上线前删除此行
+    - /cmd/**
+
+# CMD POC 演示配置（运维可调）
+cmd:
+  poc:
+    # 是否打印 /cmd/** 请求日志（调试期开启，上线 / 压测前置 false）
+    log-requests: true
+    # 批量导入上传文件落盘目录（相对路径基于应用工作目录）
+    import-upload-path: ./uploads/cmd-import
 
 # MyBatisPlus配置
 # https://baomidou.com/config/
@@ -129,6 +143,11 @@ mybatis-plus:
       # AUTO 自增 NONE 空 INPUT 用户输入 ASSIGN_ID 雪花 ASSIGN_UUID 唯一 UUID
       # 如需改为自增 需要将数据库表全部设置为自增
       idType: ASSIGN_ID
+  # CMD POC 调试：完整 SQL 日志（含参数与耗时）。SQL 输出到 logger "SQL_FULL"，随 logback 落到控制台与 ./logs。
+  # 上线 / 压测前请置 false，避免大量 SQL 日志影响性能。
+  sql-log:
+    enabled: true
+    output: log
 
 # 数据加密
 mybatis-encryptor:
