@@ -121,6 +121,10 @@ public class CmdApprovalServiceImpl implements ICmdApprovalService {
         if (ObjectUtil.isNull(task)) {
             throw new ServiceException("待办任务不存在或已删除");
         }
+        // 终态任务（已批准/已拒绝/已退回/已取消/已完成）不允许再执行任何审批动作
+        if (isFinished(task.getStatus())) {
+            throw new ServiceException("该任务已处理完成（状态：" + task.getStatus() + "），不能再执行审批操作");
+        }
         String actionType = bo.getActionType();
         String beforeState = task.getStatus();
         String afterState = resolveAfterState(actionType, beforeState);
@@ -578,6 +582,10 @@ public class CmdApprovalServiceImpl implements ICmdApprovalService {
      */
     private List<CmdApprovalDetailVo.ActionVo> buildActions(CmdApprovalTask task) {
         List<CmdApprovalDetailVo.ActionVo> actions = new ArrayList<>();
+        // 终态任务（已批准/已拒绝/已退回/已取消/已完成）不再显示操作按钮
+        if (isFinished(task.getStatus())) {
+            return actions;
+        }
         boolean gc = "GC".equalsIgnoreCase(task.getScope());
         actions.add(action(CmdConstants.ACTION_APPROVE, gc ? "确认合并 / 批准" : "批准", "primary"));
         actions.add(action(CmdConstants.ACTION_REJECT, "拒绝", "danger"));
