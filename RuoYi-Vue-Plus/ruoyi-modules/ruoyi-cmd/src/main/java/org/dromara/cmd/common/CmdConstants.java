@@ -44,6 +44,8 @@ public interface CmdConstants {
     String CUST_STATUS_ARCHIVED = "archived";
     /** 已驳回 */
     String CUST_STATUS_REJECTED = "rejected";
+    /** 退回补充（申请人待补材料后重新提交） */
+    String CUST_STATUS_RETURNED = "returned";
 
     // ==================== 匹配结论 cmd_customer.match_state ====================
 
@@ -142,4 +144,30 @@ public interface CmdConstants {
     String SLA_NORMAL = "NORMAL";
     String SLA_DUE_SOON = "DUE_SOON";
     String SLA_OVERDUE = "OVERDUE";
+
+    // ==================== 工作流步骤类型 cmd_workflow_step_log.step_type ====================
+
+    /** 提交申请 */
+    String STEP_SUBMIT = "SUBMIT";
+    /** 系统自动（OCR / DQ / 查重 等） */
+    String STEP_SYSTEM = "SYSTEM";
+    /** 人工决策（批准 / 拒绝 / 退回 / 升级） */
+    String STEP_BUSINESS = "BUSINESS";
+    /** 引擎节点推进（Warm-Flow 节点流转） */
+    String STEP_ENGINE = "ENGINE";
+
+    /** 工作流节点中文名（用于步骤日志与泳道图展示） */
+    static String nodeName(String code) {
+        return switch (code == null ? "" : code) {
+            case "APPLY" -> "创建客户申请";
+            case "INPUT" -> "数据装配";
+            case "OCR" -> "OCR 与智能补全";
+            case "DQ" -> "技术与业务 DQ";
+            case "DUP" -> "Duplicate Check";
+            case "BU_REVIEW" -> "BU Scope 初审";
+            case "GC_REVIEW" -> "GC Scope 决策";
+            case "END" -> "结束";
+            default -> code;
+        };
+    }
 }

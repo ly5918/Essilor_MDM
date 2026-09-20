@@ -110,6 +110,9 @@ import AdminPanel from './components/panels/AdminPanel.vue';
 import AuditPanel from './components/panels/AuditPanel.vue';
 import CoveragePanel from './components/panels/CoveragePanel.vue';
 import WorkflowCenterPanel from './components/panels/WorkflowCenterPanel.vue';
+import FlowWorkitemPanel from './components/panels/FlowWorkitemPanel.vue';
+import FlowActivePanel from './components/panels/FlowActivePanel.vue';
+import FlowDonePanel from './components/panels/FlowDonePanel.vue';
 
 defineOptions({ name: 'CmdPoc' });
 
@@ -134,7 +137,10 @@ const PANEL_MAP: Record<PageId, Component> = {
   admin: AdminPanel,
   audit: AuditPanel,
   coverage: CoveragePanel,
-  flowCenter: WorkflowCenterPanel
+  flowCenter: WorkflowCenterPanel,
+  flowWorkitem: FlowWorkitemPanel,
+  flowActive: FlowActivePanel,
+  flowDone: FlowDonePanel
 };
 
 const currentPanel = computed(() => PANEL_MAP[currentPage.value] ?? DashPanel);

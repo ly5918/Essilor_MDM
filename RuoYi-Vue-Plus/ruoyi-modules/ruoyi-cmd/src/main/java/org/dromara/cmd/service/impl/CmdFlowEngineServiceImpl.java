@@ -3,6 +3,7 @@ package org.dromara.cmd.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.dromara.cmd.common.CmdConstants;
 import org.dromara.cmd.domain.CmdApprovalTask;
 import org.dromara.cmd.domain.vo.CmdFlowSceneVO;
 import org.dromara.cmd.domain.vo.CmdFlowTraceVo;
@@ -81,6 +82,12 @@ public class CmdFlowEngineServiceImpl implements ICmdFlowEngineService {
     private static final String NODE_GC_REVIEW = "GC_REVIEW";
     private static final String NODE_END = "END";
     private static final String NODE_START = "START";
+
+    /** 处理人角色编码 / 名称（与 cmd_approval_task 镜像字段保持一致） */
+    private static final String ROLE_BU_STEWARD = "BU_STEWARD";
+    private static final String NAME_BU_STEWARD = "BU Steward";
+    private static final String ROLE_GC_STEWARD = "GC_STEWARD";
+    private static final String NAME_GC_STEWARD = "GC Steward";
 
     /** 泳道名称常量（与总设计泳道图一致） */
     private static final String LANE_BU_USER = "Business User";
@@ -332,11 +339,51 @@ public class CmdFlowEngineServiceImpl implements ICmdFlowEngineService {
         if (instance != null) {
             update.setCurrentNodeCode(instance.getNodeCode());
             update.setCurrentNodeName(instance.getNodeName());
+            update.setScope(resolveScope(instance.getNodeCode(), task.getScope()));
+            update.setAssigneeRole(resolveAssigneeRole(instance.getNodeCode(), task.getAssigneeRole()));
+            update.setAssigneeName(resolveAssigneeName(instance.getNodeCode(), task.getAssigneeName()));
         }
         List<Task> nextTasks = taskService.getByInsId(task.getFlowInstanceId());
         update.setFlowTaskId(nextTasks.isEmpty() ? null : nextTasks.get(0).getId());
         taskMapper.updateById(update);
         return instance == null ? "" : instance.getNodeName();
+    }
+
+    /**
+     * 根据引擎节点推导审批 Scope（BU/GC）
+     * <p>终止节点（END）保持原有 Scope：GC 决策完成后不应回退成 BU，
+     * 否则「我已处理 / 治理复核」的归属口径会对不上。</p>
+     */
+    private String resolveScope(String nodeCode, String currentScope) {
+        if (NODE_GC_REVIEW.equals(nodeCode)) {
+            return CmdConstants.SCOPE_GC;
+        }
+        if (NODE_BU_REVIEW.equals(nodeCode)) {
+            return CmdConstants.SCOPE_BU;
+        }
+        return StringUtils.isNotBlank(currentScope) ? currentScope : CmdConstants.SCOPE_BU;
+    }
+
+    /** 根据引擎节点推导处理人角色编码（终止节点保持原办理人） */
+    private String resolveAssigneeRole(String nodeCode, String currentRole) {
+        if (NODE_GC_REVIEW.equals(nodeCode)) {
+            return ROLE_GC_STEWARD;
+        }
+        if (NODE_BU_REVIEW.equals(nodeCode)) {
+            return ROLE_BU_STEWARD;
+        }
+        return StringUtils.isNotBlank(currentRole) ? currentRole : ROLE_BU_STEWARD;
+    }
+
+    /** 根据引擎节点推导处理人显示名称（终止节点保持原办理人） */
+    private String resolveAssigneeName(String nodeCode, String currentName) {
+        if (NODE_GC_REVIEW.equals(nodeCode)) {
+            return NAME_GC_STEWARD;
+        }
+        if (NODE_BU_REVIEW.equals(nodeCode)) {
+            return NAME_BU_STEWARD;
+        }
+        return StringUtils.isNotBlank(currentName) ? currentName : NAME_BU_STEWARD;
     }
 
     @Override

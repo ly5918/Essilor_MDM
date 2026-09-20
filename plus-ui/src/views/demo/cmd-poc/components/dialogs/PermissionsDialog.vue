@@ -66,7 +66,11 @@ const activeTab = ref('matrix');
 const matrix = ref<PermissionMatrixVO[]>([]);
 const roles = ref<RolePermissionVO[]>([]);
 
-const submit = async (): Promise<string> => saveRolePermissions(roles.value);
+const submit = async (): Promise<string> => {
+  const message = await saveRolePermissions(roles.value);
+  roles.value = await listRolePermissions();
+  return message;
+};
 
 onMounted(async () => {
   [matrix.value, roles.value] = await Promise.all([getPermissionMatrix(), listRolePermissions()]);

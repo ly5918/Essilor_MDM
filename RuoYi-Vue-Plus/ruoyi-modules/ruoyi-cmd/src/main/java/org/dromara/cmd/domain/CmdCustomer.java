@@ -139,6 +139,9 @@ public class CmdCustomer extends BaseEntity {
     /** 关联 Warm-Flow 流程实例（flow_instance.id） */
     private Long flowInstanceId;
 
+    /** 工作流实例状态（Warm-Flow flow_instance.flow_status 镜像，审批流转实时回写） */
+    private String flowStatus;
+
     /** 备注 */
     private String remark;
 

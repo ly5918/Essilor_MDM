@@ -61,10 +61,16 @@ import { ref } from 'vue';
 import { ElMessage, type UploadFile } from 'element-plus';
 import { ocrRecognize } from '@/api/demo/cmdPoc';
 import type { OcrLicenseVO, OcrRecognizeVO, OcrResultVO } from '@/api/demo/cmdPoc/types';
+import { useCmdPoc } from '../../composables/useCmdPoc';
 
 defineOptions({ name: 'CmdPocOcrDialog' });
 
+defineProps<{ payload?: Record<string, unknown> }>();
+
 const emit = defineEmits<{ apply: [results: OcrResultVO[]] }>();
+
+/** OCR 结果共享通道：确认后暂存，供「新建客户申请」表单回填 */
+const { setOcrPrefill } = useCmdPoc();
 
 const fields = ref<OcrResultVO[]>([]);
 const license = ref<OcrLicenseVO | null>(null);
@@ -100,10 +106,17 @@ const onRecognize = async () => {
   }
 };
 
+/**
+ * 写回表单：
+ * 1. 结果先暂存到共享通道（全局弹窗入口时无表单可写，打开「新建客户申请」会自动回填）；
+ * 2. 再派发 apply，嵌入在「新建客户申请」内时由父组件立即回填并打「OCR回填」标签。
+ */
 const submit = async (): Promise<string> => {
   if (!fields.value.length) await onRecognize();
+  setOcrPrefill(fields.value);
   emit('apply', fields.value);
-  return 'OCR 结果已确认并写入客户表单';
+  const names = fields.value.map(item => item.field).join('、');
+  return `OCR 结果已写入新建客户申请表（${fields.value.length} 个字段：${names}）`;
 };
 
 defineExpose({ submit });

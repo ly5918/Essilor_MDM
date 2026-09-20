@@ -32,7 +32,7 @@
           <el-option label="High" value="High" />
           <el-option label="Medium" value="Medium" />
         </el-select>
-        <el-input v-model="filter.keyword" placeholder="任务编号 / 客户名称" clearable style="width: 220px" @keyup.enter="applyFilter" />
+        <el-input v-model="filter.keyword" placeholder="One ID / 申请编号 / 客户名称" clearable style="width: 240px" @keyup.enter="applyFilter" />
         <el-button type="primary" plain icon="Search" @click="applyFilter">查询</el-button>
       </div>
 
@@ -51,6 +51,7 @@
             @current-change="onRowSelect"
           >
             <el-table-column label="任务编号" prop="taskId" width="150" />
+            <el-table-column label="One ID" prop="oneId" width="140" />
             <el-table-column label="客户/主题" prop="customerName" min-width="190" show-overflow-tooltip />
             <el-table-column label="任务类型" prop="taskType" width="120" />
             <el-table-column label="来源" prop="source" width="110" />
@@ -73,6 +74,7 @@
               <b>{{ detail.id }}</b>
               <h3 class="ap-detail-name">{{ detail.name }}</h3>
               <div>
+                <el-tag v-if="detail.oneId" size="small" type="success" effect="dark">One ID：{{ detail.oneId }}</el-tag>
                 <el-tag size="small" type="primary">{{ detail.scene }}</el-tag>
                 <el-tag size="small" :type="isGc ? 'warning' : 'info'">{{ isGc ? 'GC Scope' : 'BU Scope' }}</el-tag>
                 <!-- 流程跟踪：泳道图步骤条 + Warm-Flow 实例进度（场景泳道图可视化） -->
@@ -210,7 +212,11 @@ const visibleTasks = computed<ApprovalTaskVO[]>(() => {
     const matchType = !filter.taskType || t.taskType === filter.taskType;
     const matchBu = !filter.bu || t.bu === filter.bu;
     const matchRisk = !filter.risk || t.risk === filter.risk;
-    const matchKw = !kw || t.taskId.toLowerCase().includes(kw) || t.customerName.toLowerCase().includes(kw);
+    const matchKw =
+      !kw ||
+      t.taskId.toLowerCase().includes(kw) ||
+      t.customerName.toLowerCase().includes(kw) ||
+      (t.oneId ?? '').toLowerCase().includes(kw);
     return matchType && matchBu && matchRisk && matchKw;
   });
 });

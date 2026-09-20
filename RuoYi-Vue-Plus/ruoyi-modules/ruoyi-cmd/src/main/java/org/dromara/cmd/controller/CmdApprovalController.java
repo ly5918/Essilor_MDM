@@ -8,9 +8,12 @@ import org.dromara.cmd.domain.vo.CmdApprovalActionVo;
 import org.dromara.cmd.domain.vo.CmdApprovalDetailVo;
 import org.dromara.cmd.domain.vo.CmdApprovalKpiVo;
 import org.dromara.cmd.domain.vo.CmdApprovalTaskVo;
+import org.dromara.cmd.domain.vo.CmdWorkflowStepLogVo;
 import org.dromara.cmd.service.ICmdApprovalService;
+import org.dromara.cmd.service.ICmdWorkflowStepLogService;
 import org.dromara.common.core.domain.PageResult;
 import org.dromara.common.core.domain.R;
+import org.dromara.common.core.utils.StringUtils;
 import org.dromara.common.log.annotation.Log;
 import org.dromara.common.log.enums.BusinessType;
 import org.dromara.common.mybatis.core.page.PageQuery;
@@ -37,6 +40,7 @@ import java.util.Map;
 public class CmdApprovalController extends BaseController {
 
     private final ICmdApprovalService approvalService;
+    private final ICmdWorkflowStepLogService stepLogService;
 
     /**
      * 分页查询待办任务列表（页面队列表 + 筛选行）
@@ -114,5 +118,25 @@ public class CmdApprovalController extends BaseController {
     @GetMapping("/task/{taskNo}/detail")
     public R<CmdApprovalDetailVo> detail(@PathVariable String taskNo) {
         return R.ok(approvalService.selectDetailByTaskNo(taskNo));
+    }
+
+    /**
+     * 查询工作流步骤执行日志（按客户 One ID 或任务编号）
+     * <p>用于「流程跟踪 / 审批详情」展示每一步（提交 / 系统自动 / 人工决策）并贯穿客户标识。</p>
+     *
+     * @param oneId  客户主数据标识（优先）
+     * @param taskNo 审批任务编号
+     * @return 步骤列表
+     */
+    @GetMapping("/workflow-steps")
+    public R<List<CmdWorkflowStepLogVo>> workflowSteps(@RequestParam(required = false) String oneId,
+                                                      @RequestParam(required = false) String taskNo) {
+        if (StringUtils.isNotBlank(taskNo)) {
+            return R.ok(stepLogService.listByTaskNo(taskNo));
+        }
+        if (StringUtils.isNotBlank(oneId)) {
+            return R.ok(stepLogService.listByOneId(oneId));
+        }
+        return R.ok(List.of());
     }
 }

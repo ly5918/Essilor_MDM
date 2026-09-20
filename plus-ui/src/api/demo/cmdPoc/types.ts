@@ -156,7 +156,13 @@ export type PageId =
   | 'coverage'
   | 'oneid'
   | 'dqscore'
-  | 'flowCenter';
+  | 'flowCenter'
+  /** Deepblue 三视图：待人工处理的工作项 */
+  | 'flowWorkitem'
+  /** Deepblue 三视图：运行中的工作流实例 */
+  | 'flowActive'
+  /** Deepblue 三视图：已结束（批准/拒绝/退回）的工作流实例 */
+  | 'flowDone';
 
 /** 客户状态 */
 export type CustomerStatus = 'active' | 'pending' | 'inactive' | 'draft';
@@ -217,6 +223,28 @@ export interface CustomerForm {
   dynamicValues?: Record<string, string>;
 }
 
+/** 客户新建申请提交回执（后端 CmdCustomerSubmitVo） */
+export interface CustomerSubmitVO {
+  customerId?: number;
+  /** One ID（服务端生成，后续不可变更） */
+  oneId?: string;
+  /** 申请编号（进入「治理与审批」队列后可查） */
+  taskNo?: string;
+  sceneCode?: string;
+  sceneName?: string;
+  /** 主档状态（pending） */
+  status?: string;
+  taskStatus?: string;
+  currentNodeCode?: string;
+  currentNodeName?: string;
+  assigneeRole?: string;
+  dqScore?: number;
+  riskLevel?: string;
+  slaDue?: string;
+  flowInstanceId?: number;
+  flowStatus?: string;
+}
+
 /** ------------------------------------------------------------------
  * 2. 元数据字段（Master Data Extension）
  * ------------------------------------------------------------------ */
@@ -224,6 +252,8 @@ export type FieldScope = 'GC Core' | 'BU Specific' | 'Source System';
 export type FieldType = 'Text' | 'Number' | 'Enum' | 'Date' | 'Reference';
 
 export interface MetadataFieldVO {
+  /** 主键 */
+  id?: number;
   /** 字段编码 */
   code: string;
   /** 显示名称 */
@@ -632,6 +662,8 @@ export interface ApprovalKpiVO {
 export interface ApprovalTaskVO {
   /** 任务编号 */
   taskId: string;
+  /** 客户主数据标识（One ID）—— 全链路追溯主键 */
+  oneId?: string;
   /** 客户名称或主题 */
   customerName: string;
   /** 任务类型：客户创建 / 层级关系 / DQ异常 / 疑似重复 / 批量治理 / 跨BU合并 / 合并审批 */
@@ -655,6 +687,8 @@ export interface ApprovalTaskVO {
 /** 任务详情（右侧面板） */
 export interface ApprovalTaskDetailVO {
   id: string;
+  /** 客户主数据标识（One ID）—— 全链路追溯主键 */
+  oneId?: string;
   name: string;
   scene: string;
   submitter: string;
@@ -742,6 +776,39 @@ export interface FlowGraphVO {
   edges: FlowGraphEdgeVO[];
 }
 
+/** 工作流步骤执行日志（按客户 One ID 串联每一步） */
+export interface WorkflowStepVO {
+  id?: number;
+  /** 客户主数据标识（One ID）—— 全链路追溯主键 */
+  oneId?: string;
+  /** 审批任务编号（AP-yyyyMMdd-####） */
+  taskNo?: string;
+  /** Warm-Flow 流程实例 ID */
+  flowInstanceId?: number;
+  /** 步骤序号（同一 One ID 内从 1 递增） */
+  stepSeq?: number;
+  /** 步骤类型：SUBMIT / SYSTEM / BUSINESS / ENGINE */
+  stepType?: string;
+  /** 节点编码 */
+  nodeCode?: string;
+  /** 节点名称 */
+  nodeName?: string;
+  /** 动作类型 */
+  actionType?: string;
+  /** 动作名称 */
+  actionName?: string;
+  operatorId?: number;
+  operatorName?: string;
+  operatorRole?: string;
+  /** 业务状态（操作前） */
+  fromStatus?: string;
+  /** 业务状态（操作后） */
+  toStatus?: string;
+  /** 审批意见 / 升级原因 */
+  opinion?: string;
+  createTime?: string;
+}
+
 /** 流程中心：单个 CMD 业务场景（V6.1 总设计业务流） */
 export interface FlowSceneVO {
   /** 场景编码（cmd_flow_scene.scene_code） */
@@ -774,6 +841,11 @@ export interface FlowInstanceVO {
   id: number | string;
   /** 申请编号（Label 列） */
   taskNo: string;
+  /**
+   * 客户主数据标识（One ID）：贯穿全部页面与工作流的贯通 ID，
+   * 可按此 ID 反查客户主档、审批待办与全部工作流记录。
+   */
+  oneId?: string;
   /** 业务标题（Description 列） */
   bizTitle?: string;
   /** 业务类型（中文，如「客户创建」） */
@@ -1044,6 +1116,8 @@ export interface CmdApprovalKpiRow {
 export interface CmdApprovalDetailRow {
   id?: number;
   taskId?: string;
+  /** 客户主数据标识（One ID） */
+  oneId?: string;
   name?: string;
   scene?: string;
   submitter?: string;
@@ -1134,6 +1208,10 @@ export interface AuditEventVO {
   event: string;
   role: string;
   result: 'Success' | 'Tested' | 'Failed';
+  /** 客户主数据标识（One ID）：贯穿 ID，可按此 ID 反查该客户的全部审计留痕 */
+  oneId?: string;
+  /** 关联业务单号（客户新建场景为申请编号 AP-xxxx，变更场景为变更单号） */
+  bizId?: string;
 }
 
 export interface AuditExportForm {
@@ -1154,6 +1232,10 @@ export interface PermissionMatrixVO {
 
 /** 角色权限配置行 */
 export interface RolePermissionVO {
+  /** 真实角色编码（数据库 cmd_role.role_code） */
+  roleCode: string;
+  /** 角色主键（存在时走更新，否则走新增） */
+  id?: number;
   role: string;
   scope: string;
   points: string;

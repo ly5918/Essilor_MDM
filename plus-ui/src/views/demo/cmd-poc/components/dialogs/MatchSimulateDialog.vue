@@ -13,7 +13,7 @@
       </el-table-column>
       <el-table-column label="操作" width="120" align="center">
         <template #default="{ row }">
-          <el-button link type="primary" @click="onSimulate(row)">模拟</el-button>
+          <el-button link type="primary" @click="onSimulate(asRule(row))">模拟</el-button>
           <el-button link type="danger" @click="onDelete(row.id)">删除</el-button>
         </template>
       </el-table-column>
@@ -31,6 +31,9 @@ import type { MatchRuleVO } from '@/api/demo/cmdPoc/types';
 defineOptions({ name: 'CmdPocMatchSimulateDialog' });
 
 const rules = ref<MatchRuleVO[]>([]);
+
+/** el-table 插槽行类型为 DefaultRow，此处收敛断言，保证模板调用无需类型体操 */
+const asRule = (row: unknown): MatchRuleVO => row as MatchRuleVO;
 
 onMounted(async () => {
   rules.value = await listMatchRules();

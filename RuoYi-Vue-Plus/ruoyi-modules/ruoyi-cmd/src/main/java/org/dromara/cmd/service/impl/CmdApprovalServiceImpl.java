@@ -8,8 +8,11 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.dromara.cmd.common.CmdConstants;
+import org.dromara.cmd.domain.AuditEvent;
 import org.dromara.cmd.domain.CmdApprovalAction;
 import org.dromara.cmd.domain.CmdApprovalTask;
+import org.dromara.cmd.domain.CmdCustomer;
+import org.dromara.cmd.domain.CmdWorkflowStepLog;
 import org.dromara.cmd.domain.bo.ApprovalActionBo;
 import org.dromara.cmd.domain.bo.CmdApprovalTaskBo;
 import org.dromara.cmd.domain.vo.CmdApprovalActionVo;
@@ -18,14 +21,18 @@ import org.dromara.cmd.domain.vo.CmdApprovalKpiVo;
 import org.dromara.cmd.domain.vo.CmdApprovalTaskVo;
 import org.dromara.cmd.mapper.CmdApprovalActionMapper;
 import org.dromara.cmd.mapper.CmdApprovalTaskMapper;
+import org.dromara.cmd.mapper.CmdCustomerMapper;
 import org.dromara.cmd.service.ICmdApprovalService;
+import org.dromara.cmd.service.ICmdAuditService;
 import org.dromara.cmd.service.ICmdFlowEngineService;
+import org.dromara.cmd.service.ICmdWorkflowStepLogService;
 import org.dromara.common.core.domain.PageResult;
 import org.dromara.common.core.exception.ServiceException;
 import org.dromara.common.core.utils.StringUtils;
 import org.dromara.common.mybatis.core.page.PageQuery;
 import org.dromara.common.mybatis.core.query.QueryBuilder;
 import org.dromara.common.satoken.utils.LoginHelper;
+import org.dromara.warm.flow.core.enums.FlowStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,6 +42,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -58,11 +66,21 @@ public class CmdApprovalServiceImpl implements ICmdApprovalService {
     private final CmdApprovalTaskMapper taskMapper;
     private final CmdApprovalActionMapper actionMapper;
     private final ICmdFlowEngineService flowEngineService;
+    private final CmdCustomerMapper customerMapper;
+    private final ICmdWorkflowStepLogService stepLogService;
+    private final ICmdAuditService auditService;
 
     /** 「通过类」动作：落到 Warm-Flow 引擎推进节点（升级 → GC 决策，批准 → 结束） */
     private static final Set<String> ADVANCE_ACTIONS = Set.of(
         CmdConstants.ACTION_APPROVE, CmdConstants.ACTION_ESCALATE,
         CmdConstants.ACTION_MERGE, CmdConstants.ACTION_CREATE_NEW, CmdConstants.ACTION_LINK);
+
+    /** 允许的决策动作白名单：不在其中的动作直接拒绝，避免写入无效步骤 / 误推进流程 */
+    private static final Set<String> ALLOWED_ACTIONS = Set.of(
+        CmdConstants.ACTION_APPROVE, CmdConstants.ACTION_REJECT, CmdConstants.ACTION_RETURN,
+        CmdConstants.ACTION_ESCALATE, CmdConstants.ACTION_CLAIM, CmdConstants.ACTION_TRANSFER,
+        CmdConstants.ACTION_MERGE, CmdConstants.ACTION_LINK, CmdConstants.ACTION_EXCLUDE,
+        CmdConstants.ACTION_CREATE_NEW, CmdConstants.ACTION_WITHDRAW);
 
     /**
      * {@inheritDoc}
@@ -112,6 +130,10 @@ public class CmdApprovalServiceImpl implements ICmdApprovalService {
             && StringUtils.isBlank(bo.getOpinion())) {
             throw new ServiceException("拒绝或退回时必须填写审批意见");
         }
+        // 动作类型白名单：未知动作直接拒绝，避免写入无效步骤日志或误推进流程
+        if (!ALLOWED_ACTIONS.contains(actionType)) {
+            throw new ServiceException("不支持的审批动作：" + actionType + "（仅支持 批准 / 拒绝 / 退回补充 / 升级GC / 认领 / 转办）");
+        }
 
         // 1) 更新待办主表状态
         CmdApprovalTask update = new CmdApprovalTask();
@@ -139,6 +161,7 @@ public class CmdApprovalServiceImpl implements ICmdApprovalService {
         action.setTaskNo(task.getTaskNo());
         action.setActionType(actionType);
         action.setActionName(resolveActionName(actionType));
+        action.setOneId(task.getOneId());
         action.setFromNodeCode(task.getCurrentNodeCode());
         action.setOperatorId(LoginHelper.getUserId());
         action.setOperatorRole(task.getAssigneeRole());
@@ -153,7 +176,134 @@ public class CmdApprovalServiceImpl implements ICmdApprovalService {
         // 3) 联动 Warm-Flow 引擎：首次决策启动流程实例，通过类动作推进节点
         linkFlowEngine(task, actionType, bo.getOpinion());
 
+        // 4) 重新读取任务镜像（引擎已推进节点 / 状态），用于步骤日志与客户主档回写
+        CmdApprovalTask after = taskMapper.selectById(task.getId());
+        String toNode = after.getCurrentNodeCode();
+        String toStatus = after.getStatus();
+        String flowStatus = after.getFlowStatus();
+        Long operatorId = action.getOperatorId();
+        String operatorName = resolveOperatorName(task, operatorId);
+        // 拒绝视为流程终止（结束节点）
+        String effectiveToNode = CmdConstants.ACTION_REJECT.equals(actionType) ? "END" : toNode;
+        // 拒绝 / 退回不推进引擎节点，但工作流镜像状态必须同步为「已拒绝 / 已退回」，
+        // 否则实例会一直显示「运行中」，泳道图与列表的状态口径不一致。
+        String effectiveFlowStatus = flowStatus;
+        if (CmdConstants.ACTION_REJECT.equals(actionType)) {
+            effectiveFlowStatus = FlowStatus.REJECT.getKey();
+        } else if (CmdConstants.ACTION_RETURN.equals(actionType)) {
+            effectiveFlowStatus = FlowStatus.TASK_BACK.getKey();
+        }
+        if (!Objects.equals(effectiveFlowStatus, flowStatus)) {
+            CmdApprovalTask fsPatch = new CmdApprovalTask();
+            fsPatch.setId(task.getId());
+            fsPatch.setFlowStatus(effectiveFlowStatus);
+            taskMapper.updateById(fsPatch);
+        }
+
+        // 4.1) 业务轨迹补写目标节点 + one_id（与步骤日志互补，均按客户追溯）
+        CmdApprovalAction actPatch = new CmdApprovalAction();
+        actPatch.setId(action.getId());
+        actPatch.setOneId(task.getOneId());
+        actPatch.setToNodeCode(effectiveToNode);
+        actPatch.setOperatorName(operatorName);
+        actionMapper.updateById(actPatch);
+
+        // 5) 工作流步骤总账：记录本次人工决策（带客户 one_id，可跨页面 / 跨工作流关联）
+        recordDecisionStep(task, actionType, bo.getOpinion(), effectiveToNode, beforeState, toStatus, operatorId, operatorName);
+
+        // 6) 回写客户主档：审批流转直接决定 Golden Record 的生效 / 驳回 / 退回
+        syncCustomerStatus(task.getOneId(), actionType, effectiveToNode, effectiveFlowStatus, operatorId, operatorName);
+
+        // 7) 审计留痕：审批决策（审计中心可按 One ID / 申请编号检索到本次决策）
+        AuditEvent audit = new AuditEvent();
+        audit.setEventType("APPROVAL");
+        audit.setEventName(resolveActionName(actionType) + "：" + task.getBizTitle());
+        audit.setBizType(StringUtils.defaultString(task.getBizType(), task.getSceneCode()));
+        audit.setBizId(task.getTaskNo());
+        audit.setOneId(task.getOneId());
+        audit.setOperatorId(operatorId);
+        audit.setOperatorName(operatorName);
+        audit.setOperatorRole(StringUtils.defaultString(task.getAssigneeRole(), ""));
+        audit.setEventTime(LocalDateTime.now());
+        audit.setResult("SUCCESS");
+        audit.setRiskLevel(StringUtils.defaultString(task.getRiskLevel(), "Low"));
+        audit.setRemark(bo.getOpinion());
+        // before_json / after_json 是 JSON 列：裸状态串（如 PENDING）不是合法 JSON，需包成对象
+        audit.setBeforeJson("{\"flow_status\":\"" + StringUtils.defaultString(beforeState, "") + "\"}");
+        audit.setAfterJson("{\"flow_status\":\"" + StringUtils.defaultString(toStatus, "") + "\"}");
+        auditService.record(audit);
+
         return rows;
+    }
+
+    /**
+     * 记录一条人工决策步骤（带客户 one_id）
+     */
+    private void recordDecisionStep(CmdApprovalTask task, String actionType, String opinion,
+                                    String toNode, String fromStatus, String toStatus,
+                                    Long operatorId, String operatorName) {
+        CmdWorkflowStepLog step = new CmdWorkflowStepLog();
+        step.setOneId(task.getOneId());
+        step.setTaskNo(task.getTaskNo());
+        step.setFlowInstanceId(task.getFlowInstanceId());
+        step.setStepType(CmdConstants.STEP_BUSINESS);
+        step.setNodeCode(toNode);
+        step.setNodeName(CmdConstants.nodeName(toNode));
+        step.setActionType(actionType);
+        step.setActionName(resolveActionName(actionType));
+        step.setOperatorId(operatorId);
+        step.setOperatorName(operatorName);
+        step.setOperatorRole(task.getAssigneeRole());
+        step.setFromStatus(fromStatus);
+        step.setToStatus(toStatus);
+        step.setOpinion(opinion);
+        step.setCreateTime(LocalDateTime.now());
+        stepLogService.recordStep(step);
+    }
+
+    /**
+     * 审批流转回写客户主档状态：审批结果直接决定 Golden Record 的生效 / 驳回 / 退回
+     *
+     * @param oneId       客户主数据标识
+     * @param actionType  动作类型
+     * @param toNode      流转后的节点（END 表示流程终止）
+     * @param flowStatus  流程实例状态
+     */
+    private void syncCustomerStatus(String oneId, String actionType, String toNode,
+                                    String flowStatus, Long operatorId, String operatorName) {
+        String custStatus;
+        if (CmdConstants.ACTION_REJECT.equals(actionType)) {
+            custStatus = CmdConstants.CUST_STATUS_REJECTED;
+        } else if (CmdConstants.ACTION_RETURN.equals(actionType)) {
+            custStatus = CmdConstants.CUST_STATUS_RETURNED;
+        } else {
+            // APPROVE / ESCALATE：走到 END 即生效，否则仍待处理（如升级后进入 GC 决策）
+            custStatus = "END".equals(toNode) ? CmdConstants.CUST_STATUS_ACTIVE : CmdConstants.CUST_STATUS_PENDING;
+        }
+        CmdCustomer patch = new CmdCustomer();
+        patch.setStatus(custStatus);
+        patch.setFlowStatus(flowStatus);
+        if (CmdConstants.CUST_STATUS_ACTIVE.equals(custStatus)) {
+            patch.setApprovedBy(operatorId);
+            patch.setApprovedTime(LocalDateTime.now());
+        }
+        customerMapper.update(patch, new LambdaQueryWrapper<CmdCustomer>().eq(CmdCustomer::getOneId, oneId));
+        log.info("[CMD][CUSTOMER] 主档状态已回写：oneId={} action={} -> status={}", oneId, actionType, custStatus);
+    }
+
+    /**
+     * 解析操作人姓名（POC 免登录兜底到任务办理人）
+     */
+    private String resolveOperatorName(CmdApprovalTask task, Long operatorId) {
+        try {
+            String name = LoginHelper.getUsername();
+            if (StringUtils.isNotBlank(name)) {
+                return name;
+            }
+        } catch (Exception ignored) {
+            // 免登录场景下取不到会话，走兜底
+        }
+        return StringUtils.blankToDefault(task.getAssigneeName(), "Data Steward");
     }
 
     /**
@@ -219,8 +369,13 @@ public class CmdApprovalServiceImpl implements ICmdApprovalService {
      * @return 查询包装器
      */
     private LambdaQueryWrapper<CmdApprovalTask> buildQueryWrapper(CmdApprovalTaskBo bo) {
+        // 队列表口径：task_category 只做"待办分类"用；
+        // 「我已处理(DONE)」不是建表时打的分类，而是按终态推导，所以要跳过列匹配改用 status IN，
+        // 否则任务处理完仍挂在待办队列、而已处理队列又查不到（演示时最容易困惑的点）
+        String category = bo.getTaskCategory();
+        boolean doneCategory = CmdConstants.APPR_CAT_DONE.equalsIgnoreCase(category);
         LambdaQueryWrapper<CmdApprovalTask> lqw = QueryBuilder.lambda(CmdApprovalTask.class)
-            .eqIfText(CmdApprovalTask::getTaskCategory, bo.getTaskCategory())
+            .eqIfText(CmdApprovalTask::getTaskCategory, doneCategory ? null : category)
             .eqIfText(CmdApprovalTask::getBizType, bo.getBizType())
             .eqIfText(CmdApprovalTask::getBuScope, bo.getBuScope())
             .eqIfText(CmdApprovalTask::getScope, bo.getScope())
@@ -241,6 +396,17 @@ public class CmdApprovalServiceImpl implements ICmdApprovalService {
                 .or().like(CmdApprovalTask::getBizTitle, kw)
                 .or().like(CmdApprovalTask::getOneId, kw));
         }
+        // 队列状态口径：待办队列只列未处理任务；"我已处理"列终态；"升级与退回"保持退回态语义
+        if (StringUtils.isNotBlank(category)) {
+            if (doneCategory) {
+                lqw.in(CmdApprovalTask::getStatus,
+                    CmdConstants.APPR_STATUS_APPROVED,
+                    CmdConstants.APPR_STATUS_REJECTED,
+                    CmdConstants.APPR_STATUS_RETURNED);
+            } else if (!CmdConstants.APPR_CAT_RETURNED.equalsIgnoreCase(category)) {
+                lqw.eq(CmdApprovalTask::getStatus, CmdConstants.APPR_STATUS_PENDING);
+            }
+        }
         return lqw;
     }
 
@@ -257,7 +423,8 @@ public class CmdApprovalServiceImpl implements ICmdApprovalService {
                  CmdConstants.ACTION_MERGE, CmdConstants.ACTION_LINK -> CmdConstants.APPR_STATUS_APPROVED;
             case CmdConstants.ACTION_REJECT, CmdConstants.ACTION_EXCLUDE -> CmdConstants.APPR_STATUS_REJECTED;
             case CmdConstants.ACTION_RETURN -> CmdConstants.APPR_STATUS_RETURNED;
-            case CmdConstants.ACTION_ESCALATE -> CmdConstants.APPR_STATUS_ESCALATED;
+            // ESCALATE 只是把任务从 BU 初审推进到 GC 决策，仍处于待处理状态
+            case CmdConstants.ACTION_ESCALATE -> CmdConstants.APPR_STATUS_PENDING;
             case CmdConstants.ACTION_WITHDRAW -> CmdConstants.APPR_STATUS_CANCELLED;
             case CmdConstants.ACTION_CLAIM -> CmdConstants.APPR_STATUS_PENDING;
             default -> beforeState;
@@ -322,11 +489,12 @@ public class CmdApprovalServiceImpl implements ICmdApprovalService {
         CmdApprovalTask task = taskMapper.selectOne(
             Wrappers.<CmdApprovalTask>lambdaQuery().eq(CmdApprovalTask::getTaskNo, taskNo));
         if (ObjectUtil.isNull(task)) {
-            throw new ServiceException("待办任务不存在：%s", taskNo);
+            throw new ServiceException("待办任务不存在：" + taskNo);
         }
         CmdApprovalDetailVo vo = new CmdApprovalDetailVo();
         vo.setId(task.getId());
         vo.setTaskId(task.getTaskNo());
+        vo.setOneId(task.getOneId());
         vo.setName(task.getBizTitle());
         vo.setScene(task.getBizType());
         vo.setSubmitter(StringUtils.blankToDefault(task.getApplicantName(), "-"));

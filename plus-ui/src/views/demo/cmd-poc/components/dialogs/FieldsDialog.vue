@@ -94,7 +94,7 @@ defineOptions({ name: 'CmdPocFieldsDialog' });
 
 defineProps<{ payload?: Record<string, unknown> }>();
 
-const { metadataFields } = useCmdPoc();
+const { metadataFields, upsertMetadataField, loadMetadataFields } = useCmdPoc();
 
 const activeTab = ref('fields');
 const valueSets = ref<Awaited<ReturnType<typeof listValueSets>>>([]);
@@ -124,6 +124,7 @@ const onSubmitField = async () => {
   try {
     const message = await fieldFormRef.value?.submit();
     ElMessage.success(message || '字段已保存为Draft');
+    await loadMetadataFields();
     fieldDialogVisible.value = false;
   } finally {
     saving.value = false;

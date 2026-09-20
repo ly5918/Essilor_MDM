@@ -4,10 +4,12 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.annotation.TableLogic;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
+import java.math.BigDecimal;
 
 /**
  * 匹配规则对象 match_rule
@@ -23,30 +25,67 @@ public class MatchRule implements Serializable {
     @TableId(value = "id", type = IdType.AUTO)
     private Long id;
 
+    /** 规则编码 */
     @TableField("rule_code")
     private String ruleCode;
 
+    /** 规则名称 */
     @TableField("rule_name")
     private String ruleName;
 
-    @TableField("dimension")
-    private String dimension;
+    /** 作用模型 */
+    @TableField("model_code")
+    private String modelCode;
 
-    @TableField("role")
-    private String role;
+    /** 应用场景 CREATE / IMPORT / BATCH / MERGE */
+    @TableField("scene")
+    private String scene;
 
-    @TableField("threshold")
-    private String threshold;
+    /** 算法 WEIGHTED / EXACT / FUZZY / ML */
+    @TableField("algorithm")
+    private String algorithm;
 
-    @TableField("result")
-    private String result;
+    /** 标准化规则 */
+    @TableField("normalize_rule")
+    private String normalizeRule;
 
-    @TableField("enabled")
-    private Boolean enabled;
+    /** Exact Match 阈值 */
+    @TableField("exact_threshold")
+    private BigDecimal exactThreshold;
 
-    @TableField("version")
-    private String version;
+    /** Suspected 阈值 */
+    @TableField("suspect_threshold")
+    private BigDecimal suspectThreshold;
 
-    @TableField("description")
-    private String description;
+    /** 超阈值自动合并 Y/N */
+    @TableField("auto_merge_flag")
+    private String autoMergeFlag;
+
+    /** 参与跨 BU 匹配 Y/N */
+    @TableField("cross_bu_flag")
+    private String crossBuFlag;
+
+    /** 规则版本号 */
+    @TableField("version_no")
+    private String versionNo;
+
+    /** 状态 0草稿 1已发布 2已停用 */
+    @TableField("status")
+    private String status;
+
+    /** 是否系统预置 */
+    @TableField("is_preset")
+    private String isPreset;
+
+    /** 显示顺序 */
+    @TableField("order_num")
+    private Integer orderNum;
+
+    /** 备注 */
+    @TableField("remark")
+    private String remark;
+
+    @TableLogic
+    @TableField("del_flag")
+    private String delFlag;
 }

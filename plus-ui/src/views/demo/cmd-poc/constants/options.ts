@@ -17,6 +17,22 @@ export const FIELD_SCOPE_OPTIONS = ['BU Specific', 'GC Core', 'Source System'];
 export const FIELD_BU_OPTIONS = ['High End', 'Mainstream', 'All'];
 export const FIELD_CUSTOMER_TYPE_OPTIONS = ['Door', 'All'];
 
+/**
+ * 枚举型元数据字段的可选值（按字段编码）
+ * <p>
+ * POC 阶段为前端常量：后端 md_value_set 只登记值集本身（set_code / set_name），
+ * 不存明细值，故演示期由前端给出选项；接入值集明细接口后改为按 field.valueSetCode 拉取。
+ */
+export const FIELD_ENUM_OPTIONS: Record<string, string[]> = {
+  country: ['中国', '中国香港', '中国澳门', '中国台湾'],
+  customer_type: CUSTOMER_TYPE_OPTIONS,
+  customer_level: ['A3', 'A2', 'A1'],
+  bu_scope: BU_OPTIONS,
+  product_line: PRODUCT_LINE_OPTIONS,
+  source_system: SOURCE_SYSTEM_OPTIONS,
+  status: ['draft', 'pending', 'active', 'inactive']
+};
+
 /** ------------------------------ 状态映射 ------------------------------ */
 interface StatusMeta {
   label: string;

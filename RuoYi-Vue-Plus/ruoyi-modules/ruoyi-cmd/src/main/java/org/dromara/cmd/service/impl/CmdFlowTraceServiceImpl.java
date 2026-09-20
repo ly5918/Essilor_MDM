@@ -93,10 +93,12 @@ public class CmdFlowTraceServiceImpl implements ICmdFlowTraceService {
             .eq(StringUtils.isNotBlank(bo.getStatus()), CmdApprovalTask::getStatus, bo.getStatus())
             .eq(StringUtils.isNotBlank(bo.getBizType()), CmdApprovalTask::getBizType, bo.getBizType())
             .orderByDesc(CmdApprovalTask::getCreateTime);
+        // 贯通查询：申请编号 / One ID / 业务标题 三列模糊匹配
         if (StringUtils.isNotBlank(bo.getKeyword())) {
-            String kw = bo.getKeyword();
+            String kw = bo.getKeyword().trim();
             lqw.and(w -> w.like(CmdApprovalTask::getTaskNo, kw)
-                .or().like(CmdApprovalTask::getBizTitle, kw));
+                .or().like(CmdApprovalTask::getBizTitle, kw)
+                .or().like(CmdApprovalTask::getOneId, kw));
         }
         // 运行状态：RUNNING 引擎已启动且未终态 / DONE 业务终态 / NEW 尚未启动实例
         String runState = bo.getRunState() == null ? "" : bo.getRunState().toUpperCase();
@@ -124,6 +126,7 @@ public class CmdFlowTraceServiceImpl implements ICmdFlowTraceService {
         CmdFlowInstanceVo vo = new CmdFlowInstanceVo();
         vo.setId(task.getId());
         vo.setTaskNo(task.getTaskNo());
+        vo.setOneId(task.getOneId());
         vo.setBizTitle(task.getBizTitle());
         vo.setBizType(task.getBizType());
         vo.setSceneCode(sceneCode);

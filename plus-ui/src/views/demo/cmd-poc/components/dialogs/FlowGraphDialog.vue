@@ -172,6 +172,40 @@
         </el-table>
       </div>
 
+      <!-- 工作流步骤执行日志：按客户 One ID 串联每一步（cmd_workflow_step_log） -->
+      <div v-if="isInstance" v-loading="stepsLoading" class="fg-steps">
+        <h4>
+          工作流步骤执行日志
+          <el-tag size="small" type="success" effect="plain">One ID 全链路追溯</el-tag>
+          <span class="fg-steps-hint">每一步均落库（提交 / 系统自动检查 / 人工决策），共 {{ steps.length }} 步</span>
+        </h4>
+        <el-table :data="steps" size="small" max-height="260">
+          <el-table-column label="#" prop="stepSeq" width="46" align="center" />
+          <el-table-column label="节点" prop="nodeName" min-width="130" show-overflow-tooltip />
+          <el-table-column label="类型" width="88" align="center">
+            <template #default="{ row }">
+              <el-tag size="small" :type="row.stepType === 'BUSINESS' ? 'warning' : row.stepType === 'SUBMIT' ? 'primary' : 'info'" effect="plain">
+                {{ row.stepType === 'BUSINESS' ? '人工决策' : row.stepType === 'SUBMIT' ? '提交' : '系统自动' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="动作" prop="actionName" width="100" />
+          <el-table-column label="操作人" min-width="120" show-overflow-tooltip>
+            <template #default="{ row }">
+              {{ row.operatorName }}<span v-if="row.operatorRole" class="fg-role">（{{ row.operatorRole }}）</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="状态流转" min-width="150">
+            <template #default="{ row }">
+              <template v-if="row.fromStatus || row.toStatus">{{ row.fromStatus ?? '—' }} → {{ row.toStatus ?? '—' }}</template>
+              <span v-else class="fg-role">{{ row.opinion }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="意见" prop="opinion" min-width="200" show-overflow-tooltip />
+          <el-table-column label="时间" prop="createTime" width="160" />
+        </el-table>
+      </div>
+
       <!-- 引擎关联说明 -->
       <div class="fg-engine">
         <b>Warm-Flow 关联：</b>流程编码 {{ graph.flowCode }} · 定义 ID {{ graph.definitionId ?? '—' }}。
@@ -193,8 +227,8 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { getFlowGraphByScene } from '@/api/demo/cmdPoc';
-import type { FlowGraphEdgeVO, FlowGraphNodeVO, FlowGraphVO } from '@/api/demo/cmdPoc/types';
+import { getFlowGraphByScene, getWorkflowSteps } from '@/api/demo/cmdPoc';
+import type { FlowGraphEdgeVO, FlowGraphNodeVO, FlowGraphVO, WorkflowStepVO } from '@/api/demo/cmdPoc/types';
 
 defineOptions({ name: 'CmdPocFlowGraphDialog' });
 
@@ -227,6 +261,10 @@ const DEFAULT_LANES = [
 const loading = ref(false);
 const graph = ref<FlowGraphVO | null>(null);
 const selected = ref<FlowGraphNodeVO | null>(null);
+
+/** 工作流步骤执行日志（按客户 One ID 串联每一步，数据库 cmd_workflow_step_log） */
+const steps = ref<WorkflowStepVO[]>([]);
+const stepsLoading = ref(false);
 
 const sceneCode = computed(() => String(props.payload?.sceneCode ?? ''));
 const sceneName = computed(() => String(props.payload?.sceneName ?? sceneCode.value));
@@ -346,6 +384,14 @@ onMounted(async () => {
   loading.value = true;
   try {
     graph.value = await getFlowGraphByScene(sceneCode.value, taskNo.value || undefined);
+    if (isInstance.value) {
+      stepsLoading.value = true;
+      try {
+        steps.value = await getWorkflowSteps({ taskNo: taskNo.value });
+      } finally {
+        stepsLoading.value = false;
+      }
+    }
   } finally {
     loading.value = false;
   }
@@ -510,5 +556,29 @@ onMounted(async () => {
   font-size: 12px;
   line-height: 1.7;
   color: var(--el-text-color-secondary);
+}
+
+/* 工作流步骤日志 */
+.fg-steps {
+  margin-top: 14px;
+
+  h4 {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: 0 0 8px;
+    font-size: 14px;
+  }
+
+  .fg-steps-hint {
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--el-text-color-secondary);
+  }
+
+  .fg-role {
+    color: var(--el-text-color-secondary);
+  }
 }
 </style>

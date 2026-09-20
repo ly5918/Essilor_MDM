@@ -115,6 +115,13 @@ public class CmdCustomerBo implements Serializable {
     /** 扩展属性（JSON 字符串） */
     private String extJson;
 
+    /**
+     * 关键字（贯通查询）：客户名称 / One ID / 统一社会信用代码，三列模糊匹配。
+     * <p>
+     * 用于「客户管理」「客户主档」等页面的搜索框按贯穿 ID 检索。
+     */
+    private String keyword;
+
     /** 请求参数（支持 beginTime / endTime 等动态条件） */
     private Map<String, Object> params = new HashMap<>();
 }

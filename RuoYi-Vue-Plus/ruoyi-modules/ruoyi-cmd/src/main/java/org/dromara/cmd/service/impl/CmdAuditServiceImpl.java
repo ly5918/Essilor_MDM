@@ -58,13 +58,63 @@ public class CmdAuditServiceImpl implements ICmdAuditService {
             lqw.eq(AuditEvent::getResult, bo.getResult());
         }
         if (StringUtils.isNotBlank(bo.getKeyword())) {
-            lqw.and(w -> w.like(AuditEvent::getEventId, bo.getKeyword())
-                .or().like(AuditEvent::getEventName, bo.getKeyword())
-                .or().like(AuditEvent::getOperatorName, bo.getKeyword()));
+            String kw = bo.getKeyword().trim();
+            // 贯通查询：事件编号 / 事件名称 / 操作人 / One ID / 关联业务单号
+            lqw.and(w -> w.like(AuditEvent::getEventId, kw)
+                .or().like(AuditEvent::getEventName, kw)
+                .or().like(AuditEvent::getOperatorName, kw)
+                .or().like(AuditEvent::getOneId, kw)
+                .or().like(AuditEvent::getBizId, kw));
         }
         lqw.orderByDesc(AuditEvent::getEventTime);
         Page<AuditEventVo> page = auditMapper.selectVoPage(pageQuery.build(), lqw);
         return PageResult.build(page.getRecords(), page.getTotal());
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public String record(AuditEvent event) {
+        if (event.getEventTime() == null) {
+            event.setEventTime(LocalDateTime.now());
+        }
+        if (StringUtils.isBlank(event.getEventId())) {
+            event.setEventId(generateEventId());
+        }
+        // audit_event 的 before_json / after_json 是 JSON 列：空串不是合法 JSON，必须落 NULL
+        if (StringUtils.isBlank(event.getBeforeJson())) {
+            event.setBeforeJson(null);
+        }
+        if (StringUtils.isBlank(event.getAfterJson())) {
+            event.setAfterJson(null);
+        }
+        auditMapper.insert(event);
+        return event.getEventId();
+    }
+
+    /**
+     * 生成审计事件编号 AE-yyyyMMdd-####（当日流水，天然防重可读）
+     *
+     * @return 事件编号
+     */
+    private String generateEventId() {
+        String day = LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd"));
+        String prefix = "AE-" + day + "-";
+        LambdaQueryWrapper<AuditEvent> lqw = Wrappers.lambdaQuery();
+        lqw.likeRight(AuditEvent::getEventId, prefix).orderByDesc(AuditEvent::getEventId).last("limit 1");
+        AuditEvent last = auditMapper.selectOne(lqw);
+        int seq = 1;
+        if (last != null && StringUtils.isNotBlank(last.getEventId())) {
+            String tail = last.getEventId().substring(prefix.length());
+            try {
+                seq = Integer.parseInt(tail) + 1;
+            } catch (NumberFormatException ignore) {
+                seq = 1;
+            }
+        }
+        return prefix + String.format("%04d", seq);
     }
 
     /**

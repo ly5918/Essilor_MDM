@@ -70,7 +70,7 @@
               <span class="wc-count">共 {{ instances.length }} 条执行记录</span>
             </div>
             <div class="wc-toolbar-right">
-              <el-input v-model="instKeyword" placeholder="申请编号 / 客户主题" clearable style="width: 220px" @keyup.enter="loadInstances" />
+              <el-input v-model="instKeyword" placeholder="One ID / 申请编号 / 客户主题" clearable style="width: 240px" @keyup.enter="loadInstances" />
               <el-button type="primary" plain icon="Refresh" @click="loadInstances">刷新</el-button>
             </div>
           </div>
@@ -82,6 +82,12 @@
               </template>
             </el-table-column>
             <el-table-column label="申请编号" prop="taskNo" width="165" />
+            <el-table-column label="One ID" prop="oneId" width="140">
+              <template #default="{ row }">
+                <span v-if="row.oneId" class="wc-oneid">{{ row.oneId }}</span>
+                <span v-else class="wc-oneid-empty">—</span>
+              </template>
+            </el-table-column>
             <el-table-column label="优先级" width="90" align="center">
               <template #default="{ row }">
                 <el-tag :type="riskTagType(row.priority)" size="small" effect="plain">{{ row.priority ?? '—' }}</el-tag>
@@ -288,6 +294,26 @@ onMounted(async () => {
 }
 
 .wc-progress-text {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--el-text-color-secondary);
+}
+
+/* 贯穿 ID：等宽字体高亮，便于跨页面人工比对 */
+.wc-oneid {
+  font-family: 'Cascadia Mono', Consolas, 'Courier New', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--el-color-primary);
+}
+
+.wc-oneid-empty {
+  color: var(--el-text-color-placeholder);
+}
+
+/* 工作项「类型」列的第二行：当前节点名 */
+.wi-sub {
   display: block;
   margin-top: 2px;
   font-size: 11px;

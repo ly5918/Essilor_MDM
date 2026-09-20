@@ -32,6 +32,9 @@ public class CmdApprovalAction extends BaseEntity {
     /** 任务编号（冗余） */
     private String taskNo;
 
+    /** 客户主数据标识（One ID），使业务审计链可按客户追溯 */
+    private String oneId;
+
     /** 动作类型（SUBMIT / APPROVE / REJECT / RETURN / ESCALATE / TRANSFER / CLAIM / MERGE ...） */
     private String actionType;
 

@@ -9,8 +9,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.dromara.cmd.common.CmdConstants;
 import org.dromara.cmd.domain.CmdApprovalAction;
 import org.dromara.cmd.domain.CmdApprovalTask;
+import org.dromara.cmd.domain.AuditEvent;
 import org.dromara.cmd.domain.CmdCustomer;
 import org.dromara.cmd.domain.CmdCustomerVersion;
+import org.dromara.cmd.domain.CmdWorkflowStepLog;
 import org.dromara.cmd.domain.bo.CmdCustomerBo;
 import org.dromara.cmd.domain.vo.CmdCustomerSubmitVo;
 import org.dromara.cmd.domain.vo.CmdCustomerVersionVo;
@@ -20,8 +22,10 @@ import org.dromara.cmd.mapper.CmdApprovalTaskMapper;
 import org.dromara.cmd.mapper.CmdCustomerMapper;
 import org.dromara.cmd.mapper.CmdCustomerVersionMapper;
 import org.dromara.cmd.mapper.CmdFlowSceneMapper;
+import org.dromara.cmd.service.ICmdAuditService;
 import org.dromara.cmd.service.ICmdCustomerService;
 import org.dromara.cmd.service.ICmdFlowEngineService;
+import org.dromara.cmd.service.ICmdWorkflowStepLogService;
 import org.dromara.common.core.domain.PageResult;
 import org.dromara.common.core.exception.ServiceException;
 import org.dromara.common.json.utils.JsonUtils;
@@ -67,6 +71,8 @@ public class CmdCustomerServiceImpl implements ICmdCustomerService {
     private final CmdApprovalActionMapper approvalActionMapper;
     private final CmdFlowSceneMapper flowSceneMapper;
     private final ICmdFlowEngineService flowEngineService;
+    private final ICmdWorkflowStepLogService stepLogService;
+    private final ICmdAuditService auditService;
 
     /** 新建客户申请的业务场景（cmd_flow_scene.scene_code，同时决定泳道图模板与流程定义） */
     private static final String SCENE_CUSTOMER_CREATE = CmdConstants.SCENE_CUSTOMER_CREATE;
@@ -197,6 +203,7 @@ public class CmdCustomerServiceImpl implements ICmdCustomerService {
         CmdApprovalAction action = new CmdApprovalAction();
         action.setTaskId(task.getId());
         action.setTaskNo(task.getTaskNo());
+        action.setOneId(customer.getOneId());
         action.setActionType(CmdConstants.ACTION_SUBMIT);
         action.setActionName("提交申请");
         action.setFromNodeCode("APPLY");
@@ -209,6 +216,25 @@ public class CmdCustomerServiceImpl implements ICmdCustomerService {
         action.setAfterState(CmdConstants.APPR_STATUS_PENDING);
         action.setEvidenceJson(task.getEvidenceJson());
         approvalActionMapper.insert(action);
+
+        // 4.1) 工作流步骤总账：把「提交 + 系统自动检查（OCR/DQ/查重）」每一步都打到客户 One ID 上
+        recordSubmitSteps(task, applicant, now, dqScore, matchState);
+
+        // 4.1) 审计留痕：提交客户新建申请（审计中心可按 One ID / 申请编号检索到本次动作）
+        AuditEvent audit = new AuditEvent();
+        audit.setEventType("CREATE");
+        audit.setEventName("提交客户新建申请：" + customer.getLegalName());
+        audit.setBizType(CmdConstants.SCENE_CUSTOMER_CREATE);
+        audit.setBizId(task.getTaskNo());
+        audit.setOneId(customer.getOneId());
+        audit.setOperatorId(applicant.id());
+        audit.setOperatorName(applicant.name());
+        audit.setOperatorRole("BUSINESS_USER");
+        audit.setEventTime(now);
+        audit.setResult("SUCCESS");
+        audit.setRiskLevel(resolveRisk(dqScore));
+        audit.setAfterJson(JsonUtils.toJsonString(customer));
+        auditService.record(audit);
 
         // 5) 拉起 Warm-Flow：部署流程定义 → 启动实例 → 定位到业务当前节点 → 回写 flow_* 镜像
         flowEngineService.startInstance(task.getTaskNo());
@@ -369,6 +395,78 @@ public class CmdCustomerServiceImpl implements ICmdCustomerService {
     }
 
     /**
+     * 记录提交阶段的步骤日志：提交申请 + 系统自动检查（数据装配 / OCR / DQ / 查重）
+     * <p>每一步都带客户 one_id，使新建客户的标识在「所有工作流步骤」中可关联回溯。</p>
+     *
+     * @param task       审批任务（含 one_id / task_no / flow_instance_id）
+     * @param applicant  申请人
+     * @param now        提交时间
+     * @param dqScore    DQ 质量分
+     * @param matchState 匹配结论
+     */
+    private void recordSubmitSteps(CmdApprovalTask task, Applicant applicant, LocalDateTime now,
+                                   BigDecimal dqScore, String matchState) {
+        String oneId = task.getOneId();
+        String taskNo = task.getTaskNo();
+        Long flowInstanceId = task.getFlowInstanceId();
+
+        // 提交申请（APPLY → BU_REVIEW）
+        CmdWorkflowStepLog submit = new CmdWorkflowStepLog();
+        submit.setOneId(oneId);
+        submit.setTaskNo(taskNo);
+        submit.setFlowInstanceId(flowInstanceId);
+        submit.setStepType(CmdConstants.STEP_SUBMIT);
+        submit.setNodeCode("APPLY");
+        submit.setNodeName(CmdConstants.nodeName("APPLY"));
+        submit.setActionType(CmdConstants.ACTION_SUBMIT);
+        submit.setActionName("提交申请");
+        submit.setOperatorId(applicant.id());
+        submit.setOperatorName(applicant.name());
+        submit.setOperatorRole(ROLE_BU_STEWARD);
+        submit.setFromStatus(CmdConstants.APPR_STATUS_DRAFT);
+        submit.setToStatus(CmdConstants.APPR_STATUS_PENDING);
+        submit.setCreateTime(now);
+        stepLogService.recordStep(submit);
+
+        // 系统自动检查（数据装配 / OCR / DQ / 查重）—— POC 阶段同步完成
+        recordSystemStep(oneId, taskNo, flowInstanceId, "INPUT", "数据装配", now, dqScore, matchState);
+        recordSystemStep(oneId, taskNo, flowInstanceId, "OCR", "OCR 与智能补全", now, dqScore, matchState);
+        recordSystemStep(oneId, taskNo, flowInstanceId, "DQ", "技术与业务 DQ", now, dqScore, matchState);
+        recordSystemStep(oneId, taskNo, flowInstanceId, "DUP", "Duplicate Check", now, dqScore, matchState);
+    }
+
+    /**
+     * 记录一条系统自动步骤（OCR / DQ / 查重 等）
+     */
+    private void recordSystemStep(String oneId, String taskNo, Long flowInstanceId, String nodeCode,
+                                  String nodeName, LocalDateTime now, BigDecimal dqScore, String matchState) {
+        CmdWorkflowStepLog step = new CmdWorkflowStepLog();
+        step.setOneId(oneId);
+        step.setTaskNo(taskNo);
+        step.setFlowInstanceId(flowInstanceId);
+        step.setStepType(CmdConstants.STEP_SYSTEM);
+        step.setNodeCode(nodeCode);
+        step.setNodeName(nodeName);
+        step.setOperatorName("系统自动处理");
+        step.setOperatorRole("SYS");
+        step.setOpinion(buildSystemOpinion(nodeCode, dqScore, matchState));
+        step.setCreateTime(now);
+        stepLogService.recordStep(step);
+    }
+
+    /**
+     * 系统自动步骤的展示意见
+     */
+    private String buildSystemOpinion(String nodeCode, BigDecimal dqScore, String matchState) {
+        return switch (nodeCode) {
+            case "DQ" -> "DQ 质量分=" + (dqScore == null ? "-" : dqScore) + "，自动校验通过";
+            case "DUP" -> "匹配结论=" + matchState + "，未发现强制合并项";
+            case "OCR" -> "营业执照识别完成，关键字段已抽取";
+            default -> "系统自动完成";
+        };
+    }
+
+    /**
      * 场景名称（cmd_flow_scene.scene_name），用于回执文案
      *
      * @return 场景名称
@@ -497,7 +595,7 @@ public class CmdCustomerServiceImpl implements ICmdCustomerService {
      * @return 查询包装器
      */
     private LambdaQueryWrapper<CmdCustomer> buildQueryWrapper(CmdCustomerBo bo) {
-        return QueryBuilder.lambda(CmdCustomer.class)
+        LambdaQueryWrapper<CmdCustomer> lqw = QueryBuilder.lambda(CmdCustomer.class)
             .likeIfText(CmdCustomer::getLegalName, bo.getLegalName())
             .eqIfText(CmdCustomer::getOneId, bo.getOneId())
             .eqIfText(CmdCustomer::getCreditCode, bo.getCreditCode())
@@ -508,6 +606,14 @@ public class CmdCustomerServiceImpl implements ICmdCustomerService {
             .betweenParams(CmdCustomer::getCreateTime, bo.getParams(), "beginTime", "endTime")
             .orderByDesc(CmdCustomer::getCreateTime)
             .build();
+        // 贯通查询：客户名称 / One ID / 统一社会信用代码 三列模糊匹配
+        if (StringUtils.isNotBlank(bo.getKeyword())) {
+            String kw = bo.getKeyword().trim();
+            lqw.and(w -> w.like(CmdCustomer::getLegalName, kw)
+                .or().like(CmdCustomer::getOneId, kw)
+                .or().like(CmdCustomer::getCreditCode, kw));
+        }
+        return lqw;
     }
 
     /**

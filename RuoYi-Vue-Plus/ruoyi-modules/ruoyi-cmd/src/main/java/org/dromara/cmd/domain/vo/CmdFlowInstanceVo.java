@@ -30,6 +30,12 @@ public class CmdFlowInstanceVo implements Serializable {
     /** 申请编号（对应参考页 Label 列） */
     private String taskNo;
 
+    /**
+     * 客户主数据标识（One ID）：贯穿全部页面与工作流的贯通 ID，
+     * 与 cmd_customer.one_id 同源，可按此 ID 反查客户主档与全部工作流记录。
+     */
+    private String oneId;
+
     /** 业务标题（对应参考页 Description 列） */
     private String bizTitle;
 

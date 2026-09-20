@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Essilor CMD 工作流 · 从零跑通实操手册（分步截图）</title>
+  <style>
+    :root{
+      --primary:#176c9f; --primary-d:#123f66; --accent:#22a8bb;
+      --success:#2e8b57; --warning:#db7c18; --danger:#c0392b;
+      --text:#15324d; --muted:#5a6e82; --border:#d9e3eb; --bg:#f5f8fb; --card:#fff;
+    }
+    *{box-sizing:border-box}
+    html{scroll-behavior:smooth}
+    body{margin:0;font-family:"Microsoft YaHei","PingFang SC",Arial,sans-serif;color:var(--text);background:var(--bg);line-height:1.75}
+    .wrap{max-width:1080px;margin:0 auto;padding:24px}
+    header{background:linear-gradient(120deg,var(--primary-d),var(--primary) 60%,var(--accent));color:#fff;padding:34px 30px;border-radius:14px;margin-bottom:22px}
+    header h1{margin:0 0 8px;font-size:25px}
+    header p{margin:0;opacity:.95;font-size:14px}
+    .toc{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:18px 22px;margin-bottom:22px;position:sticky;top:10px;z-index:20;box-shadow:0 2px 10px rgba(0,0,0,.05)}
+    .toc h2{margin:0 0 10px;font-size:16px}
+    .toc ol{margin:0;padding-left:20px;columns:2;column-gap:30px}
+    .toc a{color:var(--primary);text-decoration:none;font-size:14px}
+    .toc a:hover{text-decoration:underline}
+    section{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:22px 26px;margin-bottom:18px}
+    section h2{margin:0 0 6px;font-size:20px;color:var(--primary-d);border-left:5px solid var(--primary);padding-left:12px}
+    section h3{margin:18px 0 6px;font-size:16px;color:var(--primary)}
+    .step{background:#f0f7fc;border:1px solid #cfe4f2;border-left:6px solid var(--accent);border-radius:8px;padding:12px 16px;margin:14px 0}
+    .step .num{display:inline-block;background:var(--accent);color:#fff;font-weight:700;border-radius:6px;padding:1px 9px;margin-right:8px}
+    .tip{background:#fff8ec;border:1px solid #f3d9a6;border-left:6px solid var(--warning);border-radius:8px;padding:10px 14px;margin:12px 0;font-size:14px}
+    .tip b{color:var(--warning)}
+    .ok{background:#eefaf0;border:1px solid #bfe6c8;border-left:6px solid var(--success);border-radius:8px;padding:10px 14px;margin:12px 0;font-size:14px}
+    figure{margin:16px 0 6px}
+    figure img{width:100%;border:1px solid var(--border);border-radius:8px;display:block;background:#fff}
+    figcaption{color:var(--muted);font-size:13px;margin-top:6px;text-align:center}
+    table{width:100%;border-collapse:collapse;margin:12px 0;font-size:14px}
+    th,td{border:1px solid var(--border);padding:8px 10px;text-align:left}
+    th{background:#eef4f9;color:var(--primary-d)}
+    code{background:#eef2f6;padding:1px 6px;border-radius:4px;font-size:13px;color:#b5341f}
+    .pill{display:inline-block;border-radius:20px;padding:2px 10px;font-size:12px;font-weight:600}
+    .pill.green{background:#e8f6ec;color:var(--success)}
+    .pill.red{background:#fdecea;color:var(--danger)}
+    .pill.blue{background:#e7f1fa;color:var(--primary)}
+    footer{color:var(--muted);font-size:13px;text-align:center;padding:20px}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Essilor CMD 工作流 · 从零跑通实操手册</h1>
+    <p>面向"不懂业务"的新人：照着每一步点，每一步都配了真实截图。最终你会亲手把一个客户从"申请"跑成"正式主数据"。</p>
+  </header>
+
+  <nav class="toc">
+    <h2>目录（点击跳转）</h2>
+    <ol>
+      <li><a href="#ch0">这套系统在干什么（业务背景）</a></li>
+      <li><a href="#ch1">登录与角色切换</a></li>
+      <li><a href="#ch2">新建客户申请（OCR 识别）</a></li>
+      <li><a href="#ch3">提交申请 · 拿到贯穿 ID</a></li>
+      <li><a href="#ch4">用 One ID 在任意页面追踪</a></li>
+      <li><a href="#ch5">切到 BU 角色 · 工作项</a></li>
+      <li><a href="#ch6">流程跟踪（泳道图 + 步骤日志）</a></li>
+      <li><a href="#ch7">BU 审批：四个动作</a></li>
+      <li><a href="#ch8">审批通过后的去向</a></li>
+      <li><a href="#ch9">三张工作流视图</a></li>
+      <li><a href="#ch10">审计追溯（Auditor）</a></li>
+      <li><a href="#ch11">给不懂业务的人：一句话总结</a></li>
+    </ol>
+  </nav>
+
+  <!-- 背景 -->
+  <section id="ch0">
+    <h2>0. 这套系统在干什么（业务背景）</h2>
+    <p>这是一套<strong>客户主数据管理（MDM）审批工作流</strong>的演示原型。一句话：<em>业务人员提一个"新客户开户"申请，系统先做机器校验，再走人工审批，批完后客户变成公司正式可用的"主数据"。</em></p>
+    <h3>两个"贯穿全部页面的身份证"</h3>
+    <table>
+      <tr><th>名称</th><th>样子</th><th>含义</th><th>谁生成</th></tr>
+      <tr><td><b>One ID</b></td><td><code>GC-23F62B7A</code></td><td>客户的永久身份证。客户这辈子所有记录（申请、工作流步骤、审计）都挂它</td><td>提交申请时系统生成</td></tr>
+      <tr><td><b>申请编号</b></td><td><code>AP-20260919-0006</code></td><td>这一次审批流程的单号，类似快递单号</td><td>提交申请时系统生成</td></tr>
+    </table>
+    <div class="tip"><b>记住：</b>以后在任何页面，只要看到这俩号，就能"顺着线"查到这条客户的全貌。本手册全程用一条真实数据演示：<span class="pill blue">One ID = GC-23F62B7A</span> <span class="pill blue">申请编号 = AP-20260919-0006</span>（客户名：上海清视眼镜有限公司）。</div>
+
+    <h3>五个角色（演示里你会切换）</h3>
+    <table>
+      <tr><th>角色</th><th>能干什么</th></tr>
+      <tr><td>Business User（业务）</td><td>提交新客户申请、查看自己提交的客户</td></tr>
+      <tr><td>BU Data Steward（BU 管家）</td><td>初审 BU 范围内的客户申请</td></tr>
+      <tr><td>GC Steward（全局管家）</td><td>对"升级上来"的高风险/跨区域客户做全局决策</td></tr>
+      <tr><td>Auditor（审计员）</td><td>只读追溯：谁、在什么时候、改了什么</td></tr>
+      <tr><td>Platform Admin（平台管理员）</td><td>看流程定义、集成监控等</td></tr>
+    </table>
+    <p>演示系统顶部有个<strong>"模拟角色"下拉</strong>，不用真登录，直接切角色即可。</p>
+  </section>
+
+  <!-- 1 登录 -->
+  <section id="ch1">
+    <h2>1. 登录与角色切换</h2>
+    <div class="step"><span class="num">步骤 1</span>打开系统：浏览器访问 <code>http://localhost/cmd-poc/business</code>。默认进入 Business User 的工作台。你不用输密码，这是演示环境。</div>
+    <figure><img src="shots/S01-business-dash.png" alt="Business User 工作台"><figcaption>图 1：登录后默认是 Business User 工作台</figcaption></figure>
+
+    <div class="step"><span class="num">步骤 2</span>切换角色：点击页面顶部的<strong>"模拟角色"下拉框</strong>（默认显示 Business User），选你想扮演的角色。本手册会在需要"审批"时切到 BU Data Steward。</div>
+    <figure><img src="shots/S10-bu-role.png" alt="切换角色为 BU Data Steward"><figcaption>图 2：把角色从 Business User 切换成 BU Data Steward</figcaption></figure>
+  </section>
+
+  <!-- 2 新建客户 -->
+  <section id="ch2">
+    <h2>2. 新建客户申请（OCR 识别营业执照）</h2>
+    <div class="step"><span class="num">步骤 3</span>左侧菜单点 <strong>客户管理</strong>，进入客户列表页。你会看到列表里有 <strong>One ID</strong> 列，以及顶部一个可按 One ID / 申请编号 / 客户名搜索的框。</div>
+    <figure><img src="shots/S02-business-customers.png" alt="客户管理列表"><figcaption>图 3：客户管理页（已含 One ID 列 + 搜索框）</figcaption></figure>
+
+    <div class="step"><span class="num">步骤 4</span>点右上角 <strong>「新建客户」</strong>按钮，弹出申请表单。</div>
+    <figure><img src="shots/S03-new-customer-dialog.png" alt="新建客户弹窗"><figcaption>图 4：新建客户申请表单（动态字段已按数据模型加载）</figcaption></figure>
+
+    <div class="step"><span class="num">步骤 5</span>用 OCR 省去手抄：点表单上方的 <strong>「查看 OCR 识别结果」</strong>，弹出营业执照识别窗口。</div>
+    <figure><img src="shots/S04-ocr-dialog.png" alt="OCR 弹窗"><figcaption>图 5：OCR 识别弹窗</figcaption></figure>
+
+    <div class="step"><span class="num">步骤 6</span>在 OCR 窗口选一张营业执照图片（演示里点"选择营业执照"会自动载入一张测试图），系统<strong>自动识别</strong>出：客户法定名称、统一社会信用代码、注册地址、省、市。</div>
+    <figure><img src="shots/S05-ocr-recognized.png" alt="OCR 识别结果"><figcaption>图 6：自动识别出的营业执照字段</figcaption></figure>
+
+    <div class="step"><span class="num">步骤 7</span>点 <strong>「写回表单」</strong>，识别结果回填到申请表单，被回填的字段旁边会打 <span class="pill green">OCR回填</span> 标签，肉眼可见。</div>
+    <figure><img src="shots/S06-form-prefilled.png" alt="表单被 OCR 回填"><figcaption>图 7：OCR 结果写回表单（带"OCR回填"标签）</figcaption></figure>
+
+    <div class="tip"><b>注意：</b>OCR 只认营业执照上有的字段。像<strong>联系人、联系电话、客户简称</strong>这类营业执照上没有的，得自己填。</div>
+    <div class="step"><span class="num">步骤 8</span>补全必填项（如联系人、联系电话、客户简称），确认无误。</div>
+    <figure><img src="shots/S07-form-complete.png" alt="补全后的表单"><figcaption>图 8：补全联系人等字段后的完整表单</figcaption></figure>
+  </section>
+
+  <!-- 3 提交 -->
+  <section id="ch3">
+    <h2>3. 提交申请 · 拿到贯穿 ID</h2>
+    <div class="step"><span class="num">步骤 9</span>点 <strong>「提交申请」</strong>。系统会依次自动做三件机器活：①落客户主档（同时生成 One ID）②数据质量(DQ)打分 ③智能查重。完成后弹出成功提示，里面就带着你的两个身份证。</div>
+    <figure><img src="shots/S08-submit-success.png" alt="提交成功"><figcaption>图 9：提交成功！拿到 One ID = GC-23F62B7A，申请编号 = AP-20260919-0006</figcaption></figure>
+    <div class="ok"><b>这一步的意义：</b>客户从"无"变成"有一条待审批的申请"。接下来所有页面都能用这两个号找到它。</div>
+  </section>
+
+  <!-- 4 搜索 -->
+  <section id="ch4">
+    <h2>4. 用 One ID 在任意页面追踪</h2>
+    <div class="step"><span class="num">步骤 10</span>回到客户管理列表，在搜索框输入 <code>GC-23F62B7A</code> 或 <code>AP-20260919-0006</code>，点查询——立刻命中这条客户（此时状态是 Pending，表示审批中）。</div>
+    <figure><img src="shots/S09-search-oneid.png" alt="用 One ID 搜索"><figcaption>图 10：用 One ID 搜索，精准命中刚提交的客户</figcaption></figure>
+    <div class="tip"><b>关键能力：</b>这个搜索框在<strong>客户管理、治理与审批、工作项、已激活/已完成工作流、审计中心</strong>等所有列表都一样——也就是说你拿同一个号，能在全系统追着这条客户跑。</div>
+  </section>
+
+  <!-- 5 切角色 工作项 -->
+  <section id="ch5">
+    <h2>5. 切到 BU 角色 · 工作项</h2>
+    <div class="step"><span class="num">步骤 11</span>顶部把角色切成 <strong>BU Data Steward</strong>。左侧菜单展开 <strong>流程中心</strong> → 点 <strong>「工作项」</strong>。这里列出"当前轮到我处理的待办"。你刚提交的申请就在第一条。</div>
+    <figure><img src="shots/S11-bu-workitem.png" alt="BU 工作项"><figcaption>图 11：BU Data Steward 的"工作项"——待我初审的申请排在首位</figcaption></figure>
+    <div class="tip"><b>菜单说明：</b>「流程中心」下有三个视图，都是 RuoYi 二级子菜单样式：
+      <ul>
+        <li><b>工作项</b>：当前需要我处理、还没办的（PENDING）。</li>
+        <li><b>已激活工作流</b>：正在跑、还没结束的流程（含别人在处理或等待的）。</li>
+        <li><b>已完成的工作流</b>：已经批完/拒绝/退回、走到终态的。</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 6 泳道图 -->
+  <section id="ch6">
+    <h2>6. 流程跟踪（泳道图 + 步骤日志）</h2>
+    <div class="step"><span class="num">步骤 12</span>在工作项第一条点 <strong>「泳道图」</strong>按钮，打开"流程跟踪"窗口。它把整条工作流画成泳道图：横向是阶段（提交 → 校验 → 初审 → 决策 → 完成），纵向是处理人角色。</div>
+    <figure><img src="shots/S12-flowgraph-pending.png" alt="泳道图-待审批"><figcaption>图 12：实例视图泳道图——绿色是已完成的自动步骤（5/11），蓝色"BU 初审"是当前卡住的节点</figcaption></figure>
+
+    <div class="step"><span class="num">步骤 13</span>把窗口往下滚，看底部的 <strong>「工作流步骤执行日志」</strong>。这一步是新增的：系统把工作流<em>每一步</em>都记下来了，且每一步都带 One ID，所以可以精确复盘"谁、在哪个节点、做了什么"。</div>
+    <figure><img src="shots/S13-step-log.png" alt="步骤执行日志"><figcaption>图 13：步骤执行日志——提交、录入、OCR、DQ 打分、查重 5 个自动步骤全程留痕，且都挂 One ID</figcaption></figure>
+    <div class="ok"><b>为什么这步重要：</b>之前工作流"调起来"后，机器做的几步（OCR/DQ/查重）是黑盒。现在每一步都写进 <code>cmd_workflow_step_log</code> 表，可查、可审计。</div>
+  </section>
+
+  <!-- 7 四个动作 -->
+  <section id="ch7">
+    <h2>7. BU 审批：四个动作（核心业务）</h2>
+    <div class="step"><span class="num">步骤 14</span>回到 BU 角色，进 <strong>治理与审批</strong> 菜单（也可在"工作项"里直接处理）。用申请编号搜到这条，<strong>点中这一行</strong>，右侧会展开详情和四个动作按钮。</div>
+    <figure><img src="shots/S14-bu-approval-queue.png" alt="审批队列"><figcaption>图 14：治理与审批队列——按申请编号搜到待办</figcaption></figure>
+    <figure><img src="shots/S15-bu-approval-detail.png" alt="审批详情"><figcaption>图 15：点中行后右侧出现详情 + 四个动作</figcaption></figure>
+
+    <div class="tip"><b>四个动作分别是什么（业务含义）：</b>
+      <table>
+        <tr><th>按钮</th><th>含义</th><th>结果</th></tr>
+        <tr><td><span class="pill green">批准</span></td><td>BU 认可，客户资料没问题</td><td>客户转 <b>Active</b>（正式主数据），流程结束</td></tr>
+        <tr><td><span class="pill red">拒绝</span></td><td>资料有问题，不予创建</td><td>客户转 <b>Rejected</b>，流程终止</td></tr>
+        <tr><td><span class="pill blue">退回补充</span></td><td>缺材料，打回给业务补</td><td>客户转 <b>Returned</b>，业务可再提交</td></tr>
+        <tr><td><span class="pill blue">升级 GC</span></td><td>超出 BU 权限（如跨区域/高风险）</td><td>转给 GC Steward 做全局决策，BU 范围扩大为全局</td></tr>
+      </table>
+    </div>
+
+    <div class="step"><span class="num">步骤 15</span>先演示最常用的 <strong>「批准」</strong>：在意见框填一句（如"OCR与DQ校验通过，同意创建"），点「批准」。</div>
+    <figure><img src="shots/S16-bu-approve-result.png" alt="批准结果"><figcaption>图 16：点「批准」成功——待办数 -1，已处理数 +1</figcaption></figure>
+
+    <div class="step"><span class="num">步骤 16</span>切到 <strong>「我已处理」</strong> 标签页，能看到刚批完的这条（状态 APPROVED）。</div>
+    <figure><img src="shots/S17-bu-done-list.png" alt="我已处理"><figcaption>图 17：BU 的"我已处理"列表，含刚批准的 AP-20260919-0006</figcaption></figure>
+
+    <div class="tip"><b>其余三个分支怎么测：</b>另建几条客户，分别点"拒绝 / 退回补充 / 升级 GC"即可。本演示库里已经预置了三条分支样本供你对照查看：
+      <ul>
+        <li><code>AP-20260919-0002</code> 分支B-审批拒绝（Rejected）</li>
+        <li><code>AP-20260919-0003</code> 分支C-退回补充（Returned）</li>
+        <li><code>AP-20260919-0001</code> 分支A-批准通过（Approved）</li>
+      </ul>
+      想在泳道图里看"拒绝"分支长啥样，可在"已完成的工作流"里打开 AP-20260919-0002。
+    </div>
+  </section>
+
+  <!-- 8 去向 -->
+  <section id="ch8">
+    <h2>8. 审批通过后的去向</h2>
+    <div class="step"><span class="num">步骤 17</span>批准后，这条客户<strong>正式成为主数据</strong>。验证三处：
+      <ul>
+        <li><b>客户主档</b>：用 One ID 搜，状态列变成 <span class="pill green">Active</span>。</li>
+        <li><b>已完成的工作流</b>：出现在"流程中心 → 已完成的工作流"里。</li>
+        <li><b>业务视角</b>：切回 Business User，客户管理列表里它从 Pending 变成 Active，业务方可以正式使用。</li>
+      </ul>
+    </div>
+    <figure><img src="shots/S23-master-active.png" alt="客户主档 Active"><figcaption>图 18：客户主档按 One ID 搜索 → 状态 Active</figcaption></figure>
+    <figure><img src="shots/S26-business-customers-active.png" alt="业务视角 Active"><figcaption>图 19：切回 Business User，客户列表里该客户已是 Active（正式主数据）</figcaption></figure>
+    <div class="ok"><b>一句话：</b>走完"提交 → BU 批准"，这条客户就从"申请"变成了公司里<strong>真实可用、被各系统引用的主数据</strong>。这就是工作流"吊起来"的最终目的。</div>
+  </section>
+
+  <!-- 9 三个视图 -->
+  <section id="ch9">
+    <h2>9. 三张工作流视图（流程中心）</h2>
+    <p>左侧 <strong>流程中心</strong> 下有三个菜单，分别看流程的不同状态。它们都带 One ID 列，且都能按 One ID 搜。</p>
+    <figure><img src="shots/S19-flow-workitem.png" alt="工作项视图"><figcaption>图 20：工作项（待我处理）</figcaption></figure>
+    <figure><img src="shots/S20-flow-active.png" alt="已激活工作流"><figcaption>图 21：已激活工作流（正在跑、未结束）</figcaption></figure>
+    <figure><img src="shots/S18-flow-done.png" alt="已完成的工作流"><figcaption>图 22：已完成的工作流（已到终态），One ID 列已前置最显眼</figcaption></figure>
+
+    <div class="step"><span class="num">步骤 18</span>在"已完成的工作流"里打开这条，点「泳道图」——此时是<strong>实例视图</strong>，全部 11 个节点都点亮（绿色），代表流程完整跑完。</div>
+    <figure><img src="shots/S21-flowgraph-approved.png" alt="完成的泳道图"><figcaption>图 23：已完成的实例视图——11/11 节点全绿</figcaption></figure>
+    <figure><img src="shots/S22-step-log-approved.png" alt="批准步骤日志"><figcaption>图 24：步骤日志里第 6 步"人工批准(BU)"也留了痕，带操作人和意见</figcaption></figure>
+  </section>
+
+  <!-- 10 审计 -->
+  <section id="ch10">
+    <h2>10. 审计追溯（Auditor 角色）</h2>
+    <div class="step"><span class="num">步骤 19</span>把角色切成 <strong>Auditor</strong>，进 <strong>审计中心</strong>。这里记录"谁、在什么时候、对哪个客户、做了什么、结果和风险等级"。每一行都带 One ID 和关联单号。</div>
+    <figure><img src="shots/S24-audit-role.png" alt="审计角色"><figcaption>图 25：切换到 Auditor 角色 + 审计中心</figcaption></figure>
+    <figure><img src="shots/S25-audit-search.png" alt="审计按 One ID 搜"><figcaption>图 26：审计中心按 One ID 过滤——提交与批准两条事件都挂在同一 One ID 下</figcaption></figure>
+    <div class="ok"><b>合规价值：</b>审批动作会自动落一条审计事件（如 <code>AE-20260919-0001</code>），含操作前/后状态快照。监管要查"这条客户谁批的、为什么批"，用 One ID 一秒拉全。</div>
+  </section>
+
+  <!-- 11 总结 -->
+  <section id="ch11">
+    <h2>11. 给不懂业务的人：一句话总结</h2>
+    <ol>
+      <li><b>业务方</b>（Business User）：填表 → OCR 写回 → 提交。拿到 <code>One ID</code> 和 <code>申请编号</code>。</li>
+      <li><b>机器</b>自动做：落档、DQ 打分、查重（这 5 步在泳道图底部步骤日志里看得见）。</li>
+      <li><b>BU 管家</b>在"工作项"里收到待办 → 打开泳道图看进度 → 在"治理与审批"里点 批准/拒绝/退回/升级GC。</li>
+      <li><b>批准后</b>：客户变 <span class="pill green">Active</span> 主数据；流程出现在"已完成的工作流"；审计中心多一条记录。</li>
+      <li><b>全程</b>：拿同一个 <code>One ID</code>，从客户管理、审批、工作流视图到审计，任何页面都能追到这条客户。</li>
+    </ol>
+    <div class="tip"><b>一个还没做成独立菜单的点：</b>"流程跟踪（泳道图）"目前是藏在每条工作项 / 审批记录的 <strong>「泳道图」按钮</strong> 里，没有单独放成侧边栏菜单项。如果你希望它也像"工作项/已激活/已完成"那样作为流程中心下的独立菜单，我可以再帮你加（需要改菜单配置 + 一个独立泳道图面板）。你说一声即可。</div>
+  </section>
+
+  <footer>
+    Essilor CMD POC 实操手册 · 全部截图均为真实操作实录（演示数据：GC-23F62B7A / AP-20260919-0006 / 上海清视眼镜有限公司）<br>
+    涉及页面均为演示环境，角色可在顶部"模拟角色"下拉直接切换，无需登录。
+  </footer>
+</div>
+</body>
+</html>

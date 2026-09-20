@@ -43,7 +43,9 @@ import type {
   CoverageItemVO,
   CustomerForm,
   CustomerQuery,
+  CustomerSubmitVO,
   CustomerVO,
+  DqRuleRow,
   DashboardStatVO,
   DeactivateForm,
   DeactivateResultVO,
@@ -74,6 +76,7 @@ import type {
   CmdValueSetRow,
   CmdVersionRow,
   LegacyMappingVO,
+  MatchRuleRow,
   MatchRuleVO,
   MetadataFieldForm,
   MetadataFieldVO,
@@ -91,7 +94,8 @@ import type {
   RolePermissionVO,
   TemplateMappingVO,
   TodoVO,
-  WorkflowConfigVO
+  WorkflowConfigVO,
+  WorkflowStepVO
 } from './types';
 import * as mock from './mock';
 
@@ -102,7 +106,7 @@ import * as mock from './mock';
  *   全局仍为 Mock 时，只有列在此处的模块走真实后端，其余继续用演示数据。
  *   例：VITE_CMD_POC_LIVE_MODULES=customer,hierarchy,dashboard
  */
-export const USE_MOCK = import.meta.env.VITE_CMD_POC_MOCK !== 'false';
+export const USE_MOCK = import.meta.env.VITE_CMD_POC_MOCK === 'true';
 
 /** 已联调模块列表（小写逗号分隔，从环境变量读取） */
 const LIVE_MODULES: string[] = String(import.meta.env.VITE_CMD_POC_LIVE_MODULES ?? '')
@@ -197,10 +201,63 @@ export const listCustomers = async (query?: CustomerQuery): Promise<CustomerVO[]
   return (page?.rows ?? []).map(toCustomerVO);
 };
 
-export const submitCustomer = async (data: CustomerForm): Promise<string> => {
-  if (!useLive('customer')) return delay('客户申请已提交，进入DQ与Duplicate Check');
-  await unwrap(request({ url: '/cmd/customer', method: 'post', data }));
-  return '客户已保存至数据库，进入 DQ 与 Duplicate Check';
+/** CUSTOMER 模型的动态字段 → 客户主档列（其余动态字段整体进 ext_json 扩展属性） */
+function toCmdCustomerPayload(data: CustomerForm) {
+  const dynamic = data.dynamicValues ?? {};
+  const extras: Record<string, string> = {};
+  Object.entries(dynamic).forEach(([code, value]) => {
+    if (value !== undefined && value !== null && value !== '') extras[code] = value;
+  });
+  // 已被主档列承载的核心字段不再重复写入扩展属性
+  delete extras.legal_name;
+  delete extras.credit_code;
+  delete extras.address;
+  return {
+    legalName: data.legalName || dynamic.legal_name || '',
+    creditCode: data.creditCode || dynamic.credit_code || '',
+    address: data.address || dynamic.address || '',
+    customerType: data.customerType,
+    buScope: data.bu,
+    productLine: data.productLine,
+    sourceSystem: data.sourceSystem,
+    payerId: data.payerId || dynamic.payer_id,
+    country: dynamic.country,
+    province: dynamic.province,
+    city: dynamic.city,
+    postalCode: dynamic.postal_code,
+    taxNo: dynamic.tax_no,
+    contactName: dynamic.contact_name,
+    contactPhone: dynamic.contact_phone,
+    contactEmail: dynamic.contact_email,
+    matchState: 'NEW',
+    status: 'pending',
+    extJson: Object.keys(extras).length ? JSON.stringify(extras) : undefined
+  };
+}
+
+/**
+ * 提交客户新建申请：后端落主档 + 自动检查 + 生成统一待办 + 拉起 Warm-Flow 流程实例
+ *
+ * @param data 表单数据（业务上下文 + 动态字段 + OCR 回填结果）
+ * @return 提交回执（One ID / 申请编号 / 当前节点 / 流程实例）
+ */
+export const submitCustomer = async (data: CustomerForm): Promise<CustomerSubmitVO> => {
+  if (!useLive('customer')) {
+    return delay<CustomerSubmitVO>({
+      oneId: 'GC-DEMO0001',
+      taskNo: 'AP-DEMO-0001',
+      sceneCode: 'CUSTOMER_CREATE',
+      sceneName: '客户创建',
+      status: 'pending',
+      currentNodeName: 'BU Scope 初审',
+      assigneeRole: 'BU_STEWARD',
+      dqScore: 92
+    });
+  }
+  const vo = await unwrap<CustomerSubmitVO>(
+    request({ url: '/cmd/customer', method: 'post', data: toCmdCustomerPayload(data) })
+  );
+  return vo ?? {};
 };
 
 export const deactivateCustomer = async (data: DeactivateForm): Promise<string> => {
@@ -239,7 +296,10 @@ export const listMetadataFields = async (): Promise<MetadataFieldVO[]> => {
     type: FIELD_TYPE_TEXT[(row.dataType ?? '').toUpperCase()] ?? 'Text',
     required: row.isRequired === 'Y',
     bu: row.ownerBu ?? 'All',
-    customerType: row.modelCode ?? 'All',
+    // 说明：md_field.model_code 是「数据模型」（如 CUSTOMER），不是客户类型，
+    // 早期实现直接把它当 customerType 过滤条件，导致动态字段全部被过滤为空。
+    // 字段按模型维度适用于全部客户类型，故统一取 All（与原型「根据业务上下文加载字段」一致）。
+    customerType: 'All',
     status: row.status === '1' ? 'Published' : 'Draft'
   }));
 };
@@ -251,6 +311,7 @@ export const saveMetadataField = async (data: MetadataFieldForm): Promise<string
       url: '/cmd/metadata/field',
       method: 'post',
       data: {
+        id: data.id,
         fieldCode: data.code,
         fieldName: data.label,
         dataType: (data.type ?? 'Text').toUpperCase(),
@@ -294,21 +355,14 @@ export const publishModelVersion = async (): Promise<string> => {
 };
 
 /* ============================== 4. 数据质量 ============================== */
-export const listDqRules = async (): Promise<DqRuleVO[]> => {
+/** DQ 规则清单：前端表格直接消费后端行契约（ruleCode / ruleName / dimension / ...） */
+export const listDqRules = async (): Promise<DqRuleRow[]> => {
   if (!useLive('dq')) return delay(mock.mockDqRules);
   const rows = await unwrap<DqRuleRow[]>(request({ url: '/cmd/dq/rule/list', method: 'get' }));
-  return (rows ?? []).map(row => ({
-    ruleCode: row.ruleCode ?? '',
-    ruleName: row.ruleName ?? '',
-    dimension: row.dimension ?? '',
-    role: row.role ?? '',
-    threshold: row.threshold ?? '',
-    result: row.result ?? '',
-    enabled: row.enabled ?? true
-  }));
+  return rows ?? [];
 };
 
-export const saveDqRule = async (rule: DqRuleVO): Promise<string> => {
+export const saveDqRule = async (rule: DqRuleRow): Promise<string> => {
   if (!useLive('dq')) return delay('DQ规则已保存');
   return unwrap(request({ url: '/cmd/dq/rule', method: 'post', data: rule }));
 };
@@ -319,25 +373,23 @@ export const deleteDqRule = async (id: number): Promise<string> => {
 };
 
 export const getDqScorecard = (oneId?: string): Promise<DqScorecardVO> =>
-  USE_MOCK ? delay(mock.mockDqScorecard) : unwrap(request({ url: '/cmd/dq/scorecard', method: 'get', params: { oneId } }));
+  useLive('dq') ? unwrap(request({ url: '/cmd/dq/scorecard', method: 'get', params: { oneId } })) : delay(mock.mockDqScorecard);
 
 export const simulateDq = (data: Record<string, string>): Promise<DqSimulateResultVO[]> =>
   useLive('dq') ? unwrap(request({ url: '/cmd/dq/simulate', method: 'post', data })) : delay(mock.mockDqSimulate);
 
 export const reEvaluateDq = (data: ReEvaluateForm): Promise<string> =>
-  USE_MOCK ? delay('历史数据重评估任务已创建，旧规则版本与旧分数保留') : unwrap(request({ url: '/cmd/dq/reEvaluate', method: 'post', data }));
+  useLive('dq') ? unwrap(request({ url: '/cmd/dq/reEvaluate', method: 'post', data })) : delay('历史数据重评估任务已创建，旧规则版本与旧分数保留');
 
 /** 重评估影响预估（Demo） */
 export const getReEvaluateImpact = (): Promise<ReEvaluateImpactVO[]> =>
-  USE_MOCK ? delay(mock.mockReEvaluateImpact) : unwrap(request({ url: '/cmd/dq/reEvaluate/impact', method: 'get' }));
+  useLive('dq') ? unwrap(request({ url: '/cmd/dq/reEvaluate/impact', method: 'get' })) : delay(mock.mockReEvaluateImpact);
 
 /* ============================== 5. 匹配与重复治理 ============================== */
 export const listMatchRules = async (): Promise<MatchRuleVO[]> => {
   if (!useLive('match')) return delay(mock.mockMatchRules);
   const rows = await unwrap<MatchRuleRow[]>(request({ url: '/cmd/match/rule/list', method: 'get' }));
   return (rows ?? []).map(row => ({
-    ruleCode: row.ruleCode ?? '',
-    ruleName: row.ruleName ?? '',
     dimension: row.dimension ?? '',
     role: row.role ?? '',
     threshold: row.threshold ?? '',
@@ -681,6 +733,7 @@ const SLA_TEXT: Record<string, string> = { NORMAL: '正常', DUE_SOON: '临近',
 function toApprovalTaskVO(row: CmdApprovalTaskRow): ApprovalTaskVO {
   return {
     taskId: row.taskNo ?? '',
+    oneId: row.oneId ?? '',
     customerName: row.bizTitle ?? '',
     taskType: row.bizType ?? '',
     source: row.sceneCode ?? '',
@@ -739,6 +792,7 @@ export const getApprovalTaskDetail = async (taskNo: string): Promise<ApprovalTas
   const vo = await unwrap<CmdApprovalDetailRow>(request({ url: `/cmd/approval/task/${taskNo}/detail`, method: 'get' }));
   return {
     id: String(vo.id ?? ''),
+    oneId: vo.oneId ?? '',
     name: vo.name ?? '',
     scene: vo.scene ?? '',
     submitter: vo.submitter ?? '',
@@ -918,6 +972,20 @@ export const getFlowGraphByScene = async (sceneCode: string, taskNo?: string): P
 };
 
 /**
+ * 工作流步骤执行日志：按客户 One ID 或任务编号查询
+ * 后端 GET /cmd/approval/workflow-steps
+ * <p>用于「流程跟踪」展示每一步（提交 / 系统自动 / 人工决策），每一步都带客户 One ID。</p>
+ *
+ * @param params oneId 或 taskNo（二选一）
+ */
+export const getWorkflowSteps = async (params: { oneId?: string; taskNo?: string }): Promise<WorkflowStepVO[]> => {
+  if (!useLive('approval')) return delay<WorkflowStepVO[]>([]);
+  return unwrap<WorkflowStepVO[]>(
+    request({ url: '/cmd/approval/workflow-steps', method: 'get', params })
+  );
+};
+
+/**
  * 流程中心：流程实例记录（每一次执行过的工作流，可查看 / 用 Graph 回看泳道图）
  * 后端 GET /cmd/flow/instances（CmdFlowTraceController）
  */
@@ -925,7 +993,11 @@ export const listFlowInstances = async (query: FlowInstanceQuery = {}): Promise<
   if (!useLive('approval')) {
     const kw = (query.keyword ?? '').trim().toLowerCase();
     const rows = mock.mockFlowInstances.filter(r => {
-      const matchKw = !kw || r.taskNo.toLowerCase().includes(kw) || (r.bizTitle ?? '').toLowerCase().includes(kw);
+      const matchKw =
+        !kw ||
+        r.taskNo.toLowerCase().includes(kw) ||
+        (r.bizTitle ?? '').toLowerCase().includes(kw) ||
+        (r.oneId ?? '').toLowerCase().includes(kw);
       const matchStatus = !query.status || r.status === query.status;
       const matchBiz = !query.bizType || r.bizType === query.bizType;
       const runState = query.runState;
@@ -1047,17 +1119,25 @@ const AUDIT_RESULT_TEXT: Record<string, AuditEventVO['result']> = {
   FAILED: 'Failed'
 };
 
-export const listAuditEvents = async (): Promise<AuditEventVO[]> => {
-  if (!useLive('audit')) return delay(mock.mockAuditEvents);
+export const listAuditEvents = async (keyword?: string): Promise<AuditEventVO[]> => {
+  const kw = (keyword ?? '').trim().toLowerCase();
+  if (!useLive('audit')) {
+    const rows = mock.mockAuditEvents as AuditEventVO[];
+    return delay(
+      kw ? rows.filter(r => r.id.toLowerCase().includes(kw) || r.event.toLowerCase().includes(kw)) : rows
+    );
+  }
   const page = await unwrap<PageResult<CmdAuditEventRow>>(
-    request({ url: '/cmd/audit/list', method: 'get', params: { pageNum: 1, pageSize: 100 } })
+    request({ url: '/cmd/audit/list', method: 'get', params: { pageNum: 1, pageSize: 100, keyword: kw || undefined } })
   );
   return (page.rows ?? []).map(row => ({
     id: row.eventId ?? '',
     time: row.eventTime ?? '',
     event: row.eventName ?? '',
     role: row.operatorRole ?? '',
-    result: AUDIT_RESULT_TEXT[row.result ?? ''] ?? 'Success'
+    result: AUDIT_RESULT_TEXT[row.result ?? ''] ?? 'Success',
+    oneId: row.oneId ?? '',
+    bizId: row.bizId ?? ''
   }));
 };
 
@@ -1083,6 +1163,8 @@ export const listRolePermissions = async (): Promise<RolePermissionVO[]> => {
   if (!useLive('permission')) return delay(mock.mockRolePermissions);
   const rows = await unwrap<CmdRoleRow[]>(request({ url: '/cmd/permission/role/list', method: 'get' }));
   return (rows ?? []).map(row => ({
+    roleCode: row.roleCode ?? '',
+    id: row.id,
     role: row.roleName ?? '',
     scope: row.defaultBu ? `${row.scopeType ?? ''} · ${row.defaultBu}` : (row.scopeType ?? ''),
     points: row.description ?? '',
@@ -1093,8 +1175,8 @@ export const listRolePermissions = async (): Promise<RolePermissionVO[]> => {
 export const saveRolePermissions = async (data: RolePermissionVO[]): Promise<string> => {
   if (!useLive('permission')) return delay('角色权限已保存');
   const payload = (data ?? []).map(item => ({
-    id: undefined,
-    roleCode: item.role.replace(/[^A-Za-z0-9]/g, '').toUpperCase(),
+    id: item.id,
+    roleCode: item.roleCode,
     roleName: item.role,
     scopeType: item.scope.split('·')[0]?.trim(),
     defaultBu: item.scope.split('·')[1]?.trim(),
@@ -1125,7 +1207,7 @@ export const saveWorkflow = (data: WorkflowConfigVO): Promise<string> =>
 export const ocrRecognize = async (fileName?: string): Promise<OcrRecognizeVO> => {
   if (!useLive('customer')) return delay({ license: mock.mockOcrLicense, fields: mock.mockOcrResults }, 800);
   const data = await unwrap<Partial<OcrRecognizeVO> | OcrResultVO[]>(
-    request({ url: '/cmd/ocr/recognize', method: 'post', params: fileName ? { fileName } : undefined })
+    request({ url: '/cmd/ocr/recognize', method: 'post', data: fileName ? { fileName } : undefined })
   );
   if (Array.isArray(data)) {
     return { license: mock.mockOcrLicense, fields: data };

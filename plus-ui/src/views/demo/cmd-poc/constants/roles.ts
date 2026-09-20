@@ -15,6 +15,8 @@ export interface PocMenu {
   badge?: string;
   /** 菜单图标（纯文字占位，避免引入图标库差异） */
   icon: string;
+  /** 子菜单（RuoYi 二级菜单样式，如「流程中心」下的工作流三视图） */
+  children?: PocMenu[];
 }
 
 export interface PocRole {
@@ -32,6 +34,19 @@ export interface PocRole {
   menus: PocMenu[];
 }
 
+/** 「流程中心」二级菜单（RuoYi 子菜单样式）：定义 / 三视图 / 流程跟踪 */
+const FLOW_CENTER_MENU: PocMenu = {
+  id: 'flowCenter',
+  label: '流程中心',
+  icon: '流',
+  children: [
+    { id: 'flowCenter', label: '工作流定义', icon: '流' },
+    { id: 'flowWorkitem', label: '工作项', icon: '项' },
+    { id: 'flowActive', label: '已激活工作流', icon: '启' },
+    { id: 'flowDone', label: '已完成的工作流', icon: '毕' }
+  ]
+};
+
 export const ROLE_LIST: PocRole[] = [
   {
     key: 'business',
@@ -46,7 +61,7 @@ export const ROLE_LIST: PocRole[] = [
       { id: 'batch', label: '批量导入', icon: '批' },
       { id: 'hier', label: '客户层级', icon: '层' },
       { id: 'change', label: '变更与停用', icon: '变' },
-      { id: 'flowCenter', label: '流程中心', icon: '流' }
+      FLOW_CENTER_MENU
     ]
   },
   {
@@ -63,7 +78,7 @@ export const ROLE_LIST: PocRole[] = [
       { id: 'hier', label: '客户层级', icon: '层' },
       { id: 'batch', label: '批量治理', badge: '3', icon: '批' },
       { id: 'change', label: '变更与停用', icon: '变' },
-      { id: 'flowCenter', label: '流程中心', icon: '流' }
+      FLOW_CENTER_MENU
     ]
   },
   {
@@ -80,7 +95,7 @@ export const ROLE_LIST: PocRole[] = [
       { id: 'hier', label: '客户层级', icon: '层' },
       { id: 'batch', label: '批量治理', badge: '2', icon: '批' },
       { id: 'change', label: '变更与停用', icon: '变' },
-      { id: 'flowCenter', label: '流程中心', icon: '流' },
+      FLOW_CENTER_MENU,
       { id: 'audit', label: '治理审计', icon: '审' }
     ]
   },
@@ -95,7 +110,7 @@ export const ROLE_LIST: PocRole[] = [
       { id: 'dash', label: '管理工作台', icon: '工' },
       { id: 'admin', label: '平台管理', icon: '管' },
       { id: 'integration', label: '集成监控', icon: '集' },
-      { id: 'flowCenter', label: '流程中心', icon: '流' },
+      FLOW_CENTER_MENU,
       { id: 'audit', label: '管理员日志', icon: '审' }
     ]
   },
@@ -111,7 +126,7 @@ export const ROLE_LIST: PocRole[] = [
       { id: 'audit', label: '审计中心', icon: '审' },
       { id: 'customers', label: '客户只读查询', icon: '客' },
       { id: 'hier', label: '层级只读查询', icon: '层' },
-      { id: 'flowCenter', label: '流程中心', icon: '流' }
+      FLOW_CENTER_MENU
     ]
   }
 ];

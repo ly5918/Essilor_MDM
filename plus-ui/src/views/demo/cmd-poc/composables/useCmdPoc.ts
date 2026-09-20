@@ -9,7 +9,7 @@
 import { computed, inject, provide, reactive, ref, type ComputedRef, type InjectionKey, type Ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import * as cmdPocApi from '@/api/demo/cmdPoc';
-import type { CustomerVO, MetadataFieldVO, PageId, RoleKey } from '@/api/demo/cmdPoc/types';
+import type { CustomerVO, MetadataFieldVO, OcrResultVO, PageId, RoleKey } from '@/api/demo/cmdPoc/types';
 import { DIALOG_MAP, type DialogKey } from '../constants/dialogs';
 import { getRole, type PocRole } from '../constants/roles';
 
@@ -55,6 +55,13 @@ export interface CmdPocContext {
   publishMetadata: () => Promise<void>;
   /** 按业务上下文过滤已发布字段（动态表单渲染依据） */
   publishedFields: ComputedRef<MetadataFieldVO[]>;
+  /**
+   * OCR 回填通道：全局「查看OCR识别结果」弹窗确认后暂存识别结果，
+   * 打开「新建客户申请」时自动写入表单（否则那次「写回表单」无处可写）。
+   */
+  ocrPrefill: Ref<OcrResultVO[] | null>;
+  /** 暂存 / 清空 OCR 识别结果 */
+  setOcrPrefill: (results: OcrResultVO[] | null) => void;
   /** 左侧菜单是否折叠 */
   sidebarCollapsed: Ref<boolean>;
   /** 切换左侧菜单折叠 */
@@ -119,6 +126,11 @@ export function createCmdPoc(defaultRole: RoleKey): CmdPocContext {
 
   const publishedFields = computed(() => metadataFields.value.filter(field => field.status === 'Published'));
 
+  const ocrPrefill = ref<OcrResultVO[] | null>(null);
+  const setOcrPrefill = (results: OcrResultVO[] | null) => {
+    ocrPrefill.value = results;
+  };
+
   const sidebarCollapsed = ref(false);
   const toggleSidebar = () => {
     sidebarCollapsed.value = !sidebarCollapsed.value;
@@ -143,6 +155,8 @@ export function createCmdPoc(defaultRole: RoleKey): CmdPocContext {
     upsertMetadataField,
     publishMetadata,
     publishedFields,
+    ocrPrefill,
+    setOcrPrefill,
     sidebarCollapsed,
     toggleSidebar
   };

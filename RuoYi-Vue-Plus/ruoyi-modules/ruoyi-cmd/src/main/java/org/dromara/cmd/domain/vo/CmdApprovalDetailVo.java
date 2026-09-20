@@ -27,6 +27,9 @@ public class CmdApprovalDetailVo implements Serializable {
     /** 任务编号 */
     private String taskId;
 
+    /** 客户主数据标识（One ID）—— 全链路追溯主键 */
+    private String oneId;
+
     /** 客户名称 / 主题 */
     private String name;
 

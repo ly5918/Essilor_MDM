@@ -19,7 +19,7 @@ import type {
   CustomerVO,
   DashboardStatVO,
   DeactivateResultVO,
-  DqRuleVO,
+  DqRuleRow,
   DqScorecardVO,
   DqSimulateResultVO,
   DuplicateCandidateVO,
@@ -161,6 +161,60 @@ export const mockDqSimulate: DqSimulateResultVO[] = [
   { rule: '格式规则', result: 'Pass' },
   { rule: 'GC Core完整性', result: 'Pass' },
   { rule: 'Payer必填', result: 'Block', message: 'Payer 缺失，阻止提交' }
+];
+
+/** DQ 规则清单（对应页面「数据质量 → 规则配置」，行契约与后端 DqRuleRow 一致） */
+export const mockDqRules: DqRuleRow[] = [
+  {
+    id: 1,
+    ruleCode: 'req_legal_name',
+    ruleName: '客户法定名称必填',
+    dimension: '完整性',
+    role: 'GC Core',
+    threshold: '100%',
+    result: 'Pass',
+    enabled: true
+  },
+  {
+    id: 2,
+    ruleCode: 'fmt_credit_code',
+    ruleName: '统一社会信用代码格式校验',
+    dimension: '有效性',
+    role: 'GC Core',
+    threshold: '18位',
+    result: 'Pass',
+    enabled: true
+  },
+  {
+    id: 3,
+    ruleCode: 'enum_country',
+    ruleName: '国家/地区值集校验',
+    dimension: '有效性',
+    role: 'GC Core',
+    threshold: 'COUNTRY',
+    result: 'Warning',
+    enabled: true
+  },
+  {
+    id: 4,
+    ruleCode: 'payer_required',
+    ruleName: 'Payer Required',
+    dimension: '完整性',
+    role: 'BU',
+    threshold: '必填',
+    result: 'Block',
+    enabled: true
+  },
+  {
+    id: 5,
+    ruleCode: 'address_standard',
+    ruleName: 'Address Standardization',
+    dimension: '一致性',
+    role: 'GC Core',
+    threshold: '标准化',
+    result: 'Warning',
+    enabled: false
+  }
 ];
 
 /** ---------------------------------- 匹配规则 ---------------------------------- */
@@ -838,11 +892,11 @@ export const mockPermissionMatrix: PermissionMatrixVO[] = [
 ];
 
 export const mockRolePermissions: RolePermissionVO[] = [
-  { role: 'Business User', scope: 'High End · Frame', points: '查看 / 发起变更', enabled: true },
-  { role: 'Data Steward (BU)', scope: 'BU Scope · High End', points: '查看 / 编辑 / 治理 / 审批', enabled: true },
-  { role: 'Data Steward (GC)', scope: 'GC Scope · Cross-BU', points: '跨BU治理 / 审计 / 审批', enabled: true },
-  { role: 'Platform Admin', scope: 'Platform & Integration', points: '平台配置 / 集成监控', enabled: true },
-  { role: 'Auditor', scope: 'Read Only · Authorized', points: '只读查询 / 审计导出', enabled: true }
+  { roleCode: 'BUSINESS_USER', role: 'Business User', scope: 'High End · Frame', points: '查看 / 发起变更', enabled: true },
+  { roleCode: 'BU_STEWARD', role: 'Data Steward (BU)', scope: 'BU Scope · High End', points: '查看 / 编辑 / 治理 / 审批', enabled: true },
+  { roleCode: 'GC_STEWARD', role: 'Data Steward (GC)', scope: 'GC Scope · Cross-BU', points: '跨BU治理 / 审计 / 审批', enabled: true },
+  { roleCode: 'PLATFORM_ADMIN', role: 'Platform Admin', scope: 'Platform & Integration', points: '平台配置 / 集成监控', enabled: true },
+  { roleCode: 'AUDITOR', role: 'Auditor', scope: 'Read Only · Authorized', points: '只读查询 / 审计导出', enabled: true }
 ];
 
 export const mockCoverage: CoverageItemVO[] = [

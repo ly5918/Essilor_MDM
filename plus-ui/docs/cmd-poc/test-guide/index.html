@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Essilor CMD POC 测试与使用手册（含截图）</title>
+  <style>
+    :root {
+      --primary: #176c9f;
+      --primary-light: #e6f3fa;
+      --success: #4d944e;
+      --warning: #db7c18;
+      --danger: #c0392b;
+      --text: #15324d;
+      --muted: #5a6e82;
+      --border: #d9e3eb;
+      --bg: #f5f8fb;
+      --card: #fff;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif;
+      color: var(--text);
+      background: var(--bg);
+      line-height: 1.7;
+    }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 24px; }
+    header {
+      background: linear-gradient(120deg, #123f66, #176d9e 62%, #22a8bb);
+      color: #fff;
+      padding: 36px 28px;
+      border-radius: 12px;
+      margin-bottom: 24px;
+    }
+    header h1 { margin: 0 0 8px; font-size: 26px; }
+    header p { margin: 0; opacity: .95; }
+    nav.toc {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px 22px;
+      margin-bottom: 24px;
+      position: sticky;
+      top: 12px;
+      z-index: 10;
+      box-shadow: 0 2px 8px rgba(0,0,0,.04);
+    }
+    nav.toc h2 { margin: 0 0 10px; font-size: 16px; }
+    nav.toc ul { margin: 0; padding-left: 18px; columns: 2; column-gap: 32px; }
+    nav.toc li { margin: 4px 0; }
+    nav.toc a { color: var(--primary); text-decoration: none; font-size: 14px; }
+    nav.toc a:hover { text-decoration: underline; }
+    section {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 24px 28px;
+      margin-bottom: 20px;
+    }
+    h2 { color: var(--primary); margin-top: 0; border-bottom: 2px solid var(--primary-light); padding-bottom: 8px; }
+    h3 { color: var(--text); margin-top: 24px; }
+    h4 { color: var(--muted); margin-top: 18px; }
+    p { margin: 10px 0; }
+    ul, ol { padding-left: 22px; }
+    li { margin: 6px 0; }
+    code {
+      background: #eef4f9;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: Consolas, Monaco, monospace;
+      font-size: 13px;
+      color: #2c3e50;
+    }
+    .kbd {
+      display: inline-block;
+      background: #f0f2f5;
+      border: 1px solid #cdd4dc;
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-size: 13px;
+      box-shadow: 0 1px 0 #fff inset;
+    }
+    .tip {
+      background: #e8f6e8;
+      border-left: 4px solid var(--success);
+      padding: 12px 16px;
+      border-radius: 6px;
+      margin: 14px 0;
+    }
+    .warn {
+      background: #fff5e6;
+      border-left: 4px solid var(--warning);
+      padding: 12px 16px;
+      border-radius: 6px;
+      margin: 14px 0;
+    }
+    .danger {
+      background: #fdecea;
+      border-left: 4px solid var(--danger);
+      padding: 12px 16px;
+      border-radius: 6px;
+      margin: 14px 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0;
+      font-size: 14px;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 10px 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: var(--primary-light); color: var(--primary); }
+    tr:nth-child(even) { background: #fafcfe; }
+    .figure {
+      margin: 18px 0;
+      text-align: center;
+    }
+    .figure img {
+      max-width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: 0 4px 14px rgba(0,0,0,.08);
+    }
+    .figure .caption {
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 8px;
+    }
+    .step {
+      display: flex;
+      gap: 14px;
+      margin: 16px 0;
+      align-items: flex-start;
+    }
+    .step-num {
+      flex: 0 0 32px;
+      height: 32px;
+      line-height: 32px;
+      text-align: center;
+      background: var(--primary);
+      color: #fff;
+      border-radius: 50%;
+      font-weight: 700;
+      font-size: 15px;
+    }
+    .step-body { flex: 1; }
+    .role-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      margin: 14px 0;
+    }
+    .role-card {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+      background: #fafcfe;
+    }
+    .role-card strong { display: block; color: var(--primary); margin-bottom: 4px; }
+    .tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 12px;
+      margin-right: 4px;
+    }
+    .tag-blue { background: #e6f3fa; color: #176c9f; }
+    .tag-green { background: #e8f6e8; color: #2e6b3c; }
+    .tag-orange { background: #fff5e6; color: #a85b00; }
+    .tag-purple { background: #f0e6fa; color: #5e2d8c; }
+    .tag-red { background: #fdecea; color: #a02e22; }
+    footer {
+      text-align: center;
+      color: var(--muted);
+      font-size: 13px;
+      padding: 24px;
+    }
+    @media (max-width: 720px) {
+      nav.toc ul { columns: 1; }
+      .wrap { padding: 14px; }
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Essilor CMD POC 测试与使用手册</h1>
+    <p>按 V6.1 总体设计，从 0 开始学：先看懂业务名词，再检查必要参数，最后按角色把每条工作流跑一遍。所有截图均为本环境下真实界面。</p>
+  </header>
+
+  <nav class="toc">
+    <h2>目录</h2>
+    <ul>
+      <li><a href="#concepts">1. 前置知识（5 分钟）</a></li>
+      <li><a href="#env">2. 环境与地址</a></li>
+      <li><a href="#params">3. 必要参数检查</a></li>
+      <li><a href="#scenarios">4. 泳道图场景 vs 实现状态</a></li>
+      <li><a href="#e2e">5. 端到端场景一：单条创建</a></li>
+      <li><a href="#branches">5B. 全链路追溯与四个审批分支（重点）</a></li>
+      <li><a href="#business">6. Business User 操作</a></li>
+      <li><a href="#bu">7. BU Steward 操作</a></li>
+      <li><a href="#gc">8. GC Steward 操作</a></li>
+      <li><a href="#admin">9. Platform Admin 操作</a></li>
+      <li><a href="#audit">10. Auditor 操作</a></li>
+      <li><a href="#reset">11. 数据重置</a></li>
+      <li><a href="#faq">12. 常见问题</a></li>
+    </ul>
+  </nav>
+
+  <section id="concepts">
+    <h2>1. 前置知识（5 分钟）</h2>
+    <p>这套系统叫 <strong>CMD（Customer Master Data）</strong>，目标是为依视路全球客户建立“一个客户、一个主数据记录”。下面几个名词贯穿所有操作：</p>
+    <table>
+      <tr><th>名词</th><th>白话解释</th><th>在系统里对应哪里</th></tr>
+      <tr>
+        <td><strong>One ID</strong></td>
+        <td>客户的“身份证号”，全球唯一。一个客户在不同 BU、不同来源系统可能有很多本地编码，但 One ID 只有一个。</td>
+        <td>客户列表的 One ID 列，例如 <code>GC-73CE714B</code></td>
+      </tr>
+      <tr>
+        <td><strong>BU / Scope</strong></td>
+        <td>Business Unit，业务单元。POC 里用 High End / Mainstream / Frame / Sun 等区分数据权限。</td>
+        <td>新建客户表单里的 BU、Product Line、Source System</td>
+      </tr>
+      <tr>
+        <td><strong>Data Steward</strong></td>
+        <td>数据治理员。分 BU Scope（只看本 BU）和 GC Scope（跨 BU 全局决策）。</td>
+        <td>登录角色里的 bu / gc</td>
+      </tr>
+      <tr>
+        <td><strong>DQ（Data Quality）</strong></td>
+        <td>数据质量打分。缺字段会扣分，最终分为 A/B/C/D。</td>
+        <td>客户列表 DQ 列、审批任务 DQ 列</td>
+      </tr>
+      <tr>
+        <td><strong>Duplicate Check</strong></td>
+        <td>查重。系统按信用代码、地址、名称等判断这是新客户，还是和已有客户重复。</td>
+        <td>审批任务 Match 列：NEW / SUSPECTED / EXACT</td>
+      </tr>
+      <tr>
+        <td><strong>Warm-Flow</strong></td>
+        <td>底层工作流引擎。业务只保存 flow_instance_id / flow_task_id，实际流转由引擎驱动。</td>
+        <td>流程中心、泳道图弹窗</td>
+      </tr>
+      <tr>
+        <td><strong>泳道图 / 流程图</strong></td>
+        <td>横轴是阶段（发起→数据准备→自动校验→匹配分流→人工治理→审批发布→追踪审计），纵轴是角色。</td>
+        <td>流程中心 → Graph 泳道图</td>
+      </tr>
+    </table>
+
+    <h3>五个角色一句话</h3>
+    <div class="role-grid">
+      <div class="role-card"><strong>Business User</strong><span class="tag tag-blue">发起者</span>录入客户、上传附件、批量导入、发起变更。</div>
+      <div class="role-card"><strong>BU Steward</strong><span class="tag tag-green">本BU治理</span>初审、DQ复核、疑似重复处理、决定升级GC。</div>
+      <div class="role-card"><strong>GC Steward</strong><span class="tag tag-orange">全局决策</span>跨BU证据核对、One ID关联/新建决策。</div>
+      <div class="role-card"><strong>Platform Admin</strong><span class="tag tag-purple">平台配置</span>字段、值集、DQ规则、匹配规则、流程场景、权限。</div>
+      <div class="role-card"><strong>Auditor</strong><span class="tag tag-red">只读审计</span>查看所有审批轨迹、变更记录、操作日志。</div>
+    </div>
+  </section>
+
+  <section id="env">
+    <h2>2. 环境与地址</h2>
+    <p>本环境当前已启动：</p>
+    <ul>
+      <li>前端：<code>http://localhost/</code>（Vite dev server）</li>
+      <li>后端：<code>http://localhost:8080/</code></li>
+      <li>前端 API 代理前缀：<code>/dev-api</code>，实际请求会被转发到 :8080</li>
+      <li>数据库：<code>ruoyi_plus</code>（MySQL 8）</li>
+    </ul>
+    <div class="tip">
+      <strong>登录入口：</strong>直接打开 <code>http://localhost/cmd-poc/login</code>。页面提供 5 个角色快捷入口，也可以直接访问角色专属地址：
+      <code>/cmd-poc/business</code>、<code>/cmd-poc/bu</code>、<code>/cmd-poc/gc</code>、<code>/cmd-poc/admin</code>、<code>/cmd-poc/audit</code>。
+    </div>
+    <div class="figure">
+      <img src="shots/01-login.png" alt="登录页">
+      <div class="caption">图 1：CMD POC 登录页，点击角色即可进入对应工作台</div>
+    </div>
+  </section>
+
+  <section id="params">
+    <h2>3. 必要参数检查（Admin 先做）</h2>
+    <p>在让业务用户操作之前，先以 <strong>Platform Admin</strong> 登录，确认以下“必要参数”已配置。这些参数决定了表单能加载哪些字段、DQ 怎么打分、匹配怎么判断、流程能不能启动。</p>
+
+    <h3>3.1 检查入口</h3>
+    <p>Admin 登录后 → 左侧菜单【平台管理】。这里聚合了字段、值集、One ID、角色权限、DQ规则、匹配规则、流程配置、导入模板。</p>
+    <div class="figure">
+      <img src="shots/17-admin-platform.png" alt="平台管理">
+      <div class="caption">图 2：平台管理入口——字段/值集、One ID、角色权限、DQ/匹配规则、模板/流程</div>
+    </div>
+
+    <h3>3.2 必查清单</h3>
+    <table>
+      <tr><th>检查项</th><th>不看它会出现什么问题</th><th>当前状态</th></tr>
+      <tr>
+        <td>字段与值集</td>
+        <td>新建客户时“动态客户字段”一片空白；OCR 写回找不到目标字段。</td>
+        <td>已发布 20+ 字段，包含客户法定名称、信用代码、地址、省份、城市等</td>
+      </tr>
+      <tr>
+        <td>DQ 规则</td>
+        <td>提交申请后 DQ 分永远为 0，无法触发风险分级。</td>
+        <td>已配置缺字段扣分规则</td>
+      </tr>
+      <tr>
+        <td>匹配规则</td>
+        <td>Duplicate Check 不会生成 NEW / SUSPECTED 结论。</td>
+        <td>已配置信用代码、地址、名称权重</td>
+      </tr>
+      <tr>
+        <td>流程场景</td>
+        <td>提交申请后 Warm-Flow 实例无法启动，审批队列为空。</td>
+        <td>6 个 CMD 业务场景全部已部署</td>
+      </tr>
+      <tr>
+        <td>导入模板</td>
+        <td>批量导入下载不到 Excel 表头。</td>
+        <td>已配置 Door/High End/Frame/Cloud 模板</td>
+      </tr>
+    </table>
+
+    <h3>3.3 流程场景部署状态</h3>
+    <p>进入 Admin 的【流程中心】→【工作流定义】，应看到 6 条场景全部“已部署”。如果某条显示“未部署”，点右侧【部署】按钮。</p>
+    <div class="figure">
+      <img src="shots/19-admin-flowcenter.png" alt="流程中心定义">
+      <div class="caption">图 3：流程中心工作流定义——6 个 V6.1 业务场景全部已部署到 Warm-Flow</div>
+    </div>
+  </section>
+
+  <section id="scenarios">
+    <h2>4. 泳道图场景 vs 当前实现状态</h2>
+    <p>V6.1 总体设计里画了 9 条泳道。POC 不是一次性全部做完，下面按“可测试程度”给你标注清楚，避免你点到没实现的页面时困惑。</p>
+    <table>
+      <tr><th>V6.1 场景</th><th>主要角色</th><th>当前可测试程度</th><th>推荐测试入口</th></tr>
+      <tr>
+        <td>场景一：单条客户创建 + 跨 BU 疑似重复</td>
+        <td>BU → SYS → DS → GC</td>
+        <td><span class="tag tag-green">已跑通</span></td>
+        <td>Business User 客户管理 → 新建客户申请</td>
+      </tr>
+      <tr>
+        <td>场景二：批量客户导入 + 部分成功</td>
+        <td>BU → SYS → DS → GC</td>
+        <td><span class="tag tag-orange">UI 就绪，后端可上传解析</span></td>
+        <td>Business User 批量导入</td>
+      </tr>
+      <tr>
+        <td>跨 BU 客户合并</td>
+        <td>BU / DS / GC</td>
+        <td><span class="tag tag-orange">有种子数据，动作待完善</span></td>
+        <td>GC 全局治理决策</td>
+      </tr>
+      <tr>
+        <td>关键客户属性变更</td>
+        <td>BU / DS / GC</td>
+        <td><span class="tag tag-orange">页面有，后端未完整接入流程</span></td>
+        <td>Business User 变更与停用</td>
+      </tr>
+      <tr>
+        <td>客户逻辑停用</td>
+        <td>BU / DS / GC</td>
+        <td><span class="tag tag-orange">页面有，后端未完整接入流程</span></td>
+        <td>Business User 变更与停用</td>
+      </tr>
+      <tr>
+        <td>层级关系新增 / 变更</td>
+        <td>BU / DS / GC</td>
+        <td><span class="tag tag-orange">页面有，后端未完整接入流程</span></td>
+        <td>Business User 客户层级</td>
+      </tr>
+      <tr>
+        <td>DQ 规则变更</td>
+        <td>DS / GC / Admin</td>
+        <td><span class="tag tag-green">可在平台管理查看</span></td>
+        <td>Admin 平台管理 → DQ 规则</td>
+      </tr>
+      <tr>
+        <td>匹配规则变更</td>
+        <td>DS / GC / Admin</td>
+        <td><span class="tag tag-green">可在平台管理查看</span></td>
+        <td>Admin 平台管理 → 匹配规则</td>
+      </tr>
+      <tr>
+        <td>集成失败处理</td>
+        <td>BU / DS / Admin</td>
+        <td><span class="tag tag-orange">有监控页，数据为演示</span></td>
+        <td>Admin 集成监控</td>
+      </tr>
+    </table>
+  </section>
+
+  <section id="e2e">
+    <h2>5. 端到端场景一：单条客户创建（带 OCR）</h2>
+    <p>这是整个 POC 最核心、链路最长、最能验证“业务 → 自动检查 → 审批 → 工作流”是否打通的场景。下面每一步都告诉你：<strong>在哪个页面、点哪个按钮、填什么、提交后去哪看结果。</strong></p>
+
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <strong>Business User 登录 → 客户管理</strong><br>
+        打开 <code>http://localhost/cmd-poc/business</code>，左侧菜单点【客户管理】。页面标题是 <em>Customer Management</em>，右上角有两个按钮：【查看 OCR 识别结果】【新建客户】。
+        <div class="figure"><img src="shots/03-business-customers.png" alt="客户管理"><div class="caption">图 4：Business User 客户管理页</div></div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <strong>点【新建客户】打开申请表单</strong><br>
+        表单分三块：业务上下文（Customer Type / BU / Product Line / Source System）、动态客户字段（从 md_field 加载）、底部提交按钮。如果动态字段空白，说明必要参数里的“字段与值集”没配好。
+        <div class="figure"><img src="shots/04-business-newcustomer-form.png" alt="新建客户表单"><div class="caption">图 5：新建客户申请表单——动态字段已加载 19 个</div></div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <strong>OCR 识别营业执照（两种方式）</strong><br>
+        方式 A：在表单内点【上传并 OCR 识别】；方式 B：先点右上角【查看 OCR 识别结果】。任选一种，选择 <code>docs/cmd-poc/测试素材/营业执照/license_06.png</code>（南京），点【开始识别】。
+        <div class="warn"><strong>注意：</strong>license_06 是南京视界；license_01/07/08 分别对应上海/成都/重庆。如果文件名没传对，后端会默认走 license_01，导致识别成上海。</div>
+        <div class="figure"><img src="shots/05-business-ocr-dialog.png" alt="OCR弹窗"><div class="caption">图 6：OCR 识别弹窗——选图 → 开始识别 → 写回表单</div></div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <strong>点【写回表单】</strong><br>
+        关闭 OCR 弹窗回到表单，客户法定名称、统一社会信用代码、注册地址、省份、城市会被自动填入，对应字段旁出现 <span class="tag tag-blue">OCR回填</span> 标签。这就是“写到哪里”的答案。
+        <div class="tip">如果没看到回填，先确认文件名是否传到后端（此前 bug 是文件名放 query 参数导致后端收不到，已修复为放 request body）。</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">5</div>
+      <div class="step-body">
+        <strong>补齐其余字段 → 点【提交申请】</strong><br>
+        提交是一次事务，会做四件事：① 生成 One ID 并落主档；② 创建 CREATE 版本快照；③ 计算 DQ 分 / 风险等级；④ 建审批待办并启动 Warm-Flow 实例。提交成功后弹窗提示会给出 <strong>One ID + 申请编号</strong>。
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">6</div>
+      <div class="step-body">
+        <strong>在客户列表确认新记录</strong><br>
+        关掉弹窗，客户列表首位会出现一条新记录，状态为 <span class="tag tag-orange">Pending</span>，One ID 就是刚才提示里的。
+        <div class="figure"><img src="shots/23-business-customers-after.png" alt="客户列表"><div class="caption">图 7：提交后客户列表首位出现南京视界，状态 Pending</div></div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">7</div>
+      <div class="step-body">
+        <strong>切换到 BU Steward 审批</strong><br>
+        打开 <code>http://localhost/cmd-poc/bu</code>，左侧菜单点【治理与审批】。列表中能看到刚提交的申请，当前节点是 <em>BU Scope 初审</em>。
+        <div class="figure"><img src="shots/10-bu-approval.png" alt="BU审批队列"><div class="caption">图 8：BU Steward 治理与审批队列——AP-20260919-0001 待初审</div></div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">8</div>
+      <div class="step-body">
+        <strong>查看流程跟踪（泳道图实例视图）</strong><br>
+        在 BU 角色打开【流程中心】→【流程实例记录】，点第一条的【泳道图】。绿色节点表示已完成，蓝色节点是当前。此时应看到：创建客户申请 / 录入与附件 / OCR / DQ / Duplicate Check 已绿，BU Scope 初审为蓝色。
+        <div class="figure"><img src="shots/11-bu-flowtrace.png" alt="BU流程跟踪"><div class="caption">图 9：实例视图泳道图——已完成 5/11 步，BU 初审为当前节点</div></div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">9</div>
+      <div class="step-body">
+        <strong>BU 点【升级 GC】</strong><br>
+        在审批队列中找到该任务，点查看详情，选择动作【升级 GC】。这一步会把任务从 BU Scope 推到 GC Scope。升级成功后，任务会从 BU 队列消失。
+        <div class="warn">此前升级后任务仍留在 BU 队列（因为 scope/assigneeRole 没同步更新到 GC），本次已修复：升级后 cmd_approval_task 的 scope=GC、assigneeRole=GC_STEWARD、currentNodeCode=GC_REVIEW。</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">10</div>
+      <div class="step-body">
+        <strong>切换到 GC Steward 全局治理决策</strong><br>
+        打开 <code>http://localhost/cmd-poc/gc</code>，左侧菜单点【全局治理决策】。升级过来的任务会出现在这里，当前节点为 <em>GC Scope 决策</em>。
+        <div class="figure"><img src="shots/14-gc-approval.png" alt="GC审批队列"><div class="caption">图 10：GC Steward 全局治理决策队列</div></div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">11</div>
+      <div class="step-body">
+        <strong>GC 点【审批通过】</strong><br>
+        在 GC 详情中点审批通过。流程走到 END 节点，实例 11/11 步全部完成。
+        <div class="figure"><img src="shots/15-gc-flowtrace.png" alt="完成泳道图"><div class="caption">图 11：审批通过后实例视图——已完成 11/11 步，流程结束</div></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="branches">
+    <h2>5B. 全链路追溯与四个审批分支（重点）</h2>
+
+    <h3>5B.1 一条申请的「身份证」：One ID + 申请编号</h3>
+    <p>你提交「新建客户申请」后，系统会生成两个贯穿始终的标识，之后<strong>所有页面、所有工作流、所有数据表</strong>都靠它们关联：</p>
+    <table>
+      <tr><th>标识</th><th>长什么样</th><th>含义</th><th>在哪里能看到</th></tr>
+      <tr><td><b>One ID</b></td><td><code>GC-99C88CB1</code></td><td>客户主数据标识（客户一生的唯一身份证，对应总设计的 One ID 架构）</td><td>提交回执提示、客户列表第 1 列、审批队列「One ID」列、审批详情头部、泳道图步骤日志</td></tr>
+      <tr><td><b>申请编号</b></td><td><code>AP-20260919-0001</code></td><td>这一次审批的流程单号（一个客户可以有多次申请，每次一个新编号）</td><td>提交回执提示、审批队列「任务编号」列、泳道图标题</td></tr>
+    </table>
+    <p>数据库层面，这两个标识写在以下每一张相关表里（这就是「工作流执行每一步都有客户标识」的落库实现）：</p>
+    <table>
+      <tr><th>表</th><th>作用</th><th>关键字段</th></tr>
+      <tr><td><code>cmd_customer</code></td><td>客户主档（最终数据）</td><td>one_id / status / flow_status / flow_instance_id</td></tr>
+      <tr><td><code>cmd_customer_version</code></td><td>版本快照（每次 CREATE/变更留底）</td><td>one_id / version_no / change_type</td></tr>
+      <tr><td><code>cmd_approval_task</code></td><td>审批任务（队列里那一行）</td><td>one_id / task_no / flow_instance_id / scope</td></tr>
+      <tr><td><code>cmd_approval_action</code></td><td>业务审批轨迹（谁在什么时候点了什么）</td><td>one_id / task_no / action_type</td></tr>
+      <tr><td><code>cmd_workflow_step_log</code></td><td><b>工作流步骤执行日志（本次新增）</b>：每一步都带 one_id，从提交到结束一共 6~7 步</td><td>one_id / task_no / step_seq / node_code / operator_name</td></tr>
+      <tr><td><code>flow_instance / flow_his_task</code></td><td>Warm-Flow 引擎实例与节点历史（引擎侧）</td><td>instance_id（业务表通过 flow_instance_id 关联）</td></tr>
+    </table>
+    <p>页面上看：打开任意一条实例的「泳道图」，底部新增了<b>「工作流步骤执行日志」</b>表格，每一步的节点、类型（提交/系统自动/人工决策）、操作人、状态流转、意见、时间一目了然。</p>
+    <div class="figure"><img src="shots/B04-workflow-step-log.png" alt="工作流步骤日志"><div class="caption">图 B1：泳道图底部的工作流步骤执行日志——升级 GC 通过的那条申请共 7 步，每步都带 One ID</div></div>
+
+    <h3>5B.2 先测「出错提示」</h3>
+    <p>在做分支前，先故意做错，确认系统会拦住你（这些都是真实后端校验，不是前端摆设）：</p>
+    <table>
+      <tr><th>操作</th><th>应出现的提示</th></tr>
+      <tr><td>点「拒绝」但<b>不填审批意见</b>，点确认</td><td>「拒绝或退回时必须填写审批意见」</td></tr>
+      <tr><td>点「退回补充」但<b>不填审批意见</b></td><td>「拒绝或退回时必须填写审批意见」</td></tr>
+      <tr><td>动作类型为空</td><td>「动作类型不能为空」</td></tr>
+      <tr><td>未知动作类型</td><td>「不支持的审批动作：XXX（仅支持 批准 / 拒绝 / 退回补充 / 升级GC / 认领 / 转办）」</td></tr>
+    </table>
+    <p class="note">提示以红色弹条出现在页面顶部，2~3 秒后自动消失。以上 4 条均已实测通过。</p>
+
+    <h3>5B.3 四个审批分支逐个测试（BU Steward 角色）</h3>
+    <p>先准备 4 条测试申请（用第 5 章的方法创建 4 个客户），然后到 <b>BU Steward → 治理与审批</b>，点开任意一条的详情，右下角就是 4 个决策按钮。每个按钮点完后的结果如下：</p>
+    <table>
+      <tr><th>按钮</th><th>填什么</th><th>点完之后（去哪里看）</th><th>客户主档最终状态</th></tr>
+      <tr>
+        <td><b>批准</b></td>
+        <td>意见随便填，如「BU初审通过」</td>
+        <td>① 任务状态变 APPROVED；② 「流程中心→流程实例记录→泳道图」：<b>11/11 步全绿</b>；③ 步骤日志最后一步 = 审批通过（END 节点）</td>
+        <td><b>active（生效）</b>——成为正式 Golden Record</td>
+      </tr>
+      <tr>
+        <td><b>拒绝</b></td>
+        <td><b>必须填意见</b>，如「注册地址与营业执照不符」</td>
+        <td>① 任务状态变 REJECTED；② 泳道图：自动段绿色、BU 初审蓝色、后续节点终止；③ 步骤日志记录拒绝原因</td>
+        <td><b>rejected（已驳回）</b></td>
+      </tr>
+      <tr>
+        <td><b>退回补充</b></td>
+        <td><b>必须填意见</b>，说明缺什么</td>
+        <td>① 任务状态变 RETURNED，进入「升级与退回」清单，等申请人补材料后重新提交；② 步骤日志记录退回原因</td>
+        <td><b>returned（待补充）</b></td>
+      </tr>
+      <tr>
+        <td><b>升级GC</b></td>
+        <td>填升级原因，如「跨BU疑似重复」</td>
+        <td>① 任务不变 REFUSED 也不结束：<b>归属从 BU 变 GC</b>、当前节点变「GC Scope 决策」；② 到 <b>GC Steward → 全局治理决策</b> 里继续审批；③ GC 批准后 11/11 步全绿，任务归属保持 GC</td>
+        <td>GC 批准后 <b>active</b></td>
+      </tr>
+    </table>
+    <div class="figure"><img src="shots/B02-bu-approval-queue.png" alt="BU 审批队列"><div class="caption">图 B2：BU 审批队列——「One ID」列就在任务编号旁边，每条任务都能对应到客户</div></div>
+    <div class="figure"><img src="shots/B05-flowtrace-rejected.png" alt="拒绝分支泳道图"><div class="caption">图 B3：拒绝分支的泳道图——自动检查段绿色已完成，BU 初审蓝色（决策点），流程终止于此</div></div>
+
+    <h3>5B.4 新建客户成功后，数据去哪了？有什么用？</h3>
+    <p><b>保存在哪：</b>「客户主档」页面（Business User 的「客户管理」、BU/GC 的「客户主档」、Auditor 的「客户只读查询」，都是同一张 <code>cmd_customer</code> 表，只是角色权限能看到/能操作的范围不同）。</p>
+    <p><b>什么时候成为「最终数据」：</b>提交后 status=<code>pending</code>（审批中，可用）；<b>审批通过</b>后 status=<code>active</code>（正式生效）。被拒绝/退回的记录也会留在主档里并标明 rejected/returned，便于追溯。</p>
+    <p><b>这条数据之后的作用（对照总设计）：</b></p>
+    <ul>
+      <li><b>One ID 贯穿后续工作流</b>：客户层级维护、变更与停用、DQ 治理、查重合并、批量导入，全部以 One ID 为主键操作这条记录，而不是重新建客户；</li>
+      <li><b>下游系统分发</b>：active 的 Golden Record 会按集成配置分发到 SAP/CRM 等下游（「集成监控」页面可看到分发任务状态）；</li>
+      <li><b>审计可回溯</b>：任何一条 active 客户，都能通过 One ID 在步骤日志里还原「谁提交 → 系统检查了什么 → 谁批准的 → 什么意见」的完整证据链（Auditor 全量可查）。</li>
+    </ul>
+    <div class="figure"><img src="shots/B07-customer-master-final.png" alt="客户主档最终状态"><div class="caption">图 B4：客户主档——分支演示C（退回补充）带 One ID 出现在列表中，状态列区分 active / pending / returned / rejected</div></div>
+    <p class="note">说明：本次分支测试是通过接口直接驱动的，操作人记录为「BU Steward / GC Steward」；你本人在页面上操作时，操作人会记录为你的登录账号，效果一致。数据库当前保留了 4 条「分支演示A/B/C/D」数据，供你对照每个分支的最终状态。</p>
+  </section>
+
+  <section id="business">
+    <h2>6. Business User 操作清单</h2>
+    <p>Business User 是流程发起者，菜单最少、操作最直接。按下面顺序逐一点开，确认每个页面能正常加载、按钮能弹出对应对话框。</p>
+    <table>
+      <tr><th>菜单</th><th>应出现的核心按钮/内容</th><th>验证点</th></tr>
+      <tr>
+        <td>工作台</td>
+        <td>客户总数、生效中、待审批、层级节点等 KPI 卡片</td>
+        <td>KPI 数字与数据库记录数一致</td>
+      </tr>
+      <tr>
+        <td>客户管理</td>
+        <td>查看 OCR 识别结果、新建客户</td>
+        <td>动态字段有内容、能提交并生成 One ID</td>
+      </tr>
+      <tr>
+        <td>批量导入</td>
+        <td>下载模板、新建导入任务</td>
+        <td>模板能下载、任务能创建</td>
+      </tr>
+      <tr>
+        <td>客户层级</td>
+        <td>发起层级关系申请</td>
+        <td>页面能加载</td>
+      </tr>
+      <tr>
+        <td>变更与停用</td>
+        <td>发起属性变更、申请逻辑停用</td>
+        <td>按钮能弹出对话框</td>
+      </tr>
+      <tr>
+        <td>流程中心</td>
+        <td>工作流定义、流程实例记录</td>
+        <td>能查看泳道图</td>
+      </tr>
+    </table>
+
+    <div class="figure"><img src="shots/02-business-dash.png" alt="Business User工作台"><div class="caption">图 12：Business User 工作台</div></div>
+    <div class="figure"><img src="shots/06-business-batch.png" alt="批量导入"><div class="caption">图 13：批量导入中心</div></div>
+    <div class="figure"><img src="shots/07-business-hier.png" alt="客户层级"><div class="caption">图 14：客户层级工作台</div></div>
+    <div class="figure"><img src="shots/08-business-change.png" alt="变更与停用"><div class="caption">图 15：变更与停用工作台</div></div>
+  </section>
+
+  <section id="bu">
+    <h2>7. BU Steward 操作清单</h2>
+    <p>BU Steward 负责“本 BU 初审”。重点看两个菜单：治理与审批、客户主档。</p>
+    <table>
+      <tr><th>菜单</th><th>重点看什么</th><th>验证动作</th></tr>
+      <tr>
+        <td>治理与审批</td>
+        <td>全部待办 / 审批任务 / 升级与退回 / 我已处理 四个 Tab</td>
+        <td>对一条 BU_REVIEW 任务执行“升级 GC”，确认任务从 BU 队列消失</td>
+      </tr>
+      <tr>
+        <td>客户主档</td>
+        <td>本 BU 可见的客户列表</td>
+        <td>能看到 Business User 刚创建、状态 Pending 的记录</td>
+      </tr>
+      <tr>
+        <td>批量治理</td>
+        <td>批量导入产生的疑似重复治理任务</td>
+        <td>页面能加载，有种子数据</td>
+      </tr>
+    </table>
+
+    <div class="figure"><img src="shots/09-bu-dash.png" alt="BU工作台"><div class="caption">图 16：BU Steward 工作台</div></div>
+    <div class="figure"><img src="shots/12-bu-customers.png" alt="BU客户主档"><div class="caption">图 17：BU Steward 客户主档</div></div>
+  </section>
+
+  <section id="gc">
+    <h2>8. GC Steward 操作清单</h2>
+    <p>GC Steward 做“跨 BU 全局决策”。除了全局治理决策，还能看治理审计。</p>
+    <table>
+      <tr><th>菜单</th><th>重点看什么</th><th>验证动作</th></tr>
+      <tr>
+        <td>全局治理决策</td>
+        <td>从 BU 升级过来的任务、跨 BU 合并/查重任务</td>
+        <td>对升级来的任务执行“审批通过”，流程结束</td>
+      </tr>
+      <tr>
+        <td>全局客户主档</td>
+        <td>跨 BU 客户视图</td>
+        <td>能看到 One ID 与本地编码映射</td>
+      </tr>
+      <tr>
+        <td>治理审计</td>
+        <td>审批轨迹、变更记录</td>
+        <td>能看到 SUBMIT / ESCALATE / APPROVE 三条动作</td>
+      </tr>
+    </table>
+
+    <div class="figure"><img src="shots/13-gc-dash.png" alt="GC工作台"><div class="caption">图 18：GC Steward 全局工作台</div></div>
+  </section>
+
+  <section id="admin">
+    <h2>9. Platform Admin 操作清单</h2>
+    <p>Admin 不跑业务审批，只维护“必要参数”。所有配置改完后，点右上角【发布配置版本】才生效。</p>
+    <table>
+      <tr><th>菜单</th><th>配置内容</th><th>影响范围</th></tr>
+      <tr>
+        <td>平台管理</td>
+        <td>字段与值集、One ID 规则、角色与权限、DQ 规则、匹配规则、导入模板、流程配置</td>
+        <td>决定表单字段、DQ 打分、匹配结论、流程能否启动</td>
+      </tr>
+      <tr>
+        <td>集成监控</td>
+        <td>Inbound / Outbound / Retry</td>
+        <td>观察下游系统发布状态</td>
+      </tr>
+      <tr>
+        <td>流程中心</td>
+        <td>工作流定义 / 流程实例记录</td>
+        <td>部署/查看泳道图</td>
+      </tr>
+    </table>
+
+    <div class="figure"><img src="shots/16-admin-dash.png" alt="Admin工作台"><div class="caption">图 19：Platform Admin 管理工作台</div></div>
+    <div class="figure"><img src="shots/18-admin-integration.png" alt="集成监控"><div class="caption">图 20：集成监控（Inbound / Outbound / Retry）</div></div>
+  </section>
+
+  <section id="audit">
+    <h2>10. Auditor 操作清单</h2>
+    <p>Auditor 是只读角色，所有操作按钮都被隐藏或禁用。适合合规人员查看“谁、何时、做了什么”。</p>
+    <table>
+      <tr><th>菜单</th><th>查看内容</th></tr>
+      <tr><td>审计工作台</td><td>汇总 KPI：审批总数、变更数、合并数等</td></tr>
+      <tr><td>审计中心</td><td>按业务类型过滤的审计事件列表</td></tr>
+      <tr><td>客户只读查询</td><td>客户主档只读视图</td></tr>
+      <tr><td>层级只读查询</td><td>层级关系只读视图</td></tr>
+      <tr><td>流程中心</td><td>流程实例与泳道图</td></tr>
+    </table>
+
+    <div class="figure"><img src="shots/20-audit-dash.png" alt="审计工作台"><div class="caption">图 21：Auditor 审计工作台</div></div>
+    <div class="figure"><img src="shots/21-audit-center.png" alt="审计中心"><div class="caption">图 22：审计中心事件列表</div></div>
+    <div class="figure"><img src="shots/22-audit-customers.png" alt="客户只读查询"><div class="caption">图 23：Auditor 客户只读查询</div></div>
+  </section>
+
+  <section id="reset">
+    <h2>11. 数据重置（测试后恢复种子状态）</h2>
+    <p>测试多了之后数据库会乱，建议按下面的顺序清掉测试数据、重跑种子脚本。</p>
+    <div class="danger">
+      <strong>⚠️ 危险操作：会删除业务演示数据！</strong><br>
+      仅在你确认要恢复种子状态时使用。不要对生产库执行。
+    </div>
+    <ol>
+      <li>停止后端（杀掉 8080 的 java 进程）。</li>
+      <li>在 MySQL 中执行：
+        <pre><code>DELETE FROM cmd_customer WHERE id BETWEEN 1001 AND 1099;
+DELETE FROM cmd_customer_version WHERE id BETWEEN 1001 AND 1099;
+DELETE FROM cmd_approval_task WHERE id BETWEEN 1001 AND 1099;
+DELETE FROM cmd_approval_action WHERE id BETWEEN 1001 AND 1099;
+-- 你自己的测试任务 id 可能不在这个区间，按需删除</code></pre>
+      </li>
+      <li>重跑种子脚本：
+        <pre><code>mysql -uroot -proot ruoyi_plus &lt; docs/cmd-poc/sql/08_业务演示数据.sql</code></pre>
+      </li>
+      <li>重新启动后端 jar。</li>
+    </ol>
+  </section>
+
+  <section id="faq">
+    <h2>12. 常见问题</h2>
+    <h4>Q1：动态客户字段一片空白？</h4>
+    <p>检查 Admin 平台管理里的字段是否已发布；再检查 <code>md_field</code> 是否有字段。此前 bug 是把 <code>model_code</code> 错当成 customerType 过滤，已改为固定 <code>customerType:'All'</code>。</p>
+
+    <h4>Q2：OCR 识别成上海/成都/重庆，和我想的不一样？</h4>
+    <p>后端按文件名匹配测试执照。确认你传的文件名和后端常量一致（如 license_06.png → 南京）。不要改文件名。</p>
+
+    <h4>Q3：点“写回表单”没反应？</h4>
+    <p>全局 OCR 弹窗写回后，结果会先暂存到共享通道，再回填到当前打开的新建客户表单。请确保你是在【新建客户申请】弹窗打开的状态下点“写回表单”。</p>
+
+    <h4>Q4：提交申请后没反应？</h4>
+    <p>此前后端 <code>POST /cmd/customer</code> 只 insert 不建待办/不起流程，已改为 <code>submitApplication</code> 完整链路。提交后应看到提示含 One ID + 申请编号，列表首位新增 Pending 记录。</p>
+
+    <h4>Q5：升级 GC 后任务还在 BU 队列？</h4>
+    <p>本次已修复。升级后任务会同步更新 scope=GC、assigneeRole=GC_STEWARD、currentNodeCode=GC_REVIEW，并从 BU 队列移到 GC 队列。</p>
+
+    <h4>Q6：审批通过后客户状态还是 Pending？</h4>
+    <p>当前 POC 尚未在审批通过时自动把 <code>cmd_customer.status</code> 更新为 active。这是已知缺口，后续按 V6.1 的“发布到下游”环节补齐。</p>
+
+    <h4>Q7：服务起不来 / 8080 被占用？</h4>
+    <p>先杀掉 8080 的 java 进程再启动。启动命令必须显式指定端口：<br>
+    <code>java -jar ruoyi-admin/target/ruoyi-admin.jar --server.port=8080 --server.address=0.0.0.0</code></p>
+  </section>
+
+  <footer>
+    本手册由 AI 根据 V6.1 总体设计与当前 POC 实现整理，截图均为真实运行界面。<br>
+    最后更新：2026-09-19
+  </footer>
+</div>
+</body>
+</html>

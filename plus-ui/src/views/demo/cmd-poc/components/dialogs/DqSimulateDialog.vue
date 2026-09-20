@@ -13,7 +13,7 @@
       </el-table-column>
       <el-table-column label="操作" width="120" align="center">
         <template #default="{ row }">
-          <el-button link type="primary" @click="onSimulate(row)">模拟</el-button>
+          <el-button link type="primary" @click="onSimulate(asRule(row))">模拟</el-button>
           <el-button link type="danger" @click="onDelete(row.id)">删除</el-button>
         </template>
       </el-table-column>
@@ -26,35 +26,39 @@
 import { onMounted, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import { listDqRules, saveDqRule, deleteDqRule } from '@/api/demo/cmdPoc';
-import type { DqRuleVO } from '@/api/demo/cmdPoc/types';
+import type { DqRuleRow } from '@/api/demo/cmdPoc/types';
 
 defineOptions({ name: 'CmdPocDqSimulateDialog' });
 
-const rules = ref<DqRuleVO[]>([]);
+const rules = ref<DqRuleRow[]>([]);
+
+/** el-table 插槽行类型为 DefaultRow，此处收敛断言，保证模板调用无需类型体操 */
+const asRule = (row: unknown): DqRuleRow => row as DqRuleRow;
 
 onMounted(async () => {
   rules.value = await listDqRules();
 });
 
-const onSimulate = async (row: DqRuleVO) => {
+const onSimulate = async (row: DqRuleRow) => {
   await saveDqRule(row);
-  ElMessage.success(`模拟完成：${row.ruleName} → ${row.result}`);
+  ElMessage.success(`模拟完成：${row.ruleName ?? ''} → ${row.result ?? ''}`);
 };
 
 const onDelete = async (id: number | undefined) => {
   if (!id) return;
   await deleteDqRule(id);
-  rules.value = rules.value.filter(r => true);
+  rules.value = rules.value.filter(item => item.id !== id);
   ElMessage.success('规则已删除');
 };
 
 const onAddRule = () => {
-  const newRule: DqRuleVO = {
-    code: `RULE_${Date.now().toString().slice(-6)}`,
-    name: '新DQ规则',
-    type: 'Technical',
-    level: 'Warning',
-    action: '允许提交并标记',
+  const newRule: DqRuleRow = {
+    ruleCode: `RULE_${Date.now().toString().slice(-6)}`,
+    ruleName: '新DQ规则',
+    dimension: '有效性',
+    role: 'GC Core',
+    threshold: '待配置',
+    result: 'Warning',
     enabled: true
   };
   rules.value.unshift(newRule);

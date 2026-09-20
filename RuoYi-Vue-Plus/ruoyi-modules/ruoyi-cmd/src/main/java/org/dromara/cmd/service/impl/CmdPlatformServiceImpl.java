@@ -81,8 +81,19 @@ public class CmdPlatformServiceImpl implements ICmdPlatformService {
             fieldMapper.updateById(field);
             return field.getFieldCode();
         }
-        field.setStatus(StringUtils.blankToDefault(field.getStatus(), "0"));
-        fieldMapper.insert(field);
+        // 查重：同 model_code + field_code + version_no 已存在则 update
+        MdField exist = fieldMapper.selectOne(
+            Wrappers.<MdField>lambdaQuery()
+                .eq(MdField::getModelCode, field.getModelCode())
+                .eq(MdField::getFieldCode, field.getFieldCode())
+                .eq(MdField::getVersionNo, field.getVersionNo()));
+        if (exist != null) {
+            field.setId(exist.getId());
+            fieldMapper.updateById(field);
+        } else {
+            field.setStatus(StringUtils.blankToDefault(field.getStatus(), "0"));
+            fieldMapper.insert(field);
+        }
         return field.getFieldCode();
     }
 
