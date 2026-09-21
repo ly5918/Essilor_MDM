@@ -1,5 +1,5 @@
 <template>
-  <section class="page">
+  <section class="page list-page">
     <!-- 审计事件：原型 auditPage 为 标题 + 表格，此处补充「贯通 ID 检索」能力 -->
     <el-card class="page-card" shadow="never" :body-style="{ padding: '0' }">
       <template #header>
@@ -19,7 +19,7 @@
           </div>
         </div>
       </template>
-      <el-table v-loading="loading" border :data="events" class="data-table">
+      <el-table ref="tableRef" v-loading="loading" border :data="events" :height="tableHeight" class="data-table">
         <el-table-column label="事件编号" prop="id" width="165" />
         <el-table-column label="时间" prop="time" width="120" align="center" />
         <el-table-column label="事件" prop="event" min-width="240" show-overflow-tooltip />
@@ -48,6 +48,19 @@
           </template>
         </el-table-column>
       </el-table>
+
+      <!-- 分页 -->
+      <div class="pagination-container" v-if="total > 0">
+        <el-pagination
+          v-model:current-page="pageNum"
+          v-model:page-size="pageSize"
+          :page-sizes="[10, 20, 50, 100]"
+          :total="total"
+          layout="total, sizes, prev, pager, next, jumper"
+          @size-change="load"
+          @current-change="load"
+        />
+      </div>
     </el-card>
   </section>
 </template>
@@ -56,21 +69,31 @@
 import { onMounted, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import { listAuditEvents } from '@/api/demo/cmdPoc';
-import type { AuditEventVO } from '@/api/demo/cmdPoc/types';
+import type { AuditEventVO, PageResult } from '@/api/demo/cmdPoc/types';
+import { useListTableHeight } from '../../composables/useListTableHeight';
 import { AUDIT_RESULT_MAP } from '../../constants/options';
 
 defineOptions({ name: 'CmdPocAuditPanel' });
 
+/** 表格高度自适应：分页条固定在内容区底部，不随数据条数浮动 */
+const { tableRef, tableHeight, recalc } = useListTableHeight(70);
+
 const loading = ref(false);
 const keyword = ref('');
 const events = ref<AuditEventVO[]>([]);
+const pageNum = ref(1);
+const pageSize = ref(10);
+const total = ref(0);
 
 const load = async () => {
   loading.value = true;
   try {
-    events.value = await listAuditEvents(keyword.value);
+    const page = await listAuditEvents(keyword.value, pageNum.value, pageSize.value);
+    events.value = page.rows;
+    total.value = page.total;
   } finally {
     loading.value = false;
+    recalc();
   }
 };
 
@@ -79,7 +102,7 @@ const onSearch = async () => {
   await load();
   const kw = keyword.value.trim();
   if (kw) {
-    ElMessage.info(`已按「${kw}」检索到 ${events.value.length} 条审计事件`);
+    ElMessage.info(`已按「${kw}」检索到 ${events.value.length} 条审计事件（共 ${total.value} 条）`);
   }
 };
 

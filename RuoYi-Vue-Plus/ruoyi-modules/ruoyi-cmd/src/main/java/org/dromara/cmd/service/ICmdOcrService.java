@@ -19,4 +19,17 @@ public interface ICmdOcrService {
      * @return 执照信息 + 字段识别结果
      */
     CmdOcrRecognizeVo recognize(String fileName);
+
+    /**
+     * 按客户主档匹配预置识别结果（不带文件名上下文时使用）。
+     * <p>
+     * POC 的 OCR 是「按文件名匹配测试素材」的模拟实现：客户数据若由某张测试图回填而来，
+     * 依据法定名称 / 统一社会信用代码能反查出那张素材的识别结果（含各字段置信度）；
+     * 未命中时回退默认素材（license_01）。
+     *
+     * @param legalName  客户法定名称（可为空）
+     * @param creditCode 统一社会信用代码（可为空）
+     * @return 匹配到的预置识别结果（永不为 null）
+     */
+    CmdOcrRecognizeVo recognizeOfCustomer(String legalName, String creditCode);
 }

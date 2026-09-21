@@ -4,18 +4,26 @@
  * 5 类技术角色，BU / GC 通过 Data Steward 的 Scope 区分。
  * 后端接入时可替换为「根据当前登录用户角色返回菜单」。
  */
-import type { PageId, RoleKey } from '@/api/demo/cmdPoc/types';
+import type { MenuId, RoleKey } from '@/api/demo/cmdPoc/types';
 
 export interface PocMenu {
-  /** 页面编码 */
-  id: PageId;
+  /** 菜单标识：叶子=可路由页面；二级菜单容器=`sub-` 前缀伪 id（不可路由） */
+  id: MenuId;
   /** 菜单名称（同时作为面包屑末级文案） */
   label: string;
-  /** 菜单右上角徽标（待办数） */
-  badge?: string;
+  /**
+   * 是否为「审批类」菜单：只有需要人工审批/复核的菜单才在侧栏显示待办统计角标。
+   *
+   * 严格对齐业务口径——NOT 每个菜单都需要统计。当前仅有：
+   * - Data Steward · BU Scope：「治理与审批」「批量治理」
+   * - Data Steward · GC Scope：「全局治理决策」「批量治理」
+   * 其余菜单（工作台 / 客户主档 / 客户层级 / 变更与停用 / 流程中心 / 审计 / 集成 / 平台管理）
+   * 以及 Business User、Platform Admin、Auditor 角色的全部菜单均不显示角标。
+   */
+  requiresApproval?: boolean;
   /** 菜单图标（纯文字占位，避免引入图标库差异） */
   icon: string;
-  /** 子菜单（RuoYi 二级菜单样式，如「流程中心」下的工作流三视图） */
+  /** 子菜单（RuoYi 二级菜单样式，如「工作流」下的两个实例列表视图） */
   children?: PocMenu[];
 }
 
@@ -34,16 +42,29 @@ export interface PocRole {
   menus: PocMenu[];
 }
 
-/** 「流程中心」二级菜单（RuoYi 子菜单样式）：定义 / 三视图 / 流程跟踪 */
+/**
+ * 「工作流」二级菜单（RuoYi 子菜单样式）：运行态视图，5 个角色通用。
+ *
+ * 两个子页分工（列表页分离，避免「一个页面既当列表又当详情」）：
+ * - 已激活工作流：运行中、未结束的实例，行内可看「流程跟踪」；
+ * - 已完成的工作流：已结束实例的**列表**（可按状态筛），行内「查看流程跟踪」
+ *   打开**弹窗**看该次执行的完整链路。
+ *
+ * 「流程跟踪」刻意**不做菜单项**：它是「某一次执行」的详情，
+ * 属于从列表下钻的二级动作，形态与「工作流定义 → 某行配置」一致（点开弹窗），
+ * 而不是一个可以独立进入的页面——否则会出现「进了页面却不知道看哪条实例」的空态。
+ *
+ * 注意：「工作流定义」也不在这里——按 V6.1 第 3 / 10 / 16 页，
+ * Workflow 属于 Platform Admin 的平台管理能力（配置态），
+ * 入口为「平台管理 → Workflow 卡片 → 管理」，因此它没有侧边栏菜单项。
+ */
 const FLOW_CENTER_MENU: PocMenu = {
-  id: 'flowCenter',
+  id: 'sub-flowCenter',
   label: '流程中心',
   icon: '流',
   children: [
-    { id: 'flowCenter', label: '工作流定义', icon: '流' },
-    { id: 'flowWorkitem', label: '工作项', icon: '项' },
-    { id: 'flowActive', label: '已激活工作流', icon: '启' },
-    { id: 'flowDone', label: '已完成的工作流', icon: '毕' }
+    { id: 'flowWorkitem', label: '已激活工作流', icon: '活' },
+    { id: 'flowDone', label: '已完成的工作流', icon: '完' }
   ]
 };
 
@@ -73,10 +94,10 @@ export const ROLE_LIST: PocRole[] = [
     readOnly: false,
     menus: [
       { id: 'dash', label: '工作台', icon: '工' },
-      { id: 'approval', label: '治理与审批', badge: '8', icon: '审' },
+      { id: 'approval', label: '治理与审批', icon: '审', requiresApproval: true },
       { id: 'customers', label: '客户主档', icon: '客' },
       { id: 'hier', label: '客户层级', icon: '层' },
-      { id: 'batch', label: '批量治理', badge: '3', icon: '批' },
+      { id: 'batch', label: '批量治理', icon: '批', requiresApproval: true },
       { id: 'change', label: '变更与停用', icon: '变' },
       FLOW_CENTER_MENU
     ]
@@ -90,10 +111,10 @@ export const ROLE_LIST: PocRole[] = [
     readOnly: false,
     menus: [
       { id: 'dash', label: '全局工作台', icon: '工' },
-      { id: 'approval', label: '全局治理决策', badge: '5', icon: '审' },
+      { id: 'approval', label: '全局治理决策', icon: '审', requiresApproval: true },
       { id: 'customers', label: '全局客户主档', icon: '客' },
       { id: 'hier', label: '客户层级', icon: '层' },
-      { id: 'batch', label: '批量治理', badge: '2', icon: '批' },
+      { id: 'batch', label: '批量治理', icon: '批', requiresApproval: true },
       { id: 'change', label: '变更与停用', icon: '变' },
       FLOW_CENTER_MENU,
       { id: 'audit', label: '治理审计', icon: '审' }

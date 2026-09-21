@@ -1,0 +1,909 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Essilor CMD POC · 零基础上手指南</title>
+<style>
+  :root {
+    --brand: #176c9f;
+    --brand-dark: #10527b;
+    --brand-soft: #eaf4fa;
+    --green: #4d944e;
+    --orange: #db7c18;
+    --purple: #7955a8;
+    --gold: #d59b22;
+    --text1: #1c2b36;
+    --text2: #5b6f7d;
+    --text3: #8497a4;
+    --line: #dfe7ec;
+    --bg: #f4f7f9;
+    --card: #ffffff;
+    --danger: #c0392b;
+    --danger-soft: #fdeeec;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    color: var(--text1);
+    background: var(--bg);
+    line-height: 1.75;
+    font-size: 15px;
+  }
+  .wrap { max-width: 1160px; margin: 0 auto; padding: 0 24px 80px; }
+
+  /* ---------- Hero ---------- */
+  header.hero {
+    background: linear-gradient(135deg, #10527b 0%, #176c9f 55%, #2b8fc4 100%);
+    color: #fff;
+    padding: 52px 24px 44px;
+    margin-bottom: 28px;
+  }
+  header.hero .wrap { padding-bottom: 0; }
+  .hero-tag {
+    display: inline-block;
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    background: rgba(255, 255, 255, 0.16);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 999px;
+    padding: 4px 14px;
+    margin-bottom: 16px;
+  }
+  header.hero h1 { font-size: 34px; margin: 0 0 12px; font-weight: 700; letter-spacing: 0.5px; }
+  header.hero p.lead { font-size: 16px; margin: 0; max-width: 780px; color: #e2f0f8; }
+  .hero-metrics { display: flex; flex-wrap: wrap; gap: 28px; margin-top: 28px; }
+  .hero-metrics div b { display: block; font-size: 24px; font-weight: 700; }
+  .hero-metrics div span { font-size: 12.5px; color: #cfe6f2; }
+
+  /* ---------- TOC ---------- */
+  nav.toc {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin-bottom: 32px;
+  }
+  nav.toc h2 { font-size: 14px; margin: 0 0 12px; color: var(--text2); letter-spacing: 0.06em; }
+  nav.toc ol { margin: 0; padding-left: 22px; columns: 2; column-gap: 36px; }
+  nav.toc li { margin-bottom: 6px; break-inside: avoid; }
+  nav.toc a { color: var(--brand); text-decoration: none; }
+  nav.toc a:hover { text-decoration: underline; }
+
+  /* ---------- Sections ---------- */
+  section {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 30px 32px;
+    margin-bottom: 22px;
+  }
+  section > h2 {
+    font-size: 21px;
+    margin: 0 0 6px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--brand-soft);
+    color: var(--brand-dark);
+  }
+  section > h2 .num {
+    display: inline-block;
+    min-width: 30px;
+    height: 30px;
+    line-height: 30px;
+    text-align: center;
+    background: var(--brand);
+    color: #fff;
+    border-radius: 8px;
+    font-size: 14px;
+    margin-right: 10px;
+    vertical-align: 2px;
+  }
+  section > .sub { color: var(--text2); font-size: 14px; margin: 10px 0 22px; }
+  h3 { font-size: 17px; margin: 28px 0 10px; color: var(--text1); }
+  h4 { font-size: 15px; margin: 20px 0 8px; color: var(--brand-dark); }
+  p { margin: 10px 0; }
+  ul, ol { padding-left: 24px; }
+  li { margin-bottom: 6px; }
+  code {
+    background: #eef3f6;
+    border: 1px solid #dde7ec;
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 13px;
+    font-family: "JetBrains Mono", Consolas, Monaco, monospace;
+    color: #14506e;
+  }
+  strong { color: #0f3f5c; }
+
+  /* ---------- Callouts ---------- */
+  .callout { border-radius: 9px; padding: 14px 18px; margin: 18px 0; font-size: 14px; border-left: 4px solid; }
+  .callout b:first-child { display: block; margin-bottom: 4px; }
+  .c-info  { background: var(--brand-soft);  border-color: var(--brand); }
+  .c-tip   { background: #eef8ef; border-color: var(--green); }
+  .c-warn  { background: #fdf6ec; border-color: var(--orange); }
+  .c-danger{ background: var(--danger-soft); border-color: var(--danger); }
+
+  /* ---------- Tables ---------- */
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px; }
+  th, td { border: 1px solid var(--line); padding: 10px 12px; text-align: left; vertical-align: top; }
+  th { background: #f2f7fa; font-weight: 600; color: var(--brand-dark); white-space: nowrap; }
+  tbody tr:nth-child(even) { background: #fafcfd; }
+  td code { white-space: nowrap; }
+
+  /* ---------- Figure ---------- */
+  figure { margin: 20px 0; }
+  figure img {
+    width: 100%;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    display: block;
+    box-shadow: 0 2px 10px rgba(16, 82, 123, 0.07);
+  }
+  figcaption { font-size: 13px; color: var(--text2); margin-top: 8px; text-align: center; }
+
+  /* ---------- Steps ---------- */
+  .steps { counter-reset: step; list-style: none; padding-left: 0; margin: 18px 0; }
+  .steps > li {
+    counter-increment: step;
+    position: relative;
+    padding: 14px 16px 14px 56px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    margin-bottom: 12px;
+    background: #fcfdfe;
+  }
+  .steps > li::before {
+    content: counter(step);
+    position: absolute;
+    left: 16px; top: 15px;
+    width: 26px; height: 26px;
+    line-height: 26px;
+    text-align: center;
+    border-radius: 50%;
+    background: var(--brand);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .steps > li b { display: block; margin-bottom: 2px; color: var(--brand-dark); }
+  .steps > li small { color: var(--text2); display: block; margin-top: 4px; font-size: 13px; }
+
+  /* ---------- Role chips ---------- */
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; }
+  .chip {
+    font-size: 13px; padding: 4px 12px; border-radius: 999px;
+    background: var(--brand-soft); color: var(--brand-dark); border: 1px solid #cfe4f0;
+  }
+  .chip.g { background: #eef8ef; color: #2f6b30; border-color: #cfe8d0; }
+  .chip.o { background: #fdf6ec; color: #9c5a0f; border-color: #f2ddc0; }
+  .chip.p { background: #f3eefa; color: #5a3d84; border-color: #ded0ef; }
+  .chip.y { background: #fdfaec; color: #8d6812; border-color: #f0e6c2; }
+
+  /* ---------- Cards ---------- */
+  .grid { display: grid; gap: 14px; margin: 18px 0; }
+  .grid.g2 { grid-template-columns: repeat(2, 1fr); }
+  .grid.g3 { grid-template-columns: repeat(3, 1fr); }
+  .card {
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    padding: 16px 18px;
+    background: #fcfdfe;
+  }
+  .card h4 { margin: 0 0 8px; color: var(--brand-dark); font-size: 15px; }
+  .card p, .card ul { margin: 6px 0; font-size: 13.5px; color: var(--text2); }
+  .card .badge {
+    display: inline-block; font-size: 11.5px; padding: 1px 8px; border-radius: 4px;
+    background: var(--brand); color: #fff; margin-left: 6px; vertical-align: 1px;
+  }
+  .card .badge.g { background: var(--green); }
+  .card .badge.o { background: var(--orange); }
+  .card .badge.p { background: var(--purple); }
+
+  /* ---------- Flow chain ---------- */
+  .chain { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 18px 0; }
+  .chain .node {
+    background: #fff; border: 1.5px solid var(--brand); color: var(--brand-dark);
+    border-radius: 8px; padding: 7px 13px; font-size: 13px; font-weight: 600;
+  }
+  .chain .node.auto { border-color: var(--green); color: #2f6b30; }
+  .chain .node.human { border-color: var(--orange); color: #9c5a0f; }
+  .chain .node.end { border-color: var(--text3); color: var(--text2); }
+  .chain .arrow { color: var(--text3); font-size: 15px; }
+
+  /* ---------- FAQ ---------- */
+  details {
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    padding: 0 18px;
+    margin-bottom: 10px;
+    background: #fcfdfe;
+  }
+  details[open] { background: #fff; }
+  summary {
+    cursor: pointer;
+    padding: 14px 0;
+    font-weight: 600;
+    color: var(--brand-dark);
+    font-size: 14.5px;
+    list-style: none;
+  }
+  summary::-webkit-details-marker { display: none; }
+  summary::before { content: "＋ "; color: var(--brand); font-weight: 700; }
+  details[open] summary::before { content: "－ "; }
+  details .body { padding: 0 0 16px; font-size: 14px; color: var(--text2); }
+  details .body p:first-child { margin-top: 0; }
+
+  /* ---------- Footer ---------- */
+  footer { text-align: center; color: var(--text3); font-size: 13px; padding: 30px 0 0; }
+  @media (max-width: 820px) {
+    nav.toc ol { columns: 1; }
+    .grid.g2, .grid.g3 { grid-template-columns: 1fr; }
+    section { padding: 22px 18px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="hero-tag">Essilor CMD POC · Getting Started</span>
+    <h1>零基础上手指南</h1>
+    <p class="lead">
+      这份文档假设你<strong style="color:#fff">完全没接触过这个系统</strong>。从「怎么打开、用哪个账号登录」开始，
+      一个菜单一个菜单地告诉你它是干什么的、点哪里、会发生什么，最后带你走完一条完整的业务链：
+      新建客户 → OCR 识别 → 提交审批 → 批准成为主数据 → 归位到客户层级。
+    </p>
+    <div class="hero-metrics">
+      <div><b>5</b><span>角色工作台</span></div>
+      <div><b>19</b><span>功能页面</span></div>
+      <div><b>A3-A2-A1</b><span>客户层级</span></div>
+      <div><b>51</b><span>实拍截图</span></div>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+<nav class="toc">
+  <h2>目录</h2>
+  <ol>
+    <li><a href="#ch1">三分钟看懂这个系统</a></li>
+    <li><a href="#ch2">第一次打开：登录</a></li>
+    <li><a href="#ch3">界面导览：屏幕上每块是什么</a></li>
+    <li><a href="#ch4">五个角色分别能做什么</a></li>
+    <li><a href="#ch5">每个菜单是什么（逐页说明 + 截图）</a></li>
+    <li><a href="#ch6">手把手：走完一条完整业务</a></li>
+    <li><a href="#ch7">六个核心概念</a></li>
+    <li><a href="#ch8">「批准成主数据后，客户层级里为什么看不到？」</a></li>
+    <li><a href="#ch9">常见问题 FAQ</a></li>
+    <li><a href="#ch10">现场演示话术建议</a></li>
+    <li><a href="#ch11">图库：全部页面实拍截图</a></li>
+  </ol>
+</nav>
+
+<!-- ============ 1 ============ -->
+<section id="ch1">
+  <h2><span class="num">1</span>三分钟看懂这个系统</h2>
+  <p class="sub">先建立整体印象，细节后面再讲。</p>
+
+  <p>
+    这个系统叫 <strong>CMD（Customer Master Data，客户主数据管理）</strong>。它解决的问题是：
+    <strong>同一个客户，在不同的业务系统里有不同的名字和编码，导致对不上账。</strong>
+  </p>
+  <p>
+    系统做三件事：<strong>① 把散落的客户信息收进来 → ② 判断它是不是重复的 → ③ 给它一个终身不变的身份（One ID），
+    并纳入客户层级，之后所有变更都留痕。</strong>
+  </p>
+
+  <h3>三条主线业务</h3>
+  <div class="grid g3">
+    <div class="card">
+      <h4>故事一 · 单条创建</h4>
+      <p>业务员新建一个客户，上传营业执照，系统 OCR 自动填空，跑数据质量打分和查重，
+      然后 BU 初审 → GC 决策，通过后成为主数据。</p>
+    </div>
+    <div class="card">
+      <h4>故事二 · 批量导入</h4>
+      <p>把 Excel/CSV 丢进来，系统逐行检查质量、批内去重、跟存量比对，
+      分四类结果：可入库 / 疑似重复 / 需修复 / 拒收。</p>
+    </div>
+    <div class="card">
+      <h4>故事三 · 变更与治理</h4>
+      <p>改名、改地址要走审批；客户不合作了要「逻辑停用」（不物理删除），
+      全程保留 Before / After 和审批轨迹，审计随时可查。</p>
+    </div>
+  </div>
+
+  <div class="callout c-info">
+    <b>一句话记住</b>
+    客户管理 = 一条条具体的客户记录；客户层级 = 这些客户之间的上下级关系（谁属于谁）。
+    两者合起来，才是客户主数据的完整视图。
+  </div>
+</section>
+
+<!-- ============ 2 ============ -->
+<section id="ch2">
+  <h2><span class="num">2</span>第一次打开：登录</h2>
+  <p class="sub">打开地址，选一个演示账号，点一次按钮就进去了。</p>
+
+  <h3>2.1 打开地址</h3>
+  <p>浏览器地址栏输入：<code>http://localhost/cmd-poc/login</code></p>
+  <figure>
+    <img src="shots/business-01-dash.png" alt="登录后的工作台" />
+    <figcaption>图 2A · 登录成功后的第一屏（Business User 工作台）。看到这个画面就说明进来了。</figcaption>
+  </figure>
+
+  <h3>2.2 五个演示账号（不用记密码）</h3>
+  <p>登录页上有一排圆形按钮，<strong>点一下就把账号填好了</strong>，然后点页面上的
+  <strong>「使用 Microsoft 账号登录」</strong> 即可（演示环境会跳过验证码）。</p>
+
+  <table>
+    <thead>
+      <tr><th>点这个按钮</th><th>你是谁</th><th>能看到什么数据</th><th>典型用途</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>Business User</code></td><td>业务用户</td><td>本 BU · High End</td><td>新建客户、批量导入、发起变更</td></tr>
+      <tr><td><code>Steward BU</code></td><td>BU 范围数据管家</td><td>High End BU</td><td>本 BU 申请初审、异常数据治理</td></tr>
+      <tr><td><code>Steward GC</code></td><td>GC 全局数据管家</td><td>全部授权 BU</td><td>跨 BU 决策、合并、重大层级审批</td></tr>
+      <tr><td><code>Admin</code></td><td>平台管理员</td><td>平台配置 + 集成</td><td>字段/规则/模板/流程配置、集成监控</td></tr>
+      <tr><td><code>Auditor</code></td><td>审计员（只读）</td><td>授权范围只读</td><td>查谁在什么时候改了什么</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout c-tip">
+    <b>已经登录了，想换个角色看看？</b>
+    不用退出重登。看右上角有一行 <strong>「模拟角色」下拉框</strong>，直接选另一个角色，
+    左侧菜单和数据范围会立刻跟着变。
+  </div>
+</section>
+
+<!-- ============ 3 ============ -->
+<section id="ch3">
+  <h2><span class="num">3</span>界面导览：屏幕上每块是什么</h2>
+  <p class="sub">整个系统只有一套骨架，学会一次就够用所有页面。</p>
+
+  <div class="grid g2">
+    <div class="card">
+      <h4>① 顶栏</h4>
+      <ul>
+        <li><strong>左侧</strong>：折叠/展开菜单</li>
+        <li><strong>中间</strong>：模拟角色下拉（切换身份）</li>
+        <li><strong>右侧</strong>：头像 → 布局设置 / 退出登录</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>② 左侧菜单</h4>
+      <p>按角色显示可用功能。<strong>带数字小徽标的表示有待办</strong>（如「治理与审批 8」）。
+      「流程中心」是可以展开的二级菜单（下含「已激活工作流」「已完成的工作流」两个子菜单）。</p>
+    </div>
+    <div class="card">
+      <h4>③ 标签页</h4>
+      <p>你打开过的页面会排成标签，可以来回切换、单独关闭，不用退回菜单重新点。
+      最右侧可一键关掉全部。</p>
+    </div>
+    <div class="card">
+      <h4>④ 内容区</h4>
+      <p>页面主体。统一结构是：<strong>H2 标题 + 一句说明 + 操作按钮</strong>，
+      下面是卡片分区，卡片里通常是表格或指标。</p>
+    </div>
+  </div>
+
+  <div class="callout c-info">
+    <b>一个规律</b>
+    每个页面顶部的 H2 标题和它右边的一句小字，就是这一页的「说明书」。
+    忘了这页干什么，看那行小字最快。
+  </div>
+</section>
+
+<!-- ============ 4 ============ -->
+<section id="ch4">
+  <h2><span class="num">4</span>五个角色分别能做什么</h2>
+  <p class="sub">权限设计原则：<strong>BU 管自己范围，GC 管跨范围，Auditor 只看不改。</strong></p>
+
+  <table>
+    <thead>
+      <tr><th>角色</th><th>菜单</th><th>核心动作</th><th>不能做什么</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="chip">Business User</span></td>
+        <td>工作台、客户管理、批量导入、客户层级、变更与停用、流程中心</td>
+        <td>新建客户、OCR 识别、批量上传、发起属性变更/逻辑停用</td>
+        <td>不能审批；不能直接归位层级</td>
+      </tr>
+      <tr>
+        <td><span class="chip g">Steward BU</span></td>
+        <td>工作台、治理与审批、客户主档、客户层级、批量治理、变更与停用、流程中心</td>
+        <td>本 BU 申请初审、DQ 复核、疑似重复处理、<strong>把主数据归位到层级树</strong></td>
+        <td>不能做跨 BU 决策</td>
+      </tr>
+      <tr>
+        <td><span class="chip o">Steward GC</span></td>
+        <td>全局工作台、全局治理决策、全局客户主档、客户层级、批量治理、变更与停用、流程中心、治理审计</td>
+        <td>跨 BU 决策、合并冲突客户、关联已有 One ID、重大层级审批</td>
+        <td>—</td>
+      </tr>
+      <tr>
+        <td><span class="chip y">Platform Admin</span></td>
+        <td>管理工作台、平台管理、集成监控、流程中心、管理员日志</td>
+        <td>配置字段与值集、DQ 规则、匹配规则、One ID 规则、导入模板、Workflow；看集成重试</td>
+        <td>不参与业务审批</td>
+      </tr>
+      <tr>
+        <td><span class="chip p">Auditor</span></td>
+        <td>审计工作台、审计中心、客户只读查询、层级只读查询、流程中心</td>
+        <td>查操作记录、Before/After、审批轨迹、导出审计报告</td>
+        <td><strong>全局只读</strong>，任何按钮都不改数据</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============ 5 ============ -->
+<section id="ch5">
+  <h2><span class="num">5</span>每个菜单是什么（逐页说明 + 截图）</h2>
+  <p class="sub">按角色分组。图片都是真实运行截图，可以直接对照你自己的屏幕。</p>
+
+  <h3>5.1 Business User（业务用户）</h3>
+  <div class="grid g2">
+    <div class="card"><h4>工作台</h4><p>第一屏。显示你的 Scope、待办数量、快捷入口。点卡片能直接跳到对应功能。</p></div>
+    <div class="card"><h4>客户管理</h4><p>客户列表（含 One ID、名称、BU、状态、层级）。可搜索、查看详情、<strong>新建客户</strong>、查看 OCR 识别结果。</p></div>
+    <div class="card"><h4>批量导入</h4><p>先选模板<strong>下载</strong>，填好再<strong>上传</strong>；系统按行检查质量与重复，结果分四类展示。</p></div>
+    <div class="card"><h4>客户层级</h4><p>左：搜索 + <strong>待归位主数据</strong>；中：A3-A2-A1 层级树；右：节点详情。可发起层级关系申请。</p></div>
+    <div class="card"><h4>变更与停用</h4><p>发起关键属性变更申请，或对不再合作的客户做逻辑停用。都能看到 Before / After。</p></div>
+    <div class="card"><h4>流程中心</h4><p>运行态二级菜单，5 个角色都有，含 2 项：<strong>已激活工作流</strong>（引擎实例已启动、还没跑完的单子）、<strong>已完成的工作流</strong>（已结束实例的列表）。某一单的完整链路不再单占一个菜单——<strong>点列表行内的「查看流程跟踪」弹出窗口</strong>，窗口里还能逐节点点开看明细。（<strong>工作流定义不在这里</strong>——那是配置态，归 Platform Admin 的「平台管理 → Workflow」。）</p></div>
+  </div>
+  <figure>
+    <img src="shots/business-02-customers.png" alt="客户管理页" />
+    <figcaption>图 5A · Business User → 客户管理。注意「层级」列：显示 <code>A1/A2/A3</code> 说明已归位，显示「未挂载」说明还没进层级树。</figcaption>
+  </figure>
+  <figure>
+    <img src="shots/business-03-batch.png" alt="批量导入页" />
+    <figcaption>图 5B · 批量导入中心。下载模板 → 上传 → 预检 / DQ / 匹配 / 治理 / 部分成功。</figcaption>
+  </figure>
+
+  <h3>5.2 Steward BU（BU 数据管家）</h3>
+  <div class="grid g2">
+    <div class="card"><h4>工作台</h4><p>BU 范围治理视角：本 BU 申请初审、异常治理、SLA 管理。</p></div>
+    <div class="card"><h4>治理与审批 <span class="badge">重点</span></h4><p>审批队列（KPI + Tab + 筛选）。本 BU 审批、DQ 复核、疑似重复、层级与批量治理在这里统一处理。</p></div>
+    <div class="card"><h4>客户主档</h4><p>与「客户管理」同一份数据，但按 BU 管家的权限和视角呈现。</p></div>
+    <div class="card"><h4>客户层级 <span class="badge g">归位入口</span></h4><p>除了看树，<strong>左栏「待归位主数据」区每个客户后面有「归位」按钮</strong>，把批准后的主数据挂进层级树。</p></div>
+    <div class="card"><h4>批量治理</h4><p>处理批量导入产生的异常行（修复后重跑）。</p></div>
+    <div class="card"><h4>变更与停用</h4><p>审批业务用户提交的变更 / 停用申请。</p></div>
+  </div>
+  <figure>
+    <img src="shots/bu-02-approval.png" alt="治理与审批页" />
+    <figcaption>图 5C · Steward BU → 治理与审批。左侧 KPI 卡可下钻，下方是待办队列；点「任务编号」可打开审批详情，右侧有「流程跟踪」。</figcaption>
+  </figure>
+
+  <h3>5.3 Steward GC（GC 数据管家）</h3>
+  <figure>
+    <img src="shots/gc-02-approval.png" alt="全局治理决策页" />
+    <figcaption>图 5D · Steward GC → 全局治理决策。范围是整个授权 BU，处理跨 BU 审批、匹配合并、One ID 与重大治理任务。</figcaption>
+  </figure>
+
+  <h3>5.4 Platform Admin（平台管理员）</h3>
+  <figure>
+    <img src="shots/admin-02-admin.png" alt="平台管理页" />
+    <figcaption>图 5E · 平台管理。字段、值集、DQ 规则、匹配规则、One ID 规则、模板、Workflow、权限，全部版本化配置。</figcaption>
+  </figure>
+  <figure>
+    <img src="shots/admin-03-integration.png" alt="集成监控页" />
+    <figcaption>图 5F · 集成监控。Inbound / Outbound 任务、错误与 Retry / Resubmit。</figcaption>
+  </figure>
+  <p><strong>Workflow（工作流定义）</strong>也在这一页：点「平台管理 → <strong>Workflow</strong> 卡片 → <strong>管理</strong>」进去，
+  就能看到系统里全部 CMD 业务工作流——场景编码 ↔ Warm-Flow 流程名 / 流程编码 / SLA / 版本 / 泳道节点数 / 部署状态，
+  每行还可以「<strong>配置</strong>」（打开该场景的 Workflow 配置弹窗）或看「<strong>泳道图</strong>」（图形化流程蓝图）。
+  <strong>这是配置态能力，只有 Platform Admin 有</strong>，业务角色不需要也不应该改流程定义。</p>
+  <p>页面顶部固定一条口径说明，弹窗里每一行节点也都带「平台固定 / 可配置」标签，<strong>什么不能改、什么能改一目了然</strong>：</p>
+  <ul>
+    <li><strong>平台固定（不可修改）</strong>：场景编码、流程编码（与 Warm-Flow 流程定义、引擎节点定位绑定）、
+    业务入口与录入节点、OCR / DQ / Duplicate Check / One ID 等<em>系统自动节点</em>、发布与运行追踪、审计证据链，
+    以及<strong>主干 BU 初审</strong>（可改命中条件与办理角色，但不可停用）。</li>
+    <li><strong>按场景可配置</strong>：节点路由规则（可<strong>新增 / 停用</strong>，即增删工作流项目）、命中条件表达式、
+    办理角色、会签 or 或签、节点 SLA、场景 SLA、超时动作与超时升级、邮件通知方式与通知对象、
+    以及 <strong>GC 决策节点是否启用</strong>（V6.1 待确认项：High End 必经、Mainstream 可只走 BU 初审）。</li>
+  </ul>
+  <p>配置弹窗共 4 个页签：<strong>流程节点</strong>（11 个泳道节点蓝图 + 可编辑的节点路由规则表）、
+  <strong>路由条件</strong>（场景启动条件 + 当前节点命中条件 + 可用路由变量）、
+  <strong>SLA 与升级</strong>、<strong>版本与发布</strong>。配置<strong>真的会落库</strong>——
+  保存后写入平台配置表（场景表 + 节点审批人规则表），下一次流程实例启动即按新配置路由。
+  图形化的流程设计统一由「泳道图」承载，所以配置弹窗里不再重复画一遍阶段链。</p>
+  <figure>
+    <img src="shots/admin-04-flowdef.png" alt="工作流定义页" />
+    <figcaption>图 5G · 平台管理 → Workflow → 管理：6 套 CMD 业务工作流，含 SLA、版本、泳道节点数与部署状态；顶部固定「平台固定 / 可配置」口径说明，每行可「配置」或「泳道图」。</figcaption>
+  </figure>
+  <figure>
+    <img src="shots/admin-05-flowdef-config.png" alt="Workflow配置弹窗" />
+    <figcaption>图 5H · 某一行点「配置」打开的 Workflow 配置（流程节点页签）：泳道节点蓝图带「平台固定 / 可配置」标签，下方是可直接编辑的节点路由规则（命中条件 / 办理角色 / 会签或签 / 节点 SLA / 启用开关）。</figcaption>
+  </figure>
+
+  <h3>5.5 Auditor（审计员 · 只读）</h3>
+  <figure>
+    <img src="shots/audit-02-audit.png" alt="审计中心" />
+    <figcaption>图 5I · 审计中心。Who / When / What + Before / After + 审批意见，支持导出。</figcaption>
+  </figure>
+
+  <h3>5.6 工作流（二级菜单：2 个列表 + 1 个弹窗）</h3>
+  <p>「流程中心」是<strong>运行态</strong>视图，5 个角色都能看到，含 <strong>2 个子菜单</strong>；「流程跟踪」不再是菜单，改成<strong>点行内按钮弹出的窗口</strong>（和「工作流定义 → 某行配置」同一形态）。</p>
+  <table>
+    <thead><tr><th>子菜单</th><th>看什么</th></tr></thead>
+    <tbody>
+      <tr><td><strong>已激活工作流</strong></td><td>引擎实例已启动、<strong>还没跑完</strong>的单子（有在途实例）。列结构对齐 Deepblue，点 One ID 打开泳道图，点「流程跟踪」看这一单的完整链路</td></tr>
+      <tr><td><strong>已完成的工作流</strong></td><td>已经跑完的实例<strong>列表</strong>（已批准 / 已拒绝 / 已取消 / 已完成），可按状态筛，可按 One ID / 申请编号 / 客户主题搜。它只负责「找得到」，不展开细节</td></tr>
+      <tr><td>（弹窗）<strong>流程跟踪</strong></td><td>点行内「流程跟踪」<strong>弹出的窗口</strong>，不是单独页面。里面是某一单的完整链路：Warm-Flow 实例流程图（BPMN）+ 11 步泳道步骤条 + <strong>步骤明细</strong> + Data context state + 审批轨迹 + 引擎关联。<strong>和审批详情里点「流程跟踪」打开的是同一个窗口</strong><br /><span style="color:#9babb6;font-size:12px">怎么用：<strong>点步骤条上任意一步</strong>（如「录入与附件」「OCR 与智能补全」），下方会跟着切换成那一步的明细——摘要 / 字段 / 表格 / 备注</span></td></tr>
+    </tbody>
+  </table>
+  <figure>
+    <img src="shots/gc-08-flowdone.png" alt="已完成的工作流（列表页）" />
+    <figcaption>图 5J · 流程中心 → 已完成的工作流。<strong>列表页</strong>：已结束实例（本例 2 条，都是「已批准 / 结束 / 100%」）。点行内「流程跟踪」弹出跟踪窗口。</figcaption>
+  </figure>
+  <figure>
+    <img src="shots/bu-09-flowtrace.png" alt="流程跟踪（弹窗）" />
+    <figcaption>图 5K · 上一步弹出的<strong>流程跟踪窗口</strong>：顶部是这次执行的身份（申请编号 + One ID + 客户），往下依次是 Warm-Flow BPMN 流程图、11 步泳道步骤条、审批轨迹、引擎关联。<strong>点步骤条上任意一步</strong>，下方「步骤明细」面板立刻切到那一步（摘要 + 字段 + 表格 + 备注）。右下角「关闭」返回列表。</figcaption>
+  </figure>
+</section>
+
+<!-- ============ 6 ============ -->
+<section id="ch6">
+  <h2><span class="num">6</span>手把手：走完一条完整业务</h2>
+  <p class="sub">跟着做一遍，你就掌握这个系统 80% 的用法了。</p>
+
+  <h3>先看懂这条链</h3>
+  <div class="chain">
+    <span class="node">新建客户</span><span class="arrow">→</span>
+    <span class="node auto">OCR 识别</span><span class="arrow">→</span>
+    <span class="node auto">DQ 打分</span><span class="arrow">→</span>
+    <span class="node auto">查重</span><span class="arrow">→</span>
+    <span class="node">提交申请</span><span class="arrow">→</span>
+    <span class="node human">BU 初审</span><span class="arrow">→</span>
+    <span class="node human">GC 决策</span><span class="arrow">→</span>
+    <span class="node end">成为主数据</span>
+  </div>
+  <p style="font-size:13.5px;color:var(--text2)">
+    <span class="chip g">绿色 = 系统自动跑完</span>
+    <span class="chip o">橙色 = 需要人点一下</span>
+    <span class="chip">蓝色 = 用户操作</span>
+  </p>
+
+  <h3>Step 1 · 以 Business User 登录，进入「客户管理」</h3>
+  <ol class="steps">
+    <li><b>登录</b>：登录页点 <code>Business User</code>，再点「使用 Microsoft 账号登录」。<small>成功后顶栏会显示 Business User 工作台。</small></li>
+    <li><b>点左菜单「客户管理」</b>：看到客户列表，含 One ID、客户名称、BU、<strong>层级归属</strong>、来源、状态等列。<small>「层级归属」列显示 <code>A1/A2/A3</code> 说明已归位；显示「未挂载」说明还没进层级树。</small></li>
+    <li><b>点「新建客户」按钮</b>：弹出「新建客户申请」表单。</li>
+  </ol>
+  <figure>
+    <img src="shots/newcustomer-01-dialog.png" alt="新建客户弹窗" />
+    <figcaption>图 6A · 新建客户申请弹窗。分三块：<strong>业务上下文</strong>（客户类型 / BU / 产品线 / 来源系统，决定后续加载哪些字段）、
+    <strong>动态客户字段</strong>（由元数据配置驱动，字段增删不用改代码）、<strong>营业执照</strong>（上传后 OCR 识别并回填）。</figcaption>
+  </figure>
+
+  <h3>Step 2 · 上传营业执照，让系统自动填</h3>
+  <ol class="steps">
+    <li><b>在弹窗里点上传营业执照</b>：选一张测试素材（<code>docs/cmd-poc/测试素材/营业执照/license_0x.png</code>）。</li>
+    <li><b>点「查看 OCR 识别结果」</b>：弹出识别结果，显示每个字段的识别值和置信度。<small>POC 环境按文件名匹配预置结果，不会真的调外部 OCR 服务。</small></li>
+    <li><b>点「写回表单」</b>：弹窗关闭，表单里对应字段被自动填好，字段名旁边会出现绿色 <strong>OCR 回填</strong> 标记。<small>这个标记很重要——它告诉你哪些值是系统给的，需要人工再核对。</small></li>
+  </ol>
+
+  <h3>Step 3 · 补全后提交，看系统自动做了什么</h3>
+  <ol class="steps">
+    <li><b>补全必填项</b>：客户法定名称、注册地址、省市、联系人、电话。<small>如果直接点「提交申请」而不填，系统会逐个字段报红提示——这就是下面的图 6A。</small></li>
+    <li><b>点「提交申请」</b>：系统立刻做三件事：
+      <ul>
+        <li>生成 <strong>One ID</strong>（终身身份）和 <strong>申请编号</strong>（如 <code>AP-20260920-0001</code>）</li>
+        <li>跑 <strong>DQ 质量打分</strong>：缺统一社会信用代码 -12、缺地址 -8、缺省市 -4、缺联系人 -4、缺电话 -4；≥90 判 A、≥75 判 B、≥60 判 C，低于 60 标记 High risk</li>
+        <li>自动跑完 <strong>OCR / DQ / 查重</strong> 三个节点，并创建审批任务</li>
+      </ul>
+    </li>
+    <li><b>看提示</b>：成功后弹出回执，含 One ID 与申请编号；客户列表刷新，新申请出现在列表里。</li>
+  </ol>
+  <figure>
+    <img src="shots/business-08-flowtrace.png" alt="提交后可在流程跟踪里看到" />
+    <figcaption>图 6B · 提交后，这单立刻出现在「流程中心 → 已激活工作流」里（引擎实例已启动、还没跑完）。点行内「流程跟踪」弹出窗口，就能看到它现在卡在哪个节点，以及每一步实际发生了什么。</figcaption>
+  </figure>
+
+  <h3>Step 4 · 出错时会看到什么</h3>
+  <figure>
+    <img src="shots/error-01-required.png" alt="必填校验报错" />
+    <figcaption>图 6C · 直接点「提交申请」而不填必填项，输入框下方立刻出现红字提示（如「请输入客户法定名称」「请输入注册地址」），弹窗不会关闭。补上内容后红字自动消失。</figcaption>
+  </figure>
+  <div class="callout c-danger">
+    <b>看到红色报错不要慌</b>
+    先读提示文字，它通常已经告诉你怎么改。比如「层级最多 3 级（A3 → A2 → A1），xx 已是末端节点，不能再挂下级」
+    意思就是：你选的上级已经在最底层了，换一个上级即可。
+  </div>
+
+  <h3>Step 5 · 换成 Steward BU，审批这单</h3>
+  <ol class="steps">
+    <li><b>右上角「模拟角色」选 <code>Data Steward · BU Scope</code></b>：左侧菜单立刻变成 BU 管家的。</li>
+    <li><b>点「治理与审批」</b>：在队列里找到刚提交的那单（可按 One ID / 申请编号搜）。</li>
+    <li><b>点任务编号打开审批详情</b>：右侧能看到泳道图、Data context state、审批轨迹。</li>
+    <li><b>点「批准」或「升级 GC」</b>：
+      <ul>
+        <li>点<strong>批准</strong> → 客户状态变为 <code>active</code>，正式成为主数据，流程结束</li>
+        <li>点<strong>升级 GC</strong> → 流转到 GC 决策节点，需要 GC 管家再点一次</li>
+        <li>点<strong>拒绝</strong> → 客户状态 <code>rejected</code>，流程终止</li>
+        <li>点<strong>退回补充</strong> → 客户状态 <code>returned</code>，退回给申请人补材料</li>
+      </ul>
+    </li>
+  </ol>
+
+  <h3>Step 6 · 客户层级里「归位」（关键一步，详见第 8 章）</h3>
+  <ol class="steps">
+    <li><b>点左菜单「客户层级」</b></li>
+    <li><b>看左栏「待归位主数据」</b>：刚批准的那个客户已经在列表里了。<small>批准后系统会自动把它登记成「待归位」节点，所以它一定会出现在这里。</small></li>
+    <li><b>点该客户后面的「归位」按钮</b>：弹出「主数据归位」窗口。</li>
+    <li><b>选目标父节点</b>：只能选 A3（集团）或 A2（主账户）。系统会实时告诉你归位后是什么级别、完整路径是什么。</li>
+    <li><b>点「确认归位」</b>：系统一次做完五件事：环路检测 → 级别推导 → 完整路径重建 → 祖先节点计数刷新 → 层级关系留痕。</li>
+    <li><b>回中间层级树看</b>：新节点已经挂在树上了。回到「客户管理」，该客户「层级」列也从「未挂载」变成了 <code>A1</code>。</li>
+  </ol>
+</section>
+
+<!-- ============ 7 ============ -->
+<section id="ch7">
+  <h2><span class="num">7</span>六个核心概念</h2>
+  <p class="sub">把这几句话记牢，后面看任何页面都不会迷路。</p>
+
+  <table>
+    <thead><tr><th>概念</th><th>是什么</th><th>关键规则</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>One ID</strong></td>
+        <td>客户的终身身份编码，形如 <code>GC-23F62B7A</code></td>
+        <td><strong>一旦生成，终身不变</strong>。改名、改地址、合并都不会重新生成。所有列表都能用它搜。</td>
+      </tr>
+      <tr>
+        <td><strong>申请编号</strong></td>
+        <td>一次审批流程的单号，形如 <code>AP-20260920-0001</code></td>
+        <td>一个客户可能有多条申请（新建、变更、停用），每条一个编号。追流程用这个。</td>
+      </tr>
+      <tr>
+        <td><strong>主数据 / 黄金记录</strong></td>
+        <td>审批通过、状态为 <code>active</code> 的客户</td>
+        <td>只有主数据才能被下游系统消费。「客户管理」里看到的就是主数据 + 在途申请。</td>
+      </tr>
+      <tr>
+        <td><strong>客户层级 A3-A2-A1</strong></td>
+        <td>A3 = 集团 / 法人实体，A2 = 主账户，A1 = 门店 / 终端</td>
+        <td><strong>最多三级</strong>。级别由父节点自动推导，系统不做人工指定。层级由 Data Steward 治理。</td>
+      </tr>
+      <tr>
+        <td><strong>待归位主数据</strong></td>
+        <td>已批准成为主数据、但还没挂进层级树的客户</td>
+        <td>批准后自动登记。它<strong>只出现在「客户层级」页左栏</strong>，不进中间那棵树。</td>
+      </tr>
+      <tr>
+        <td><strong>Loop Check（环路检测）</strong></td>
+        <td>防止层级关系成环</td>
+        <td>如果把某个节点挂到它自己的后代下面，系统会直接拒绝并给出冲突路径。</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout c-warn">
+    <b>为什么不物理删除？</b>
+    客户数据被下游系统引用过，删掉会造成对不上账。所以系统只做<strong>逻辑停用</strong>（状态变 <code>inactive</code>）
+    或<strong>归档</strong>，历史记录和 Before / After 全部保留，审计随时可查。
+  </div>
+</section>
+
+<!-- ============ 8 ============ -->
+<section id="ch8">
+  <h2><span class="num">8</span>「批准成主数据后，客户层级里为什么看不到？」</h2>
+  <p class="sub">这是最容易困惑的一点。答案是：<strong>它已经进去了，只是停在「待归位」区，等着被归位。</strong></p>
+
+  <h3>8.1 先理解为什么要有这一步</h3>
+  <p>
+    「批准」解决的是<strong>这个客户存不存在、数据可不可信</strong>；
+    「归位」解决的是<strong>这个客户在集团的哪个位置、归谁管</strong>。这是两件不同的事，由两个角色负责：
+  </p>
+  <div class="grid g2">
+    <div class="card">
+      <h4>审批（Steward BU / GC）</h4>
+      <p>判断这条客户数据是否可信、是否与已有客户重复。通过 → 拿到 One ID，成为主数据。</p>
+    </div>
+    <div class="card">
+      <h4>归位（Data Steward）</h4>
+      <p>判断这个客户在 A3-A2-A1 里该挂在哪个上级之下。这个过程必须由人治理，不能系统乱猜。</p>
+    </div>
+  </div>
+  <p>
+    所以系统的做法是<strong>两段式</strong>：批准的那一刻，先把客户<strong>登记进层级体系</strong>（变成「待归位」节点），
+    保证它不会漏；再由管家把它挂到正确的位置。这样既做到了「批准即纳入体系」，又守住了「层级必须被治理」的原则。
+  </p>
+
+  <h3>8.2 在哪看？怎么看？</h3>
+  <p>打开 <strong>客户层级</strong> 页，页面顶部有一行绿色说明条，写着当前有几个待归位；左栏下半部分就是待归位列表。</p>
+  <figure>
+    <img src="shots/hier-01-overview.png" alt="客户层级页" />
+    <figcaption>图 8A · 客户层级页。顶部说明条：「客户审批通过即成为主数据，并自动登记为「待归位」节点（当前 9 个）」；左栏下方是待归位列表，每条后面都有「归位」按钮。</figcaption>
+  </figure>
+
+  <figure>
+    <img src="shots/hier-02-assign-dialog.png" alt="归位弹窗" />
+    <figcaption>图 8B · 点「归位」后的弹窗。选目标父节点后，系统实时给出<strong>归位预检</strong>：环路检测是否通过、会变成什么级别、归位后的完整路径长什么样。确认前你就能看到结果。</figcaption>
+  </figure>
+
+  <figure>
+    <img src="shots/hier-03-assigned.png" alt="归位后" />
+    <figcaption>图 8C · 归位完成后。左侧说明条里的待归位数量减 1，中间层级树出现新节点，祖先节点的子节点数/后代数自动 +1。</figcaption>
+  </figure>
+
+  <h3>8.3 一句话回答客户/评审的提问</h3>
+  <div class="callout c-info">
+    <b>「批准后客户在哪儿？」</b>
+    批准后它立刻出现在两个地方：<strong>① 客户管理 / 客户主档列表里</strong>（状态 active，拿到 One ID）；
+    <strong>② 客户层级页左栏的「待归位主数据」里</strong>。
+    等 Data Steward 把它归位到 A3-A2-A1 之后，它才出现在中间的层级树上。
+    两者合起来才是主数据的完整视图。
+  </div>
+</section>
+
+<!-- ============ 9 ============ -->
+<section id="ch9">
+  <h2><span class="num">9</span>常见问题 FAQ</h2>
+  <p class="sub">点开看答案。</p>
+
+  <details>
+    <summary>为什么我看到的菜单比别人的少？</summary>
+    <div class="body">
+      菜单是按角色下发的。Business User 看不到「治理与审批」，Auditor 只有只读页面。
+      想换视角，用右上角「模拟角色」下拉切换。
+    </div>
+  </details>
+
+  <details>
+    <summary>同一个客户怎么有好几条记录？</summary>
+    <div class="body">
+      大概率是<strong>还没合并的疑似重复</strong>。系统在「治理与审批」里把它们标成 SUSPECTED，
+      需要 GC 管家核对匹配证据后决定：合并到已有 One ID，还是确认为新客户。
+      合并时源记录不会删除，而是保留 Source Snapshot 和映射关系。
+    </div>
+  </details>
+
+  <details>
+    <summary>为什么「客户层级」页在某些屏幕上变成了上下三块？</summary>
+    <div class="body">
+      这是刻意做的响应式适配。窗口宽度 ≤ 1280px 时，左/中/右三栏会折成上下三块，
+      避免三栏硬挤在一起看不清。把浏览器窗口拉宽就会恢复成并排三栏。
+    </div>
+  </details>
+
+  <details>
+    <summary>提交申请时提示「请输入客户法定名称」怎么办？</summary>
+    <div class="body">
+      这是字段级校验，说明必填项还没填。看输入框下方的红色小字，它直接告诉你是哪个字段缺了。
+      补上之后提示会自动消失。
+    </div>
+  </details>
+
+  <details>
+    <summary>归位时报「层级最多 3 级……已是末端节点」怎么办？</summary>
+    <div class="body">
+      你选的父节点已经是 A1（最底层），A1 下面不能再挂东西。
+      改成选一个 A3 或 A2 作为父节点即可。系统这样限制是为了保证层级永远是 A3 → A2 → A1 三级。
+    </div>
+  </details>
+
+  <details>
+    <summary>「泳道图」和「流程跟踪」有什么区别？</summary>
+    <div class="body">
+      两个不同的可视化，用途不同，但都是<strong>弹窗</strong>（不再单独占菜单）：<br />
+      · <strong>泳道图（V6.1）</strong>：横向 7 个业务阶段、纵向 6 条角色泳道，看「这类流程长什么样 / 这单走到哪一步」。入口在「流程跟踪」弹窗内的「泳道图」按钮（列表里点 One ID 也可直接打开）。<br />
+      · <strong>流程跟踪</strong>：Warm-Flow 引擎的真实实例视图 + 11 步泳道步骤条 + <strong>步骤明细</strong> + Data context state + 审批轨迹 + 引擎关联。入口有二（<strong>都是同一个窗口，不会各做一套</strong>）：①「已激活工作流」/「已完成的工作流」行内「流程跟踪」；②审批详情右侧「流程跟踪」按钮。<br />
+      · <strong>步骤明细是流程跟踪的精华</strong>：点步骤条上任意一步，下方立刻换成那一步的内容（如「OCR 与智能补全」列出识别出的字段，「DQ 质量校验」给出得分与命中项、扣分原因）。
+    </div>
+  </details>
+
+  <details>
+    <summary>POC 环境和正式环境的差别？</summary>
+    <div class="body">
+      POC 阶段为了演示顺畅，做了这些简化：<code>/cmd/**</code> 接口免登录（正式上线前删除白名单）、
+      OCR 用预置结果不调外部服务、AAD 单点登录用模拟账号替代。
+      数据结构、审批流、层级治理逻辑都是真实可跑的。
+    </div>
+  </details>
+</section>
+
+<!-- ============ 10 ============ -->
+<section id="ch10">
+  <h2><span class="num">10</span>现场演示话术建议</h2>
+  <p class="sub">如果要给别人演示，按这个顺序讲最顺。</p>
+
+  <ol class="steps">
+    <li><b>先讲问题，再讲系统</b>
+      <small>「同一个客户在 Cloud、DMS+、SAP 里分别叫三个名字、有三个编码，报表对不上账。我们要解决的就是这个。」</small></li>
+    <li><b>用「故事一」走完整链路</b>
+      <small>新建 → OCR → DQ → 提交 → BU 初审 → GC 决策 → 成为主数据。中途故意留一个必填项不填，让它报红，展示校验在做实事。</small></li>
+    <li><b>在「流程跟踪」里指出 One ID</b>
+      <small>「这个编码在客户管理、审批任务、层级、审计日志里是同一个值，任何一处都能拿着它查出全链路。」</small></li>
+    <li><b>切到 Steward BU，做「归位」这一步</b>
+      <small>这是最容易被问到的一环：批准 ≠ 自动挂层级。先展示待归位列表，再点归位、看预检、确认，最后回层级树看新节点和祖先计数变化。</small></li>
+    <li><b>切到 Auditor 收尾</b>
+      <small>「刚才所有动作都被记下来了：谁、什么时候、改了什么、Before / After 是什么。而且全程没有任何物理删除。」</small></li>
+    <li><b>最后讲配置能力（Platform Admin）</b>
+      <small>字段、DQ 规则、匹配规则、模板、Workflow 都是配置驱动、版本化的，不用改代码。</small></li>
+  </ol>
+
+  <div class="callout c-tip">
+    <b>三个最能加分的细节</b>
+    ① 打开「层级归位预检」，让客户看到系统在提交前就把环路、级别、完整路径算给你看；
+    ② 打开「流程跟踪」窗口，指出自动节点（OCR/DQ/查重）是一起变绿的、人工节点是一步一步亮的，再点开任意一步看它的明细；
+    ③ 打开「审计中心」，随便挑一条记录展开 Before / After。
+  </div>
+</section>
+
+<section id="ch11">
+  <h2><span class="num">11</span>图库：全部页面实拍截图</h2>
+  <p class="sub">5 个角色共 43 个页面，全部为真实运行截图。<strong>对照你自己的屏幕看，就是这一页。</strong></p>
+  <h3>Business User（业务用户）（8 张）</h3>
+  <div class="grid g2">
+    <figure style="margin:8px 0"><img src="shots/business-01-dash.png" alt="工作台" loading="lazy" /><figcaption>工作台<br /><span style="color:#9babb6;font-size:12px">business-01-dash.png</span></figcaption></figure>
+    <figure style="margin:8px 0"><img src="shots/business-02-customers.png" alt="客户管理 / 客户主档" loading="lazy" /><figcaption>客户管理 / 客户主档<br /><span style="color:#9babb6;font-size:12px">business-02-customers.png</span></figcaption></figure>
+    <figure style="margin:8px 0"><img src="shots/business-03-batch.png" alt="批量导入 / 批量治理" loading="lazy" /><figcaption>批量导入 / 批量治理<br /><span style="color:#9babb6;font-size:12px">business-03-batch.png</span></figcaption></figure>
+    <figure style="margin:8px 0"><img src="shots/business-04-hier.png" alt="客户层级" loading="lazy" /><figcaption>客户层级<br /><span style="color:#9babb6;font-size:12px">business-04-hier.png</span></figcaption></figure>
+    <figure style="margin:8px 0"><img src="shots/business-05-change.png" alt="变更与停用" loading="lazy" /><figcaption>变更与停用<br /><span style="color:#9babb6;font-size:12px">business-05-change.png</span></figcaption></figure>
+    <figure style="margin:8px 0"><img src="shots/business-06-flowitem.png" alt="流程中心 · 已激活工作流" loading="lazy" /><figcaption>流程中心 · 已激活工作流<br /><span style="color:#9babb6;font-size:12px">business-06-flowitem.png</span></figcaption></figure>
+    <figure style="margin:8px 0"><img src="shots/business-07-flowdone.png" alt="工作流 · 已完成的工作流" loading="lazy" /><figcaption>工作流 · 已完成的工作流<br /><span style="color:#9babb6;font-size:12px">business-07-flowdone.png</span></figcaption></figure>
+    <figure style="margin:8px 0"><img src="shots/business-08-flowtrace.png" alt="工作流 · 流程跟踪（弹窗）" loading="lazy" /><figcaption>工作流 · 流程跟踪（弹窗）<br /><span style="color:#9babb6;font-size:12px">business-08-flowtrace.png</span></figcaption></figure>
+  </div>
+  <h3>Steward BU（BU 数据管家）（9 张）</h3>
+  <div class="grid g2">
+    <figure style="margin:8px 0"><img src="shots/bu-01-dash.png" alt="工作台" loading="lazy" /><figcaption>工作台<br /><span style="color:#9babb6;font-size:12px">bu-01-dash.png</span></figcaption></figure>
+    <figure style="margin:8px 0"><img src="shots/bu-02-approval.png" alt="治理与审批" loading="lazy" /><figcaption>治理与审批<br /><span style="color:#9babb6;font-size:12px">bu-02-approval.png</span></figcaption></figure>
+    <figure style="margin:8px 0"><img src="shots/bu-03-customers.png" alt="客户管理 / 客户主档" loading="lazy" /><figcaption>客户管理 / 客户主档<br /><span style="color:#9babb6;font-size:12px">bu-03-customers.png</span></figcaption></figure>
+    <figure style="margin:8px 0"><img src="shots/bu-04-hier.png" alt="客户层级" loading="lazy" /><figcaption>客户层级<br /><span style="color:#9babb6;font-size:12px">bu-04-hier.png</span></figcaption></figure>
+    <figure style="margin:8px 0"><img src="shots/bu-05-batch.png" alt="批量导入 / 批量治理" loading="lazy" /><figcaption>批量导入 / 批量治理<br /><span style="color:#9babb6;font-size:12px">bu-05-batch.png</span></figcaption></figure>
+    <figure style="margin:8px 0"><img src="shots/bu-06-change.png" alt="变更与停用" loading="lazy" /><figcaption>变更与停用<br /><span style="color:#9babb6;font-size:12px">bu-06-change.png</span></figcaption></figure>
+    <figure style="margin:8px 0"><img src="shots/bu-07-flowitem.png" alt="流程中心 · 已激活工作流" loading="lazy" /><figcaption>流程中心 · 已激活工作流<br /><span style="color:#9babb6;font-size:12px">bu-07-flowitem.png</span></figcaption></figure>
+    <figure style="margin:8px 0"><img src="shots/bu-08-flowdone.png" alt="工作流 · 已完成的工作流" loading="lazy" /><figcaption>工作流 · 已完成的工作流<br /><span style="color:#9babb6;font-size:12px">bu-08-flowdone.png</span></figcaption></figure>
+    <figure style="margin:8px 0"><img src="shots/bu-09-flowtrace.png" alt="工作流 · 流程跟踪（弹窗）" loading="lazy" /><figcaption>工作流 · 流程跟踪（弹窗）<br /><span style="color:#9babb6;font-size:12px">bu-09-flowtrace.png</span></figcaption></figure>
+  </div>
+  <h3>Steward GC（GC 数据管家）（10 张）</h3>
+  <div class="grid g2">
+    <figure style="margin:8px 0"><img src="shots/gc-01-dash.png" alt="工作台" loading="lazy" /><figcaption>工作台<br /><span style="color:#9babb6;font-size:12px">gc-01-dash.png</span></figcaption></figure>
+    <figure style="margin:8px 0"><img src="shots/gc-02-approval.png" alt="治理与审批" loading="lazy" /><figcaption>治理与审批<br /><span style="color:#9babb6;font-size:12px">gc-02-approval.png</span></figcaption></figure>
+    <figure style="margin:8px 0"><img src="shots/gc-03-customers.png" alt="客户管理 / 客户主档" loading="lazy" /><figcaption>客户管理 / 客户主档<br /><span style="color:#9babb6;font-size:12px">gc-03-customers.png</span></figcaption></figure>
+    <figure style="margin:8px 0"><img src="shots/gc-04-hier.png" alt="客户层级" loading="lazy" /><figcaption>客户层级<br /><span style="color:#9babb6;font-size:12px">gc-04-hier.png</span></figcaption></figure>
+    <figure style="margin:8px 0"><img src="shots/gc-05-batch.png" alt="批量导入 / 批量治理" loading="lazy" /><figcaption>批量导入 / 批量治理<br /><span style="color:#9babb6;font-size:12px">gc-05-batch.png</span></figcaption></figure>
+    <figure style="margin:8px 0"><img src="shots/gc-06-change.png" alt="变更与停用" loading="lazy" /><figcaption>变更与停用<br /><span style="color:#9babb6;font-size:12px">gc-06-change.png</span></figcaption></figure>
+    <figure style="margin:8px 0"><img src="shots/gc-07-flowitem.png" alt="流程中心 · 已激活工作流" loading="lazy" /><figcaption>流程中心 · 已激活工作流<br /><span style="color:#9babb6;font-size:12px">gc-07-flowitem.png</span></figcaption></figure>
+    <figure style="margin:8px 0"><img src="shots/gc-08-flowdone.png" alt="工作流 · 已完成的工作流" loading="lazy" /><figcaption>工作流 · 已完成的工作流<br /><span style="color:#9babb6;font-size:12px">gc-08-flowdone.png</span></figcaption></figure>
+    <figure style="margin:8px 0"><img src="shots/gc-09-flowtrace.png" alt="工作流 · 流程跟踪（弹窗）" loading="lazy" /><figcaption>工作流 · 流程跟踪（弹窗）<br /><span style="color:#9babb6;font-size:12px">gc-09-flowtrace.png</span></figcaption></figure>
+    <figure style="margin:8px 0"><img src="shots/gc-10-audit.png" alt="治理审计" loading="lazy" /><figcaption>治理审计<br /><span style="color:#9babb6;font-size:12px">gc-10-audit.png</span></figcaption></figure>
+  </div>
+  <h3>Platform Admin（平台管理员）（9 张）</h3>
+  <div class="grid g2">
+    <figure style="margin:8px 0"><img src="shots/admin-01-dash.png" alt="工作台" loading="lazy" /><figcaption>工作台<br /><span style="color:#9babb6;font-size:12px">admin-01-dash.png</span></figcaption></figure>
+    <figure style="margin:8px 0"><img src="shots/admin-02-admin.png" alt="平台管理" loading="lazy" /><figcaption>平台管理<br /><span style="color:#9babb6;font-size:12px">admin-02-admin.png</span></figcaption></figure>
+    <figure style="margin:8px 0"><img src="shots/admin-03-integration.png" alt="集成监控" loading="lazy" /><figcaption>集成监控<br /><span style="color:#9babb6;font-size:12px">admin-03-integration.png</span></figcaption></figure>
+    <figure style="margin:8px 0"><img src="shots/admin-04-flowdef.png" alt="平台管理 · Workflow · 工作流定义" loading="lazy" /><figcaption>平台管理 · Workflow · 工作流定义<br /><span style="color:#9babb6;font-size:12px">admin-04-flowdef.png</span></figcaption></figure>
+    <figure style="margin:8px 0"><img src="shots/admin-05-flowdef-config.png" alt="平台管理 · Workflow · 配置弹窗" loading="lazy" /><figcaption>平台管理 · Workflow · 配置弹窗<br /><span style="color:#9babb6;font-size:12px">admin-05-flowdef-config.png</span></figcaption></figure>
+    <figure style="margin:8px 0"><img src="shots/admin-06-flowitem.png" alt="流程中心 · 已激活工作流" loading="lazy" /><figcaption>流程中心 · 已激活工作流<br /><span style="color:#9babb6;font-size:12px">admin-06-flowitem.png</span></figcaption></figure>
+    <figure style="margin:8px 0"><img src="shots/admin-07-flowdone.png" alt="工作流 · 已完成的工作流" loading="lazy" /><figcaption>工作流 · 已完成的工作流<br /><span style="color:#9babb6;font-size:12px">admin-07-flowdone.png</span></figcaption></figure>
+    <figure style="margin:8px 0"><img src="shots/admin-08-flowtrace.png" alt="工作流 · 流程跟踪（弹窗）" loading="lazy" /><figcaption>工作流 · 流程跟踪（弹窗）<br /><span style="color:#9babb6;font-size:12px">admin-08-flowtrace.png</span></figcaption></figure>
+    <figure style="margin:8px 0"><img src="shots/admin-09-audit.png" alt="管理员日志" loading="lazy" /><figcaption>管理员日志<br /><span style="color:#9babb6;font-size:12px">admin-09-audit.png</span></figcaption></figure>
+  </div>
+  <h3>Auditor（审计员）（7 张）</h3>
+  <div class="grid g2">
+    <figure style="margin:8px 0"><img src="shots/audit-01-dash.png" alt="工作台" loading="lazy" /><figcaption>工作台<br /><span style="color:#9babb6;font-size:12px">audit-01-dash.png</span></figcaption></figure>
+    <figure style="margin:8px 0"><img src="shots/audit-02-audit.png" alt="审计中心 / 管理员日志" loading="lazy" /><figcaption>审计中心 / 管理员日志<br /><span style="color:#9babb6;font-size:12px">audit-02-audit.png</span></figcaption></figure>
+    <figure style="margin:8px 0"><img src="shots/audit-03-customers.png" alt="客户管理 / 客户主档" loading="lazy" /><figcaption>客户管理 / 客户主档<br /><span style="color:#9babb6;font-size:12px">audit-03-customers.png</span></figcaption></figure>
+    <figure style="margin:8px 0"><img src="shots/audit-04-hier.png" alt="客户层级" loading="lazy" /><figcaption>客户层级<br /><span style="color:#9babb6;font-size:12px">audit-04-hier.png</span></figcaption></figure>
+    <figure style="margin:8px 0"><img src="shots/audit-05-flowitem.png" alt="流程中心 · 已激活工作流" loading="lazy" /><figcaption>流程中心 · 已激活工作流<br /><span style="color:#9babb6;font-size:12px">audit-05-flowitem.png</span></figcaption></figure>
+    <figure style="margin:8px 0"><img src="shots/audit-06-flowdone.png" alt="工作流 · 已完成的工作流" loading="lazy" /><figcaption>工作流 · 已完成的工作流<br /><span style="color:#9babb6;font-size:12px">audit-06-flowdone.png</span></figcaption></figure>
+    <figure style="margin:8px 0"><img src="shots/audit-07-flowtrace.png" alt="工作流 · 流程跟踪（弹窗）" loading="lazy" /><figcaption>工作流 · 流程跟踪（弹窗）<br /><span style="color:#9babb6;font-size:12px">audit-07-flowtrace.png</span></figcaption></figure>
+  </div>
+</section>
+
+<footer>
+  Essilor CMD POC · 零基础上手指南 · 配套截图 48 张（<code>shots/</code> 目录）<br />
+  与 <code>docs/cmd-poc/test-guide/workflow-guide.html</code>（测试验证手册）配套使用
+</footer>
+
+</div>
+</body>
+</html>

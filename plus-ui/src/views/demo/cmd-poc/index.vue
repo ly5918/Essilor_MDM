@@ -109,9 +109,8 @@ import IntegrationPanel from './components/panels/IntegrationPanel.vue';
 import AdminPanel from './components/panels/AdminPanel.vue';
 import AuditPanel from './components/panels/AuditPanel.vue';
 import CoveragePanel from './components/panels/CoveragePanel.vue';
-import WorkflowCenterPanel from './components/panels/WorkflowCenterPanel.vue';
+import WorkflowDefinitionPanel from './components/panels/WorkflowDefinitionPanel.vue';
 import FlowWorkitemPanel from './components/panels/FlowWorkitemPanel.vue';
-import FlowActivePanel from './components/panels/FlowActivePanel.vue';
 import FlowDonePanel from './components/panels/FlowDonePanel.vue';
 
 defineOptions({ name: 'CmdPoc' });
@@ -137,9 +136,8 @@ const PANEL_MAP: Record<PageId, Component> = {
   admin: AdminPanel,
   audit: AuditPanel,
   coverage: CoveragePanel,
-  flowCenter: WorkflowCenterPanel,
+  flowDefinition: WorkflowDefinitionPanel,
   flowWorkitem: FlowWorkitemPanel,
-  flowActive: FlowActivePanel,
   flowDone: FlowDonePanel
 };
 
@@ -175,9 +173,10 @@ const pageSub = computed(() => {
   return PAGE_META[currentPage.value]?.sub ?? '';
 });
 
-/** 下钻场景的面包屑上级名称 */
+/** 下钻场景的面包屑上级名称（客户下钻 / 平台管理能力页下钻） */
 const currentSubLabel = computed(() => {
   if (currentSub.value === 'customers') return currentMenu.value?.label ?? '客户管理';
+  if (currentSub.value === 'admin') return PAGE_META.admin?.title ?? '平台管理';
   return '';
 });
 

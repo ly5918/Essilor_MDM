@@ -67,10 +67,11 @@ public interface ICmdApprovalService {
     /**
      * 查询治理与审批页顶部 KPI 指标
      *
-     * @param scope 审批范围（BU / GC），为空时统计全部
+     * @param scope  审批范围（BU / GC），为空时统计全部
+     * @param userId 当前登录用户 ID（用于"待我处理"按人过滤），为空时不过滤
      * @return 指标列表（待我处理 / 临近SLA / 已超时 / 退回待补充 / 本周已处理）
      */
-    List<CmdApprovalKpiVo> selectKpi(String scope);
+    List<CmdApprovalKpiVo> selectKpi(String scope, Long userId);
 
     /**
      * 按任务编号查询处理详情（含决策标签与可执行按钮）

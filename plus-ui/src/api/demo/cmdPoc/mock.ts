@@ -31,6 +31,7 @@ import type {
   FlowInstanceVO,
   FlowSceneVO,
   HierarchyNodeVO,
+  CmdHierarchyUnassignedRow,
   ImportJobVO,
   ImportTemplateVO,
   IntegrationRunVO,
@@ -49,7 +50,12 @@ import type {
   RolePermissionVO,
   TemplateMappingVO,
   TodoVO,
-  WorkflowConfigVO
+  FlowSceneConfigVO,
+  FlowSceneNodeVO,
+  FlowSceneRuleVO,
+  FlowStepDetailVO,
+  FlowStepFieldVO,
+  FlowStepTableVO
 } from './types';
 
 /** ---------------------------------- 工作台 ---------------------------------- */
@@ -445,6 +451,52 @@ export const mockHierarchy: HierarchyNodeVO[] = [
   }
 ];
 
+/**
+ * 待归位主数据：已审批通过成为主数据（active），但尚未挂到 A3-A2-A1 树上。
+ * 对应「客户层级 → 待归位主数据」区；归位后即进入 mockHierarchy 的层级树。
+ */
+export const mockHierarchyUnassigned: CmdHierarchyUnassignedRow[] = [
+  {
+    oneId: 'CN-CUS-000129',
+    legalName: '上海优视浦东门店',
+    buScope: 'High End',
+    customerStatus: 'active',
+    sourceSystem: 'OCR',
+    dqScore: 92,
+    approvedTime: '2026-09-18T10:20:00',
+    registered: true,
+    nodeCode: 'UN-000129',
+    suggestedLevel: 'A1',
+    remark: '已登记为待归位节点，等待 Data Steward 归位'
+  },
+  {
+    oneId: 'GC-000128',
+    legalName: '上海清视眼镜有限公司',
+    buScope: 'Mainstream',
+    customerStatus: 'active',
+    sourceSystem: 'Excel',
+    dqScore: 86,
+    approvedTime: '2026-09-17T16:05:00',
+    registered: true,
+    nodeCode: 'UN-000128',
+    suggestedLevel: 'A1',
+    remark: '已登记为待归位节点，等待 Data Steward 归位'
+  },
+  {
+    oneId: 'GC-000188',
+    legalName: '成都明视眼镜有限公司',
+    buScope: 'High End',
+    customerStatus: 'active',
+    sourceSystem: 'API',
+    dqScore: 78,
+    approvedTime: '2026-09-16T09:40:00',
+    registered: false,
+    nodeCode: '',
+    suggestedLevel: 'A2',
+    remark: '批准为主数据，尚未登记层级节点；归位后进入 A3-A2-A1 树'
+  }
+];
+
 /** ---------------------------------- 变更 / 停用 ---------------------------------- */
 export const mockChangeRequests: ChangeRequestVO[] = [
   {
@@ -488,11 +540,23 @@ export const mockDeactivateResult: DeactivateResultVO = {
     { key: 'Physical Delete', value: 'No' }
   ],
   dbRecords: [
-    "customer_master.status = 'INACTIVE'",
-    'customer_master.is_deleted = false',
-    'customer_version.version_no = 7',
-    "one_id_registry.one_id = 'GC-000245'",
-    "audit_event.action = 'DEACTIVATE'"
+    "cmd_customer.status = 'inactive'",
+    "cmd_customer.del_flag = '0'  -- 记录保留，未物理删除",
+    "cmd_customer.one_id = 'GC-000245'  -- One ID 不回收",
+    'cmd_customer.version_no = 7  -- 停用同样生成新版本',
+    "cmd_change_request.status = 'EFFECTIVE'",
+    "audit_event.action = 'DEACTIVATE'  -- 审计留痕保留"
+  ],
+  versions: [
+    {
+      versionNo: 7,
+      changeType: 'DEACTIVATE',
+      changeReason: '24个月无交易 · 人工填报',
+      changedFields: 'status',
+      status: 'effective',
+      sourceSystem: 'CLOUD',
+      createTime: '2026-09-15 09:02'
+    }
   ]
 };
 
@@ -528,6 +592,18 @@ export const mockApprovalInstances: ApprovalInstanceVO[] = [
   { instanceId: 'WF-HE-0012', bu: 'High End', scenario: 'Frame Customer Create', currentNode: 'BU Steward Review', sla: '1d 4h', status: 'In Progress' },
   { instanceId: 'WF-MS-0009', bu: 'Mainstream', scenario: 'DMS+ Dirty Data', currentNode: 'Return for Correction', sla: '6h', status: 'Returned' }
 ];
+
+/**
+ * 侧边导航「数据统计」角标（演示数据，key = 菜单 id，与后端 /cmd/nav/badge 结构一致）
+ * 仅 VITE_CMD_POC_MOCK=true 时使用；真实后端运行时数字由业务表实时聚合。
+ */
+export const mockNavBadges: Record<string, Record<string, number>> = {
+  business: { dash: 12, customers: 4, batch: 1, hier: 7, change: 2, flowWorkitem: 2, flowDone: 3 },
+  bu: { dash: 17, approval: 8, customers: 4, hier: 7, batch: 1, change: 2, flowWorkitem: 2, flowDone: 3 },
+  gc: { dash: 14, approval: 5, customers: 4, hier: 7, batch: 1, change: 2, flowWorkitem: 2, flowDone: 3, audit: 6 },
+  admin: { dash: 5, integration: 2, flowWorkitem: 2, flowDone: 3, audit: 6 },
+  audit: { dash: 9, audit: 6, customers: 4, hier: 7, flowWorkitem: 2, flowDone: 3 }
+};
 
 /**
  * 治理与审批合并工作台（原型 2.2「治理与审批合并版」）
@@ -691,6 +767,256 @@ const FLOW_SCENE1_STEPS: Array<Pick<FlowTraceStepVO, 'phase' | 'phaseName' | 'la
 ];
 
 /**
+ * 分步骤明细（mock）：结构 1:1 对齐后端 `CmdFlowTraceServiceImpl#buildStepDetail`，
+ * 让「纯 mock」与「live 后端」两种模式渲染同一套 UI（FlowTraceDetail 不做分支）。
+ */
+const buildMockStepDetails = (taskNo: string, isGc: boolean): FlowStepDetailVO[] => {
+  const f = (label: string, value: string, tone?: string): FlowStepFieldVO => ({ label, value, tone });
+  const t = (title: string, columns: string[], rows: string[][]): FlowStepTableVO => ({ title, columns, rows });
+
+  const NAME = '上海优视眼镜有限公司';
+  const CREDIT = '91310115MA1K35Q71N';
+  const oneId = isGc ? 'GC-000128' : 'GC-52A19C3D';
+
+  const apply: FlowStepDetailVO = {
+    nodeCode: 'APPLY',
+    summary: `王视野 于 2026-09-15 10:12 提交「${NAME}」的${isGc ? '跨BU合并' : '客户创建'}申请`,
+    fields: [
+      f('申请编号', taskNo),
+      f('客户主题', NAME),
+      f('业务类型', isGc ? '跨BU合并' : '客户创建'),
+      f('归属 BU', isGc ? 'Cross-BU' : 'High End · 镜片'),
+      f('风险等级', 'High', 'danger'),
+      f('申请人', '王视野'),
+      f('提交时间', '2026-09-15 10:12'),
+      f('场景流程', isGc ? '客户合并审批流（cmd_customer_merge）' : '客户创建审批流（cmd_customer_create）')
+    ],
+    notes: [
+      '提交同时生成 One ID 与首版本快照（cmd_customer / cmd_customer_version），并写入 SUBMIT 轨迹。',
+      'OCR / DQ / Duplicate Check 为系统自动节点，随提交一次执行完，不占用流程引擎用户任务。'
+    ]
+  };
+
+  const input: FlowStepDetailVO = {
+    nodeCode: 'INPUT',
+    summary: '录入客户主档核心字段并上传营业执照等证明材料，提交时完成落库与首版本快照',
+    fields: [
+      f('法定名称', NAME),
+      f('英文名称', 'Shanghai Youshi Optical Co., Ltd.'),
+      f('统一社会信用代码', CREDIT),
+      f('税号', CREDIT),
+      f('客户类型', 'SoldTo'),
+      f('产品线', 'High End'),
+      f('国家 / 省 / 市', '中国 / 上海市 / 上海市'),
+      f('注册地址', '上海市浦东新区张江路 88 号'),
+      f('联系人', '—', 'warning'),
+      f('联系电话', '—', 'warning'),
+      f('来源系统', 'OCR')
+    ],
+    tables: [
+      t('附件清单（cmd_attachment，biz_id = One ID）', ['文件名', '分类', 'OCR 状态', '类型', '大小(字节)', '上传时间'], [
+        ['license_01.png', 'BUSINESS_LICENSE', 'DONE', 'png', '182340', '2026-09-15 10:12']
+      ])
+    ],
+    notes: ['附件落 cmd_attachment（biz_type=CUSTOMER，biz_id=One ID），营业执照是 OCR 与统一社会信用代码校验的输入。']
+  };
+
+  const ocr: FlowStepDetailVO = {
+    nodeCode: 'OCR',
+    summary: '营业执照识别完成，抽取客户法定名称 / 统一社会信用代码 / 注册地址 / 省份 / 城市 并回填主档',
+    fields: [
+      f('识别引擎', 'POC 预置识别（CmdOcrServiceImpl）'),
+      f('识别字段数', '5'),
+      f('识别结果来源', '主档回填值（未落识别明细表）')
+    ],
+    tables: [
+      t('识别字段与回填结果', ['字段', '识别值', '回填状态', '置信度'], [
+        ['客户法定名称', NAME, '已回填主档', '98.60'],
+        ['统一社会信用代码', CREDIT, '已回填主档', '96.20'],
+        ['注册地址', '上海市浦东新区张江路 88 号', '已回填主档', '88.40'],
+        ['省份', '上海市', '已回填主档', '99.10'],
+        ['城市', '上海市', '已回填主档', '99.10']
+      ])
+    ],
+    notes: [
+      'POC 环境 OCR 按文件名匹配预置结果（license_0x.png），因此 cmd_ocr_result 为空；上表为识别后实际写入主档的字段值。',
+      '置信度低于阈值的字段由 OCR Core 置 needs_review=Y，在申请页提示确认后才允许提交。'
+    ]
+  };
+
+  const dq: FlowStepDetailVO = {
+    nodeCode: 'DQ',
+    summary: 'DQ 质量分 52.00（等级 D）：命中 5 项扣分，共扣 48 分',
+    fields: [
+      f('DQ 总分', '52.00', 'warning'),
+      f('质量等级', 'D', 'danger'),
+      f('扣分合计', '-48'),
+      f('路由结论', '存在扣分项，进入人工治理时需重点复核')
+    ],
+    tables: [
+      t('DQ 检查项明细（dq_rule 规则集）', ['检查维度', '规则', '当前值', '结果', '扣分'], [
+        ['客户法定名称', '必填', NAME, '通过', '0'],
+        ['统一社会信用代码', '必填且格式合法', CREDIT, '通过', '0'],
+        ['注册地址', '地址标准化', '相似度 0.72（未达 0.85 阈值）', '扣分', '-8'],
+        ['Payer 编码', '必填（Business Blocking）', '缺失', '扣分', '-12'],
+        ['一致性', '与来源系统（OCR）一致', '2 个字段不一致', '扣分', '-10'],
+        ['唯一性', '强制合并判定', '1 个 SUSPECT 候选待判', '扣分', '-10'],
+        ['联系人 + 联系电话', '完整性', '均缺失', '扣分', '-8']
+      ])
+    ],
+    notes: [
+      '分值与等级取 POC 演示常量（52 / D，对应 cmd_customer.dq_score），检查项对应 dq_rule 的 Blocking / Warning / Info 三档。',
+      '提交时的 POC 确定性打分口径：缺信用代码 -12、缺地址 -8、缺省市 -4、缺联系人 -4、缺电话 -4（≥90→A、≥75→B、≥60→C、<60→D）。'
+    ]
+  };
+
+  const dup: FlowStepDetailVO = {
+    nodeCode: 'DUP',
+    summary: '匹配结论 SUSPECTED，候选 1 条',
+    fields: [
+      f('匹配状态', 'SUSPECTED', 'warning'),
+      f('疑似重复标记', '是'),
+      f('路由结论', '疑似重复：转入 BU Scope 人工治理，确认 Same-BU 或升级 Cross-BU')
+    ],
+    tables: [
+      t('匹配候选（cmd_match_candidate）', ['One ID', '法定名称', '统一社会信用代码', '归属 BU', '匹配分', '判定'], [
+        ['GC-000128', '清视眼镜（High End）', CREDIT, 'High End', '0.87', '最佳候选']
+      ])
+    ],
+    notes: [
+      'SUSPECTED 候选必须经 BU Scope 初审确认（Same-BU 关联）或升级 GC 做跨 BU 决策，不允许自动合并。',
+      '字段级比对（名称 / 信用代码 / 地址 / 联系人）写入 field_compare_json，作为人工判断的证据。'
+    ]
+  };
+
+  const buReview: FlowStepDetailVO = {
+    nodeCode: 'BU_REVIEW',
+    summary: 'Same-BU 证据充分，升级 Cross-BU 由 GC Steward 决策',
+    fields: [
+      f('节点', 'BU Scope 初审'),
+      f('泳道', 'Data Steward BU Scope'),
+      f('办理人', 'BU_STEWARD'),
+      f('办理角色', 'BU_STEWARD'),
+      f('决策时限（SLA）', '2026-09-17 10:12'),
+      f('到达时间', '2026-09-15 10:14'),
+      f('执行状态', '已完成', 'success'),
+      f('会签方式', '或签（任一办理人通过）'),
+      f('适用范围', 'BU'),
+      f('规则默认角色', 'BU_STEWARD')
+    ],
+    tables: [
+      t('BU 初审动作（cmd_approval_action）', ['时间', '动作', '操作人', '角色', '状态流转', '意见'], [
+        ['2026-09-15 10:30:00', '初审认领', 'BU Steward', 'BU_STEWARD', 'PENDING → PENDING', '—'],
+        ['2026-09-16 09:30:00', '审批通过', 'BU Steward', 'BU_STEWARD', 'PENDING → APPROVED', 'Same-BU 证据充分，升级 Cross-BU']
+      ])
+    ],
+    notes: ['BU 初审结果：确认 Same-BU（关联本地组织）/ 升级 GC（Cross-BU）/ 退回补充证据。']
+  };
+
+  const gcReview: FlowStepDetailVO = {
+    nodeCode: 'GC_REVIEW',
+    summary: isGc ? '关联已有 One ID：GC-000128' : '等待 GC Steward 做跨 BU 证据核对与 One ID 决策',
+    fields: [
+      f('节点', 'GC Scope 决策'),
+      f('泳道', 'Data Steward GC Scope'),
+      f('办理人', 'GC_STEWARD'),
+      f('办理角色', 'GC_STEWARD'),
+      f('决策时限（SLA）', '2026-09-17 10:12'),
+      f('到达时间', '2026-09-16 09:30'),
+      f('执行状态', isGc ? '已完成' : '进行中', isGc ? 'success' : 'warning'),
+      f('会签方式', '或签（任一办理人通过）'),
+      f('适用范围', 'GC'),
+      f('规则默认角色', 'GC_STEWARD')
+    ],
+    tables: isGc
+      ? [
+          t('GC 决策动作（cmd_approval_action）', ['时间', '动作', '操作人', '角色', '状态流转', '意见'], [
+            ['2026-09-16 15:20:00', '关联已有 One ID', 'GC Steward', 'GC_STEWARD', 'APPROVED → APPROVED', '关联已有 One ID：GC-000128']
+          ])
+        ]
+      : [],
+    notes: ['GC 决策结果：关联已有 One ID（LINK）/ 新创主数据（CREATE_NEW）/ 确认合并（MERGE）。']
+  };
+
+  const result: FlowStepDetailVO = {
+    nodeCode: 'RESULT',
+    summary: `生成 / 关联结果：One ID ${oneId}，主数据状态 active`,
+    fields: [
+      f('One ID', oneId),
+      f('主数据状态', 'active', 'success'),
+      f('质量等级', 'D', 'danger'),
+      f('匹配状态', 'SUSPECTED'),
+      f('版本号', '1'),
+      f('生效时间', '2026-09-16 15:20'),
+      f('流程实例 ID', '1801')
+    ],
+    tables: [
+      t('来源系统编码映射（cmd_legacy_mapping）', ['来源系统', '来源编码', '来源名称', 'BU', '类型', '状态'], [
+        ['Cloud', 'HE-NEW-0231', '清视眼镜（High End 新建）', 'High End', 'LEGACY', '有效'],
+        ['DMS+', 'MS-CN-88421', '清视眼镜（Mainstream 门店）', 'Mainstream', 'LEGACY', '有效']
+      ])
+    ],
+    notes: ['批准后调用层级服务登记节点（hierarchy_type=UNASSIGNED 占位），归位由 Steward 在「客户层级」页完成。']
+  };
+
+  const publish: FlowStepDetailVO = {
+    nodeCode: 'PUBLISH',
+    summary: '按主数据发布契约，把 One ID 与编码映射下发到下游系统（DMS+ / SAP / Cloud）',
+    fields: [f('下发端点', 'DMS+ 门店同步 / SAP 主数据回写 / Cloud 平台客户接入')],
+    tables: [
+      t('集成通道运行记录（int_run，按通道最近 5 次）', ['运行编号', '端点', '目标系统', '方向', '状态', '成功/总数', '失败', '重试', '耗时(ms)', '开始时间'], [
+        ['RUN-20260918-0001', 'DMS+ 门店同步', 'DMS+', 'Outbound', 'SUCCESS', '120 / 120', '0', '1', '200000', '2026-09-18 02:00'],
+        ['RUN-20260918-0002', 'SAP 主数据回写', 'SAP', 'Outbound', 'FAILED', '0 / 1', '1', '3', '30000', '2026-09-18 08:25'],
+        ['RUN-20260918-0003', 'Cloud 平台客户接入', 'Cloud', 'Inbound', 'RETRYING', '41 / 45', '4', '2', '—', '2026-09-18 09:15']
+      ])
+    ],
+    notes: [
+      'int_run 为通道级运行记录（POC 未建客户级下发明细 int_message），用于说明下发通路的实时健康度。',
+      '下发失败不阻塞主流程，由 Retry / Resubmit 机制重投；可在「集成监控」页下钻失败原因并手动重试。'
+    ]
+  };
+
+  const trace: FlowStepDetailVO = {
+    nodeCode: 'TRACE',
+    summary: '按 One ID 串联的步骤执行总账共 6 条，任务状态 APPROVED',
+    fields: [
+      f('One ID', oneId),
+      f('任务编号', taskNo),
+      f('流程实例 ID', '1801'),
+      f('引擎状态镜像', '8'),
+      f('当前节点', '结束')
+    ],
+    tables: [
+      t('步骤执行日志（cmd_workflow_step_log）', ['序号', '类型', '节点', '动作', '操作人', '角色', '时间', '意见'], [
+        ['1', 'SUBMIT', '创建客户申请', '提交申请', '王视野', 'BU_STEWARD', '2026-09-15 10:12:00', '—'],
+        ['2', 'SYSTEM', '数据装配', '系统自动完成', '系统自动处理', 'SYS', '2026-09-15 10:12:01', '系统自动完成'],
+        ['3', 'SYSTEM', 'OCR 与智能补全', '营业执照识别', '系统自动处理', 'SYS', '2026-09-15 10:12:02', '营业执照识别完成，关键字段已抽取'],
+        ['4', 'SYSTEM', '技术与业务 DQ', '自动校验', '系统自动处理', 'SYS', '2026-09-15 10:12:03', 'DQ 质量分=52，1 Warning'],
+        ['5', 'SYSTEM', 'Duplicate Check', '匹配分派', '系统自动处理', 'SYS', '2026-09-15 10:12:04', '匹配结论=SUSPECTED'],
+        ['6', 'BUSINESS', 'BU Scope 初审', '审批通过', 'BU Steward', 'BU_STEWARD', '2026-09-16 09:30:00', 'Same-BU 证据充分，升级 Cross-BU']
+      ])
+    ],
+    notes: ['cmd_workflow_step_log 以 One ID 为追溯主键，是 CMD / Warm-Flow / 下游对账时对齐进度的唯一依据。']
+  };
+
+  const audit: FlowStepDetailVO = {
+    nodeCode: 'AUDIT',
+    summary: '该 One ID 相关审计事件共 3 条（含变更、合并与集成事件）',
+    fields: [],
+    tables: [
+      t('审计事件（audit_event，按 One ID）', ['事件编号', '类型', '事件', '操作人', '结果', '风险', '时间'], [
+        ['AE-20260915-0001', 'CREATE', '创建客户：上海优视眼镜有限公司', '王视野', 'SUCCESS', 'Medium', '2026-09-15 10:12'],
+        ['AE-20260916-0003', 'MERGE', '合并客户：成都明视眼镜 → GC-000128', 'GC Steward', 'SUCCESS', 'High', '2026-09-16 15:20'],
+        ['AE-20260917-0004', 'UPDATE', '变更客户经营地址', '张清', 'SUCCESS', 'Medium', '2026-09-17 11:05']
+      ])
+    ],
+    notes: ['Before / After 快照存 audit_event.before_json / after_json，审计数据只增不改（del_flag 逻辑保留），Auditor 只读。']
+  };
+
+  return [apply, input, ocr, dq, dup, buReview, gcReview, result, publish, trace, audit];
+};
+
+/**
  * 流程跟踪演示数据：按任务 detailType 推导当前节点，
  * 已完成步骤补系统轨迹时间，与后端实时推导口径一致。
  */
@@ -763,6 +1089,7 @@ export const buildMockFlowTrace = (taskNo: string, detailType = 'create'): FlowT
       note: '配置 DQ 规则、匹配规则和审批试验，参数配置不打断主流程'
     },
     steps,
+    stepDetails: buildMockStepDetails(taskNo, isGc),
     contextVars: [
       { name: 'record', value: `${taskNo} / 上海优视眼镜有限公司` },
       { name: 'dataset', value: 'customer' },
@@ -913,14 +1240,124 @@ export const mockCoverage: CoverageItemVO[] = [
   { topic: 'Master Data Extension', status: '已增强', evidence: '新建字段、Draft、发布并动态进入Business User表单' }
 ];
 
-/** ---------------------------------- 工作流配置 ---------------------------------- */
-export const mockWorkflow: WorkflowConfigVO = {
-  flowName: 'Customer Create & Governance',
-  steps: ['Business User Submit', 'BU Scope Initial Review', 'GC Scope Cross-BU Decision', 'Publish One ID'],
-  routeCondition: 'Match Scope = Cross-BU',
-  sla: '2 Business Days',
-  timeoutAction: 'Notify + Escalate',
-  notification: 'Email Notification Only'
+/** ---------------------------------- 工作流配置（场景级，平台管理 › Workflow › 配置） ---------------------------------- */
+
+/** 平台固定 / 可配置节点判定：与后端 CmdFlowSceneConfigServiceImpl 同一口径 */
+const MOCK_CONFIGURABLE_NODES = ['GC_REVIEW'];
+
+const MOCK_LOCKED_NODE_CONSTRAINT: Record<string, string> = {
+  APPLY: '业务入口：Business User 发起，平台固定不可删除',
+  INPUT: '申请数据录入与附件，平台固定不可删除',
+  OCR: '系统自动：OCR 与地址标准化，规则驱动不可删除',
+  DQ: '系统自动：DQ 打分，结果写入实例变量驱动路由，不可删除',
+  DUP: '系统自动：Duplicate Check（信用代码 + 经营地址为主依据），不可删除',
+  BU_REVIEW: '主干审批节点：BU Scope 初审，不可停用；命中条件与办理角色可配置',
+  RESULT: '系统自动：One ID 生成 / 关联，One ID 稳定不重新生成，不可删除',
+  PUBLISH: '发布下游与 Retry / Resubmit 由平台统一执行，不可删除',
+  TRACE: '运行追踪：任务状态与失败原因，平台固定',
+  AUDIT: '审计证据链：Who / When / What 与 Before / After，只读保留不可删除'
+};
+
+/** [id, nodeCode, nodeName, conditionExpr, assigneeValue, scopeType, multiMode, status, slaHours, priority, remark] */
+type MockRuleTuple = [number, string, string, string | null, string, string, string, string, number, number, string];
+
+/** 节点审批人规则种子：与后端 cmd_flow_node_rule 初始化数据逐行一致 */
+const MOCK_SCENE_RULE_TUPLES: Record<string, MockRuleTuple[]> = {
+  CUSTOMER_CREATE: [
+    [1001, 'bu_review', 'BU初审', 'risk_level != "High" && !cross_bu', 'BU_STEWARD', 'BU', 'ANY', '0', 48, 10, '本 BU 数据管家初审'],
+    [1002, 'gc_review', 'GC决策', 'risk_level == "High" || cross_bu', 'GC_STEWARD', 'GC', 'ANY', '0', 48, 20, '高风险或跨BU升级 GC Scope']
+  ],
+  CUSTOMER_CHANGE: [
+    [1003, 'bu_review', 'BU初审', '!is_key_change', 'BU_STEWARD', 'BU', 'ANY', '0', 48, 10, '非关键属性变更'],
+    [1004, 'gc_review', 'GC决策', 'is_key_change', 'GC_STEWARD', 'GC', 'ANY', '0', 48, 20, '关键属性变更需 GC 审批']
+  ],
+  DEACTIVATE: [
+    [1005, 'bu_review', 'BU初审', 'relation_check == "PASS"', 'BU_STEWARD', 'BU', 'ALL', '0', 72, 10, '无关联引用时 BU 审批即可'],
+    [1006, 'gc_review', 'GC决策', 'relation_check != "PASS"', 'GC_STEWARD', 'GC', 'ALL', '0', 72, 20, '存在关联引用需 GC 评估']
+  ],
+  HIER_RELATION: [
+    [1007, 'bu_review', 'BU审核', '!cross_bu', 'BU_STEWARD', 'BU', 'ANY', '0', 48, 10, '本 BU 层级关系'],
+    [1008, 'gc_review', 'GC审核', 'cross_bu', 'GC_STEWARD', 'GC', 'ANY', '0', 48, 20, '跨 BU 层级关系']
+  ],
+  MERGE: [[1009, 'gc_review', 'GC决策', null, 'GC_STEWARD', 'GC', 'ALL', '0', 24, 10, '合并统一由 GC Scope 决策']],
+  IMPORT_BATCH: [[1010, 'bu_review', 'BU确认', null, 'BU_STEWARD', 'BU', 'ANY', '0', 24, 10, '导入结果确认']]
+};
+
+/** 场景级超时升级规则种子（cmd_flow_scene.escalate_rule） */
+const MOCK_SCENE_ESCALATE: Record<string, string> = {
+  CUSTOMER_CREATE: 'TO_GC',
+  CUSTOMER_CHANGE: 'TO_GC',
+  DEACTIVATE: 'TO_GC',
+  HIER_RELATION: 'TO_GC',
+  IMPORT_BATCH: 'NOTIFY',
+  MERGE: 'TO_GC'
+};
+
+/**
+ * 构造场景级工作流配置（USE_MOCK 时使用；live 模式走后端 /cmd/flow/scene/{sceneCode}/config）
+ */
+export const buildMockSceneConfig = (sceneCode: string): FlowSceneConfigVO => {
+  const scene = mockFlowScenes.find(s => s.sceneCode === sceneCode) ?? mockFlowScenes[0];
+  const graph = buildMockSceneGraph(scene.sceneCode);
+
+  const nodes: FlowSceneNodeVO[] = graph.nodes.map(node => {
+    const configurable = MOCK_CONFIGURABLE_NODES.includes(node.nodeCode);
+    return {
+      phase: node.phase,
+      phaseName: node.phaseName,
+      lane: node.lane,
+      nodeCode: node.nodeCode,
+      nodeName: node.nodeName,
+      nodeType: node.nodeType === 3 ? 'GATEWAY' : node.nodeCode === 'OCR' || node.nodeCode === 'DQ' || node.nodeCode === 'RESULT' || node.nodeCode === 'TRACE' || node.nodeCode === 'AUDIT' ? 'AUTO' : 'MANUAL',
+      note: node.note,
+      locked: !configurable,
+      configurable,
+      constraint: configurable
+        ? '可配置：可停用（Mainstream 可只走 BU 初审）或调整升级命中条件（V6.1 待确认项）'
+        : MOCK_LOCKED_NODE_CONSTRAINT[node.nodeCode] ?? '平台固定节点，不可删除'
+    };
+  });
+
+  const rules: FlowSceneRuleVO[] = (MOCK_SCENE_RULE_TUPLES[scene.sceneCode] ?? []).map(
+    ([id, nodeCode, nodeName, conditionExpr, assigneeValue, scopeType, multiMode, status, slaHours, priority, remark]) => ({
+      id,
+      nodeCode,
+      nodeName,
+      conditionExpr: conditionExpr ?? undefined,
+      assigneeType: 'ROLE',
+      assigneeValue,
+      scopeType,
+      multiMode,
+      slaHours,
+      priority,
+      status,
+      remark,
+      locked: nodeCode === 'bu_review',
+      constraint:
+        nodeCode === 'bu_review'
+          ? '主干必经：BU Scope 初审不可停用；命中条件 / 办理角色 / 会签方式 / 节点 SLA 可调整'
+          : '可增删：停用后该场景不再走此节点（条件与节点 SLA 可调整）'
+    })
+  );
+
+  return {
+    sceneCode: scene.sceneCode,
+    sceneName: scene.sceneName,
+    flowCode: scene.flowCode,
+    flowName: scene.flowName,
+    slaHours: scene.slaHours,
+    escalateRule: MOCK_SCENE_ESCALATE[scene.sceneCode] ?? 'TO_GC',
+    startConditions: '',
+    formKey: `${scene.sceneCode.toLowerCase().replace(/_/g, '-')}-form`,
+    deployed: scene.deployed,
+    version: scene.version,
+    timeoutAction: 'Notify + Escalate',
+    notifyMode: 'Email Notification Only',
+    notifyTargets: ['申请人', '当前节点办理人'],
+    changeNote: '初始版本：平台初始化配置',
+    nodes,
+    rules
+  };
 };
 
 /** ---------------------------------- OCR ---------------------------------- */
@@ -955,8 +1392,8 @@ export const mockReEvaluateImpact: ReEvaluateImpactVO[] = [
   { label: '旧分数与规则版本', value: '保留' }
 ];
 
-/** ---------------------------------- 流程中心（所有 CMD 工作流） ---------------------------------- */
-/** 流程中心：全部 CMD 业务场景（来自 V6.1 总设计业务流，已部署到 Warm-Flow） */
+/** ---------------------------------- 工作流（所有 CMD 流程） ---------------------------------- */
+/** 工作流：全部 CMD 业务场景（来自 V6.1 总设计业务流，已部署到 Warm-Flow） */
 export const mockFlowScenes: FlowSceneVO[] = [
   { sceneCode: 'CUSTOMER_CREATE', sceneName: '客户创建', flowCode: 'cmd_customer_create', flowName: '客户创建审批流', slaHours: 48, deployed: true, definitionId: 1001, version: 1, nodeCount: 5 },
   { sceneCode: 'CUSTOMER_CHANGE', sceneName: '客户属性变更', flowCode: 'cmd_customer_change', flowName: '客户变更审批流', slaHours: 48, deployed: true, definitionId: 1002, version: 1, nodeCount: 5 },
@@ -966,7 +1403,7 @@ export const mockFlowScenes: FlowSceneVO[] = [
   { sceneCode: 'MERGE', sceneName: '客户合并', flowCode: 'cmd_customer_merge', flowName: '客户合并审批流', slaHours: 24, deployed: true, definitionId: 1006, version: 1, nodeCount: 5 }
 ];
 
-/** 流程中心：按场景构造演示用 BPMN 风格图形（节点均为待执行，定义视图） */
+/** 工作流：按场景构造演示用 BPMN 风格图形（节点均为待执行，定义视图） */
 export const buildMockSceneGraph = (sceneCode: string): FlowGraphVO => {
   const flowCode = mockFlowScenes.find(s => s.sceneCode === sceneCode)?.flowCode ?? 'cmd_customer_create';
   const definitionId = mockFlowScenes.find(s => s.sceneCode === sceneCode)?.definitionId ?? 1001;
@@ -1034,7 +1471,7 @@ export const buildMockSceneGraph = (sceneCode: string): FlowGraphVO => {
   return { definitionId, flowCode, lanes, nodes, edges };
 };
 
-/** 流程中心：流程实例记录（每一次执行过的工作流都留一条；USE_MOCK 时的演示数据） */
+/** 工作流：流程实例记录（每一次执行过的工作流都留一条；USE_MOCK 时的演示数据） */
 export const mockFlowInstances: FlowInstanceVO[] = [
   {
     id: 1001, taskNo: 'AP-20260915-0001', bizTitle: '苏州新视野眼镜有限公司', bizType: '客户创建',
@@ -1067,7 +1504,7 @@ export const mockFlowInstances: FlowInstanceVO[] = [
   }
 ];
 
-/** 流程中心：在场景图形上按实例进度点亮节点（Mock 版，与后端 applyStepStatus 口径一致） */
+/** 工作流：在场景图形上按实例进度点亮节点（Mock 版，与后端 applyStepStatus 口径一致） */
 export const buildMockInstanceGraph = (sceneCode: string, taskNo: string): FlowGraphVO => {
   const graph = buildMockSceneGraph(sceneCode);
   const inst = mockFlowInstances.find(i => i.taskNo === taskNo);

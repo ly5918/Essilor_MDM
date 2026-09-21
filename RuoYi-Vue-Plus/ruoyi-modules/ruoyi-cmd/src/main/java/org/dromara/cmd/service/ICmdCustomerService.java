@@ -1,6 +1,7 @@
 package org.dromara.cmd.service;
 
 import org.dromara.cmd.domain.bo.CmdCustomerBo;
+import org.dromara.cmd.domain.vo.CmdCustomerStatsVo;
 import org.dromara.cmd.domain.vo.CmdCustomerSubmitVo;
 import org.dromara.cmd.domain.vo.CmdCustomerVersionVo;
 import org.dromara.cmd.domain.vo.CmdCustomerVo;
@@ -36,6 +37,16 @@ public interface ICmdCustomerService {
      * @return 客户列表
      */
     List<CmdCustomerVo> selectCustomerList(CmdCustomerBo bo);
+
+    /**
+     * 按当前筛选条件统计客户指标概览（列表顶部指标带）
+     * <p>
+     * 与 {@link #selectPageCustomerList} 共用同一套查询条件，保证「指标」与「列表」口径一致。
+     *
+     * @param bo 查询条件（与列表相同）
+     * @return 指标概览（总数 / Active / 待处理 / 跨 BU / 疑似重复 / 平均质量分）
+     */
+    CmdCustomerStatsVo selectCustomerStats(CmdCustomerBo bo);
 
     /**
      * 按主键查询客户详情

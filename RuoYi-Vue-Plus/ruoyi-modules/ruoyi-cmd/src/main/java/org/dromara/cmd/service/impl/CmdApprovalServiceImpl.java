@@ -11,6 +11,7 @@ import org.dromara.cmd.common.CmdConstants;
 import org.dromara.cmd.domain.AuditEvent;
 import org.dromara.cmd.domain.CmdApprovalAction;
 import org.dromara.cmd.domain.CmdApprovalTask;
+import org.dromara.cmd.domain.CmdChangeRequest;
 import org.dromara.cmd.domain.CmdCustomer;
 import org.dromara.cmd.domain.CmdWorkflowStepLog;
 import org.dromara.cmd.domain.bo.ApprovalActionBo;
@@ -21,10 +22,13 @@ import org.dromara.cmd.domain.vo.CmdApprovalKpiVo;
 import org.dromara.cmd.domain.vo.CmdApprovalTaskVo;
 import org.dromara.cmd.mapper.CmdApprovalActionMapper;
 import org.dromara.cmd.mapper.CmdApprovalTaskMapper;
+import org.dromara.cmd.mapper.CmdChangeRequestMapper;
 import org.dromara.cmd.mapper.CmdCustomerMapper;
 import org.dromara.cmd.service.ICmdApprovalService;
 import org.dromara.cmd.service.ICmdAuditService;
 import org.dromara.cmd.service.ICmdFlowEngineService;
+import org.dromara.cmd.service.ICmdHierarchyService;
+import org.dromara.cmd.service.ICmdImportService;
 import org.dromara.cmd.service.ICmdWorkflowStepLogService;
 import org.dromara.common.core.domain.PageResult;
 import org.dromara.common.core.exception.ServiceException;
@@ -65,10 +69,13 @@ public class CmdApprovalServiceImpl implements ICmdApprovalService {
 
     private final CmdApprovalTaskMapper taskMapper;
     private final CmdApprovalActionMapper actionMapper;
+    private final CmdChangeRequestMapper changeRequestMapper;
     private final ICmdFlowEngineService flowEngineService;
     private final CmdCustomerMapper customerMapper;
     private final ICmdWorkflowStepLogService stepLogService;
     private final ICmdAuditService auditService;
+    private final ICmdHierarchyService hierarchyService;
+    private final ICmdImportService importService;
 
     /** 「通过类」动作：落到 Warm-Flow 引擎推进节点（升级 → GC 决策，批准 → 结束） */
     private static final Set<String> ADVANCE_ACTIONS = Set.of(
@@ -215,8 +222,18 @@ public class CmdApprovalServiceImpl implements ICmdApprovalService {
         // 5) 工作流步骤总账：记录本次人工决策（带客户 one_id，可跨页面 / 跨工作流关联）
         recordDecisionStep(task, actionType, bo.getOpinion(), effectiveToNode, beforeState, toStatus, operatorId, operatorName);
 
-        // 6) 回写客户主档：审批流转直接决定 Golden Record 的生效 / 驳回 / 退回
-        syncCustomerStatus(task.getOneId(), actionType, effectiveToNode, effectiveFlowStatus, operatorId, operatorName);
+        // 6) 结果回写：
+        //    变更 / 停用类申请（bizType=CHANGE）只回写「变更单状态」—— 主档的字段改写与状态切换
+        //    由变更服务在「生效」动作中显式执行，避免审批推进过程中提前改写 Golden Record；
+        //    批量导入确认（bizType=IMPORT）回写导入任务：批准为 New 行生成 One ID、拒绝置 Failed、退回回待复核；
+        //    其余场景（客户新建 / 治理复核 / 层级关系）保持「审批结果直接决定客户主档状态」的原有行为。
+        if (CmdConstants.BIZ_TYPE_CHANGE.equalsIgnoreCase(task.getBizType())) {
+            syncChangeRequestStatus(task.getBizId(), task.getOneId(), actionType, effectiveToNode);
+        } else if (CmdConstants.BIZ_TYPE_IMPORT.equalsIgnoreCase(task.getBizType())) {
+            importService.onApproval(task.getBizId(), actionType, operatorName);
+        } else {
+            syncCustomerStatus(task.getOneId(), actionType, effectiveToNode, effectiveFlowStatus, operatorId, operatorName);
+        }
 
         // 7) 审计留痕：审批决策（审计中心可按 One ID / 申请编号检索到本次决策）
         AuditEvent audit = new AuditEvent();
@@ -247,7 +264,8 @@ public class CmdApprovalServiceImpl implements ICmdApprovalService {
                                     String toNode, String fromStatus, String toStatus,
                                     Long operatorId, String operatorName) {
         CmdWorkflowStepLog step = new CmdWorkflowStepLog();
-        step.setOneId(task.getOneId());
+        // 批量导入确认（IMPORT）等批次级任务没有单一客户 one_id，置空串满足步骤日志非空约束
+        step.setOneId(StringUtils.defaultString(task.getOneId()));
         step.setTaskNo(task.getTaskNo());
         step.setFlowInstanceId(task.getFlowInstanceId());
         step.setStepType(CmdConstants.STEP_BUSINESS);
@@ -293,6 +311,62 @@ public class CmdApprovalServiceImpl implements ICmdApprovalService {
         }
         customerMapper.update(patch, new LambdaQueryWrapper<CmdCustomer>().eq(CmdCustomer::getOneId, oneId));
         log.info("[CMD][CUSTOMER] 主档状态已回写：oneId={} action={} -> status={}", oneId, actionType, custStatus);
+
+        // 6.1) 主数据 ↔ 客户层级联动：客户正式生效（成为 Golden Record）即自动登记「待归位」层级节点，
+        //      使其立刻出现在「客户层级 → 待归位主数据」中，等待 Data Steward 归位到 A3-A2-A1 树。
+        //      登记失败不能影响审批结果，因此单独兜底（registerNode 未开启独立事务，不会污染外层事务）。
+        if (CmdConstants.CUST_STATUS_ACTIVE.equals(custStatus)) {
+            try {
+                int registered = hierarchyService.registerNode(oneId);
+                if (registered > 0) {
+                    log.info("[CMD][HIER] 审批通过自动登记待归位层级节点：oneId={}", oneId);
+                }
+            } catch (Exception e) {
+                log.warn("[CMD][HIER] 自动登记层级节点失败（不影响审批结果）：oneId={} err={}", oneId, e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * 审批流转回写变更 / 停用申请状态
+     * <p>
+     * 变更与停用链路的主档改写（字段更新、状态置 Inactive）由变更服务在「生效」时执行，
+     * 此处只负责把审批结论同步到 cmd_change_request.status，保证变更页与审批中心的
+     * 状态口径一致，也避免审批到一半就改写 Golden Record。
+     *
+     * @param requestCode 变更申请编号（cmd_approval_task.biz_id）
+     * @param oneId       客户主数据标识（仅用于按 One ID 兜底匹配）
+     * @param actionType  审批动作
+     * @param toNode      流转后的节点（END 表示流程终止）
+     */
+    private void syncChangeRequestStatus(String requestCode, String oneId, String actionType, String toNode) {
+        String status = switch (actionType) {
+            case CmdConstants.ACTION_REJECT, CmdConstants.ACTION_EXCLUDE -> CmdConstants.CHG_STATUS_REJECTED;
+            case CmdConstants.ACTION_RETURN -> CmdConstants.CHG_STATUS_RETURNED;
+            case CmdConstants.ACTION_WITHDRAW -> CmdConstants.CHG_STATUS_CANCELLED;
+            // 通过类动作：走到 END 才算审批通过（可生效），否则仍在流程中（如升级后进入 GC 决策）
+            case CmdConstants.ACTION_APPROVE, CmdConstants.ACTION_MERGE,
+                 CmdConstants.ACTION_CREATE_NEW, CmdConstants.ACTION_LINK ->
+                "END".equals(toNode) ? CmdConstants.CHG_STATUS_APPROVED : CmdConstants.CHG_STATUS_PENDING;
+            default -> null;
+        };
+        if (status == null) {
+            return;
+        }
+        LambdaQueryWrapper<CmdChangeRequest> lqw = new LambdaQueryWrapper<CmdChangeRequest>()
+            .eq(CmdChangeRequest::getRequestCode, requestCode);
+        if (StringUtils.isBlank(requestCode)) {
+            lqw = new LambdaQueryWrapper<CmdChangeRequest>()
+                .eq(CmdChangeRequest::getOneId, oneId)
+                .ne(CmdChangeRequest::getStatus, CmdConstants.CHG_STATUS_EFFECTIVE)
+                .orderByDesc(CmdChangeRequest::getCreateTime)
+                .last("LIMIT 1");
+        }
+        CmdChangeRequest patch = new CmdChangeRequest();
+        patch.setStatus(status);
+        int rows = changeRequestMapper.update(patch, lqw);
+        log.info("[CMD][CHANGE] 审批结论已回写变更申请：code={} action={} -> status={} rows={}",
+            requestCode, actionType, status, rows);
     }
 
     /**
@@ -475,12 +549,16 @@ public class CmdApprovalServiceImpl implements ICmdApprovalService {
      * {@inheritDoc}
      */
     @Override
-    public List<CmdApprovalKpiVo> selectKpi(String scope) {
+    public List<CmdApprovalKpiVo> selectKpi(String scope, Long userId) {
         List<CmdApprovalKpiVo> list = new ArrayList<>();
-        list.add(kpi("待我处理", countBy(scope, CmdApprovalTask::getStatus, CmdConstants.APPR_STATUS_PENDING), "状态为待处理的任务"));
-        list.add(kpi("临近SLA", countBy(scope, CmdApprovalTask::getSlaState, CmdConstants.SLA_DUE_SOON), "SLA 即将到期"));
-        list.add(kpi("已超时", countBy(scope, CmdApprovalTask::getSlaState, CmdConstants.SLA_OVERDUE), "已超过 SLA 应完成时间"));
-        list.add(kpi("退回待补充", countBy(scope, CmdApprovalTask::getStatus, CmdConstants.APPR_STATUS_RETURNED), "已退回申请人，等待补充材料"));
+        // "待我处理"按当前用户过滤（assigneeId = userId），而非全局所有待处理任务
+        long myPending = userId != null
+            ? countBy(scope, userId, CmdApprovalTask::getStatus, CmdConstants.APPR_STATUS_PENDING)
+            : countBy(scope, null, CmdApprovalTask::getStatus, CmdConstants.APPR_STATUS_PENDING);
+        list.add(kpi("待我处理", myPending, "状态为待处理且分配给当前用户的任务"));
+        list.add(kpi("临近SLA", countBy(scope, null, CmdApprovalTask::getSlaState, CmdConstants.SLA_DUE_SOON), "SLA 即将到期"));
+        list.add(kpi("已超时", countBy(scope, null, CmdApprovalTask::getSlaState, CmdConstants.SLA_OVERDUE), "已超过 SLA 应完成时间"));
+        list.add(kpi("退回待补充", countBy(scope, null, CmdApprovalTask::getStatus, CmdConstants.APPR_STATUS_RETURNED), "已退回申请人，等待补充材料"));
         list.add(kpi("本周已处理", countFinishedThisWeek(scope), "本周一以来完成的任务"));
         return list;
     }
@@ -521,9 +599,25 @@ public class CmdApprovalServiceImpl implements ICmdApprovalService {
      * @return 任务数
      */
     private Long countBy(String scope, SFunction<CmdApprovalTask, ?> column, Object value) {
+        return countBy(scope, null, column, value);
+    }
+
+    /**
+     * 按单个字段统计任务数（带 Scope + userId 过滤）
+     *
+     * @param scope  审批范围
+     * @param userId 用户 ID（为空时不过滤）
+     * @param column 统计字段
+     * @param value  字段值
+     * @return 任务数
+     */
+    private Long countBy(String scope, Long userId, SFunction<CmdApprovalTask, ?> column, Object value) {
         LambdaQueryWrapper<CmdApprovalTask> lqw = Wrappers.lambdaQuery();
         if (StringUtils.isNotBlank(scope)) {
             lqw.eq(CmdApprovalTask::getScope, scope.toUpperCase());
+        }
+        if (userId != null) {
+            lqw.eq(CmdApprovalTask::getAssigneeId, userId);
         }
         lqw.eq(column, value);
         return taskMapper.selectCount(lqw);

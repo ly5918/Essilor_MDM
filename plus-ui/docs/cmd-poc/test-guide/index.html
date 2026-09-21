@@ -246,12 +246,12 @@
       <tr>
         <td><strong>Warm-Flow</strong></td>
         <td>底层工作流引擎。业务只保存 flow_instance_id / flow_task_id，实际流转由引擎驱动。</td>
-        <td>流程中心、泳道图弹窗</td>
+        <td>工作流、泳道图弹窗</td>
       </tr>
       <tr>
         <td><strong>泳道图 / 流程图</strong></td>
         <td>横轴是阶段（发起→数据准备→自动校验→匹配分流→人工治理→审批发布→追踪审计），纵轴是角色。</td>
-        <td>流程中心 → Graph 泳道图</td>
+        <td>工作流 → Graph 泳道图</td>
       </tr>
     </table>
 
@@ -289,7 +289,7 @@
     <p>在让业务用户操作之前，先以 <strong>Platform Admin</strong> 登录，确认以下“必要参数”已配置。这些参数决定了表单能加载哪些字段、DQ 怎么打分、匹配怎么判断、流程能不能启动。</p>
 
     <h3>3.1 检查入口</h3>
-    <p>Admin 登录后 → 左侧菜单【平台管理】。这里聚合了字段、值集、One ID、角色权限、DQ规则、匹配规则、流程配置、导入模板。</p>
+    <p>Admin 登录后 → 左侧菜单【平台管理】。这里聚合了字段、值集、One ID、角色权限、DQ规则、匹配规则、Workflow（工作流定义）、导入模板。</p>
     <div class="figure">
       <img src="shots/17-admin-platform.png" alt="平台管理">
       <div class="caption">图 2：平台管理入口——字段/值集、One ID、角色权限、DQ/匹配规则、模板/流程</div>
@@ -326,10 +326,14 @@
     </table>
 
     <h3>3.3 流程场景部署状态</h3>
-    <p>进入 Admin 的【流程中心】→【工作流定义】，应看到 6 条场景全部“已部署”。如果某条显示“未部署”，点右侧【部署】按钮。</p>
+    <p>进入 Admin 的【平台管理】→ 找到【Workflow】卡片 → 点【管理】，进入「工作流定义」页，应看到 6 条场景全部“已部署”。如果某条显示“未部署”，点右侧【部署】按钮。</p>
+    <p><b>再验一次「配置」：</b>任选一行点【配置】，弹窗应出现 4 个页签 <b>流程节点 / 路由条件 / SLA 与升级 / 版本与发布</b>。
+    「流程节点」页签上半部分是 11 个泳道节点蓝图，每行带 <b>平台固定</b>（红）或 <b>可配置</b>（绿）标签；
+    下半部分是可编辑的<b>节点路由规则</b>表（命中条件 / 办理角色 / 会签或签 / 节点 SLA / 启用开关）。
+    改动后点底部【保存配置】，提示成功后重新打开弹窗，改动仍在（配置写入平台配置表，不是纯前端演示）。</p>
     <div class="figure">
-      <img src="shots/19-admin-flowcenter.png" alt="流程中心定义">
-      <div class="caption">图 3：流程中心工作流定义——6 个 V6.1 业务场景全部已部署到 Warm-Flow</div>
+      <img src="shots/19-admin-flowcenter.png" alt="工作流定义">
+      <div class="caption">图 3：平台管理 → Workflow → 管理（工作流定义）——6 个 V6.1 业务场景全部已部署到 Warm-Flow，每行可「配置」或看「泳道图」</div>
     </div>
   </section>
 
@@ -466,7 +470,7 @@
       <div class="step-num">8</div>
       <div class="step-body">
         <strong>查看流程跟踪（泳道图实例视图）</strong><br>
-        在 BU 角色打开【流程中心】→【流程实例记录】，点第一条的【泳道图】。绿色节点表示已完成，蓝色节点是当前。此时应看到：创建客户申请 / 录入与附件 / OCR / DQ / Duplicate Check 已绿，BU Scope 初审为蓝色。
+        在 BU 角色打开【流程中心】→【已激活工作流】，找到这条（此时实例还没跑完）。点行内【流程跟踪】弹出窗口（点窗口里的【泳道图】则看实例视图）。绿色节点表示已完成，蓝色节点是当前。此时应看到：创建客户申请 / 录入与附件 / OCR / DQ / Duplicate Check 已绿，BU Scope 初审为蓝色。
         <div class="figure"><img src="shots/11-bu-flowtrace.png" alt="BU流程跟踪"><div class="caption">图 9：实例视图泳道图——已完成 5/11 步，BU 初审为当前节点</div></div>
       </div>
     </div>
@@ -540,7 +544,7 @@
       <tr>
         <td><b>批准</b></td>
         <td>意见随便填，如「BU初审通过」</td>
-        <td>① 任务状态变 APPROVED；② 「流程中心→流程实例记录→泳道图」：<b>11/11 步全绿</b>；③ 步骤日志最后一步 = 审批通过（END 节点）</td>
+        <td>① 任务状态变 APPROVED；② 「工作流→已完成的工作流」找到这条 → 点「查看流程跟踪」弹出：<b>11/11 步全绿</b>；③ 步骤日志最后一步 = 审批通过（END 节点）</td>
         <td><b>active（生效）</b>——成为正式 Golden Record</td>
       </tr>
       <tr>
@@ -609,8 +613,8 @@
         <td>按钮能弹出对话框</td>
       </tr>
       <tr>
-        <td>流程中心</td>
-        <td>工作流定义、流程实例记录</td>
+        <td>工作流</td>
+        <td>已激活工作流、已完成的工作流（流程跟踪为行内弹窗；工作流定义归 Admin 的「平台管理 → Workflow」）</td>
         <td>能查看泳道图</td>
       </tr>
     </table>
@@ -688,8 +692,8 @@
         <td>观察下游系统发布状态</td>
       </tr>
       <tr>
-        <td>流程中心</td>
-        <td>工作流定义 / 流程实例记录</td>
+        <td>工作流</td>
+        <td>已激活工作流 / 已完成的工作流（流程跟踪为弹窗）</td>
         <td>部署/查看泳道图</td>
       </tr>
     </table>
@@ -707,7 +711,7 @@
       <tr><td>审计中心</td><td>按业务类型过滤的审计事件列表</td></tr>
       <tr><td>客户只读查询</td><td>客户主档只读视图</td></tr>
       <tr><td>层级只读查询</td><td>层级关系只读视图</td></tr>
-      <tr><td>流程中心</td><td>流程实例与泳道图</td></tr>
+      <tr><td>工作流</td><td>流程实例与泳道图</td></tr>
     </table>
 
     <div class="figure"><img src="shots/20-audit-dash.png" alt="审计工作台"><div class="caption">图 21：Auditor 审计工作台</div></div>

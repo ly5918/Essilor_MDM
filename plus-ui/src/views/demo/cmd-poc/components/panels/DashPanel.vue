@@ -2,10 +2,10 @@
   <section class="page dash-page">
     <!-- BU / GC：治理工作台（原型 dashboard 特殊分支） -->
     <template v-if="roleKey === 'bu' || roleKey === 'gc'">
-      <div class="ap-kpis">
+      <div class="ap-kpis" v-loading="loadingKpi">
         <div v-for="item in apKpis" :key="item.label" class="ap-kpi">
           <b>{{ item.value }}</b>
-          <span>{{ item.label }}<br />Demo data</span>
+          <span>{{ item.label }}</span>
         </div>
       </div>
 
@@ -16,7 +16,7 @@
             <span class="card-title">{{ roleKey === 'gc' ? '高优先级治理决策' : '高优先级审批' }}</span>
           </template>
           <div class="panel-body">
-            <el-table :data="priorityTasks" class="mini-table" size="small" :show-header="true">
+            <el-table v-loading="loadingKpi" :data="priorityTasks" class="mini-table" size="small" :show-header="true">
               <el-table-column prop="taskId" label="任务" min-width="100" />
               <el-table-column prop="scene" label="场景" min-width="120" />
               <el-table-column prop="risk" label="风险" min-width="80">
@@ -42,7 +42,7 @@
               v-for="menu in governanceQuickMenus"
               :key="menu.id"
               class="quick-card"
-              @click="goMenu(menu.id)"
+              @click="goQuick(menu)"
             >
               <b>{{ menu.label }}</b>
               <p>进入{{ menu.label }}并继续下钻</p>
@@ -59,7 +59,7 @@
           <div class="stat-top"></div>
           <div class="stat-label">{{ item.label }}</div>
           <div class="stat-value">{{ item.value }}</div>
-          <div class="stat-foot">Demo data</div>
+          <div class="stat-foot">{{ item.hint }}</div>
         </el-card>
       </div>
 
@@ -73,7 +73,7 @@
               class="quick-card"
               shadow="hover"
               :body-style="{ padding: '18px' }"
-              @click="goMenu(menu.id)"
+              @click="goQuick(menu)"
             >
               <div class="q-ico" :style="{ background: role.color }">{{ menu.icon }}</div>
               <div class="q-title">{{ menu.label }}</div>
@@ -99,9 +99,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
-import { getDashboardStats, getTodo } from '@/api/demo/cmdPoc';
-import type { DashboardStatVO, TodoVO } from '@/api/demo/cmdPoc/types';
+import { computed, onMounted, ref, watch } from 'vue';
+import { getDashboardStats, getTodo, getApprovalKpis, listApprovalTasks } from '@/api/demo/cmdPoc';
+import type { DashboardStatVO, PageId, TodoVO, ApprovalKpiVO, ApprovalTaskVO } from '@/api/demo/cmdPoc/types';
 import type { PocMenu } from '../../constants/roles';
 import { useCmdPoc } from '../../composables/useCmdPoc';
 
@@ -120,31 +120,49 @@ const { role, roleKey, goMenu } = useCmdPoc();
 const stats = ref<DashboardStatVO[]>([]);
 const todo = ref<TodoVO>({ count: 0, label: '待处理任务', hint: '点击菜单进入详情', tag: '待处理' });
 
-/** BU / GC 5 张 KPI 卡片（对齐原型 dashboard 特殊分支） */
-const apKpis = computed(() => {
-  const isGc = roleKey.value === 'gc';
-  return [
-    { value: isGc ? 5 : 8, label: isGc ? '待我决策' : '待我审批' },
-    { value: 3, label: '临近SLA' },
-    { value: 1, label: '已超时' },
-    { value: 2, label: '退回待补充' },
-    { value: 18, label: '本周已处理' }
-  ];
-});
+/** BU / GC 5 张 KPI 卡片 — 从后端 /cmd/approval/kpi 实时获取 */
+const apKpis = ref<{ value: number; label: string }[]>([]);
+const priorityTasks = ref<PriorityTask[]>([]);
+const loadingKpi = ref(false);
 
-/** BU / GC 高优先级审批/治理决策表格数据 */
-const priorityTasks = computed<PriorityTask[]>(() => {
-  if (roleKey.value === 'gc') {
-    return [
-      { taskId: 'GC-DEC-0003', scene: 'Cross-BU Duplicate', risk: 'High', sla: '4h' },
-      { taskId: 'HIER-GC-0003', scene: '跨BU层级', risk: 'Medium', sla: '8h' }
-    ];
+/** BU / GC 角色的 scope 参数 */
+const scope = computed<'bu' | 'gc'>(() => (roleKey.value === 'gc' ? 'gc' : 'bu'));
+
+/** 将审批任务 VO 映射为工作台高优先级任务行 */
+function toPriorityTask(t: ApprovalTaskVO): PriorityTask {
+  return {
+    taskId: t.taskId,
+    scene: t.taskType,
+    risk: t.risk,
+    sla: t.sla
+  };
+}
+
+/** 加载 BU / GC 治理工作台数据（KPI + 高优先级任务） */
+const loadGovernanceData = async () => {
+  if (roleKey.value !== 'bu' && roleKey.value !== 'gc') return;
+  loadingKpi.value = true;
+  try {
+    const [kpis, tasks] = await Promise.all([
+      getApprovalKpis(scope.value),
+      listApprovalTasks(scope.value, 1, 5)
+    ]);
+    apKpis.value = kpis.map(k => ({ value: Number(k.value), label: k.label }));
+    // 取前 5 条待办作为高优先级任务展示
+    priorityTasks.value = (tasks.rows ?? []).slice(0, 5).map(toPriorityTask);
+  } finally {
+    loadingKpi.value = false;
   }
-  return [
-    { taskId: 'REQ-0182', scene: '客户创建', risk: 'High', sla: '3h' },
-    { taskId: 'HIER-BU-0018', scene: 'A1-A2层级申请', risk: 'Medium', sla: '8h' }
-  ];
-});
+};
+
+/**
+ * 快捷入口点击：叶子菜单直接跳转；二级菜单容器（如「工作流」）跳到其第一个子页。
+ * 容器 id 是 `sub-` 前缀伪 id，本身不可路由，因此这里必须取子页面。
+ */
+const goQuick = (menu: PocMenu) => {
+  const target = menu.children?.length ? menu.children[0] : menu;
+  goMenu(target.id as PageId);
+};
 
 /** 通用工作台快捷入口：排除工作台本身 */
 const quickMenus = computed<PocMenu[]>(() => role.value.menus.filter(menu => menu.id !== 'dash'));
@@ -154,7 +172,11 @@ const governanceQuickMenus = computed<PocMenu[]>(() =>
   role.value.menus.filter(menu => menu.id !== 'dash' && menu.id !== 'approval')
 );
 
+/** BU / GC 切换时重新拉取治理数据 */
+watch(scope, () => loadGovernanceData());
+
 onMounted(async () => {
   [stats.value, todo.value] = await Promise.all([getDashboardStats(), getTodo()]);
+  await loadGovernanceData();
 });
 </script>

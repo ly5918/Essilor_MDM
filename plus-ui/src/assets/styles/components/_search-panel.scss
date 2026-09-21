@@ -1,11 +1,15 @@
 /* Search panel, table actions, and responsive panel shells. */
 
 // --- 表格工具列链接按钮（全局） ---
+// 说明：该样式只面向「纯图标」的 link 按钮（RuoYi 各列表操作列均为 icon-only + tooltip）。
+// 这里刻意「不写死 width」——早期写死 width: 28px 时，任何带文字的 link 按钮
+// （如 CMD POC 工作流定义页的「配置 / 泳道图」）会被压成 28px，文字溢出并与相邻按钮叠印。
+// 改为 min-width 28px + 少量左右内边距：图标按钮仍为 28×28 的圆角底，
+// 文字按钮按内容自适应宽度。
 .data-table .el-button.is-link {
-  width: 28px !important;
   height: 28px !important;
   min-width: 28px !important;
-  padding: 0 !important;
+  padding: 0 5px !important;
   border-radius: var(--app-radius-md) !important;
   background: var(--app-accent-soft) !important;
 }

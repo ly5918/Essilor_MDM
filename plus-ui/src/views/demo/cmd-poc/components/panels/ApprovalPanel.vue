@@ -4,7 +4,7 @@
     <div class="ap-kpis">
       <div v-for="kpi in kpis" :key="kpi.label" class="ap-kpi">
         <b>{{ kpi.value }}</b>
-        <span>{{ kpi.label }} · Demo data</span>
+        <span>{{ kpi.label }}</span>
       </div>
     </div>
 
@@ -65,6 +65,19 @@
               </template>
             </el-table-column>
           </el-table>
+
+          <!-- 分页 -->
+          <div class="pagination-container" v-if="total > 0">
+            <el-pagination
+              v-model:current-page="pageNum"
+              v-model:page-size="pageSize"
+              :page-sizes="[10, 20, 50, 100]"
+              :total="total"
+              layout="total, sizes, prev, pager, next, jumper"
+              @size-change="loadData"
+              @current-change="loadData"
+            />
+          </div>
         </div>
 
         <!-- 右侧详情 -->
@@ -108,7 +121,7 @@
               <div class="ap-evidence">{{ detail.evidence }}</div>
 
               <h4>审批意见</h4>
-              <el-input v-model="comment" type="textarea" :rows="3" placeholder="请输入审批意见或升级原因" />
+              <el-input v-model="comment" type="textarea" :rows="2" placeholder="请输入审批意见或升级原因" />
 
               <div class="ap-actions">
                 <el-button
@@ -146,7 +159,7 @@ import { useCmdPoc } from '../../composables/useCmdPoc';
 
 defineOptions({ name: 'CmdPocApprovalPanel' });
 
-const { roleKey, openDialog } = useCmdPoc();
+const { roleKey, openDialog, refreshBadge } = useCmdPoc();
 /** 仅 BU / GC 拥有审批菜单；其余角色理论上不会进入本面板 */
 const isGc = computed(() => roleKey.value === 'gc');
 const scope = computed<'bu' | 'gc'>(() => (isGc.value ? 'gc' : 'bu'));
@@ -184,6 +197,9 @@ const selectedRow = ref<ApprovalTaskVO | null>(null);
 const detail = ref<ApprovalTaskDetailVO | null>(null);
 const comment = ref('');
 const submitting = ref(false);
+const pageNum = ref(1);
+const pageSize = ref(10);
+const total = ref(0);
 
 const filter = reactive({ taskType: '', bu: '', sla: '', risk: '', keyword: '' });
 
@@ -222,6 +238,7 @@ const visibleTasks = computed<ApprovalTaskVO[]>(() => {
 });
 
 const onTabChange = () => {
+  pageNum.value = 1;
   selectedId.value = '';
   selectedRow.value = null;
   detail.value = null;
@@ -260,6 +277,7 @@ const onAction = async (act: { key: string; label: string; type?: string }) => {
     detail.value = null;
     selectedId.value = '';
     await loadData();
+    refreshBadge();
   } finally {
     submitting.value = false;
   }
@@ -270,12 +288,13 @@ const loadData = async () => {
   try {
     const [k, t, r, d] = await Promise.all([
       getApprovalKpis(scope.value),
-      listApprovalTasks(scope.value),
+      listApprovalTasks(scope.value, pageNum.value, pageSize.value),
       getApprovalReturned(scope.value),
       getApprovalDone(scope.value)
     ]);
     kpis.value = k;
-    allTasks.value = t;
+    allTasks.value = t.rows;
+    total.value = t.total;
     returnedTasks.value = r;
     doneTasks.value = d;
   } finally {

@@ -14,6 +14,7 @@ import org.dromara.cmd.domain.CmdCustomer;
 import org.dromara.cmd.domain.CmdCustomerVersion;
 import org.dromara.cmd.domain.CmdWorkflowStepLog;
 import org.dromara.cmd.domain.bo.CmdCustomerBo;
+import org.dromara.cmd.domain.vo.CmdCustomerStatsVo;
 import org.dromara.cmd.domain.vo.CmdCustomerSubmitVo;
 import org.dromara.cmd.domain.vo.CmdCustomerVersionVo;
 import org.dromara.cmd.domain.vo.CmdCustomerVo;
@@ -110,6 +111,52 @@ public class CmdCustomerServiceImpl implements ICmdCustomerService {
     @Override
     public List<CmdCustomerVo> selectCustomerList(CmdCustomerBo bo) {
         return customerMapper.selectVoList(buildQueryWrapper(bo));
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public CmdCustomerStatsVo selectCustomerStats(CmdCustomerBo bo) {
+        // 与列表共用同一套条件，保证「指标带」与「列表」口径完全一致（不会出现上面 26 下面 10）。
+        // POC 取舍：按条件取回明细后在内存统计；数据量上万后应改为 SQL 聚合（count / sum + case when）。
+        List<CmdCustomerVo> list = customerMapper.selectVoList(buildQueryWrapper(bo));
+        long activeCount = 0L;
+        long pendingCount = 0L;
+        long crossBuCount = 0L;
+        long duplicateCount = 0L;
+        long scoredCount = 0L;
+        BigDecimal dqSum = BigDecimal.ZERO;
+        for (CmdCustomerVo row : list) {
+            if (CmdConstants.CUST_STATUS_ACTIVE.equals(row.getStatus())) {
+                activeCount++;
+            }
+            // 待处理口径：待审批（pending）+ 退回待补充（returned）
+            if (CmdConstants.CUST_STATUS_PENDING.equals(row.getStatus())
+                || CmdConstants.CUST_STATUS_RETURNED.equals(row.getStatus())) {
+                pendingCount++;
+            }
+            if (CmdConstants.YES.equals(row.getGcScopeFlag())) {
+                crossBuCount++;
+            }
+            if (CmdConstants.YES.equals(row.getDuplicateFlag())) {
+                duplicateCount++;
+            }
+            BigDecimal dq = row.getDqScore();
+            // 0 分视为「尚未跑 DQ」，不计入平均分分母，避免拉低整体质量分
+            if (dq != null && dq.compareTo(BigDecimal.ZERO) > 0) {
+                dqSum = dqSum.add(dq);
+                scoredCount++;
+            }
+        }
+        CmdCustomerStatsVo stats = new CmdCustomerStatsVo();
+        stats.setTotal((long) list.size());
+        stats.setActiveCount(activeCount);
+        stats.setPendingCount(pendingCount);
+        stats.setCrossBuCount(crossBuCount);
+        stats.setDuplicateCount(duplicateCount);
+        stats.setAvgDqScore(scoredCount == 0L ? 0L : Math.round(dqSum.doubleValue() / scoredCount));
+        return stats;
     }
 
     /**
@@ -600,18 +647,23 @@ public class CmdCustomerServiceImpl implements ICmdCustomerService {
             .eqIfText(CmdCustomer::getOneId, bo.getOneId())
             .eqIfText(CmdCustomer::getCreditCode, bo.getCreditCode())
             .eqIfText(CmdCustomer::getBuScope, bo.getBuScope())
+            .eqIfText(CmdCustomer::getCustomerType, bo.getCustomerType())
+            .eqIfText(CmdCustomer::getProductLine, bo.getProductLine())
             .eqIfText(CmdCustomer::getStatus, bo.getStatus())
             .eqIfText(CmdCustomer::getMatchState, bo.getMatchState())
             .eqIfText(CmdCustomer::getSourceSystem, bo.getSourceSystem())
             .betweenParams(CmdCustomer::getCreateTime, bo.getParams(), "beginTime", "endTime")
             .orderByDesc(CmdCustomer::getCreateTime)
             .build();
-        // 贯通查询：客户名称 / One ID / 统一社会信用代码 三列模糊匹配
+        // 贯通查询：客户名称（中/英/简称）/ One ID / 统一社会信用代码 / Payer 编码 模糊匹配
         if (StringUtils.isNotBlank(bo.getKeyword())) {
             String kw = bo.getKeyword().trim();
             lqw.and(w -> w.like(CmdCustomer::getLegalName, kw)
+                .or().like(CmdCustomer::getLegalNameEn, kw)
+                .or().like(CmdCustomer::getShortName, kw)
                 .or().like(CmdCustomer::getOneId, kw)
-                .or().like(CmdCustomer::getCreditCode, kw));
+                .or().like(CmdCustomer::getCreditCode, kw)
+                .or().like(CmdCustomer::getPayerId, kw));
         }
         return lqw;
     }

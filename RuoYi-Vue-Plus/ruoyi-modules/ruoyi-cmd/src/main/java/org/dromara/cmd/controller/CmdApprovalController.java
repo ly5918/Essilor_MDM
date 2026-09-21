@@ -106,7 +106,7 @@ public class CmdApprovalController extends BaseController {
      */
     @GetMapping("/kpi")
     public R<List<CmdApprovalKpiVo>> kpi(@RequestParam(required = false) String scope) {
-        return R.ok(approvalService.selectKpi(scope));
+        return R.ok(approvalService.selectKpi(scope, LoginHelper.getUserId()));
     }
 
     /**

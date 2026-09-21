@@ -322,6 +322,23 @@
   .page {
     padding-bottom: 8px;
   }
+
+  /* 列表页统一版式：分页条固定在内容区底部，不随列表长短上下浮动。
+     表格高度由 useListTableHeight 按「内容区底部 - 表格顶部 - 预留」算出来
+     （表格内部滚动），因此所有列表页的分页条都落在同一个位置上。 */
+  .page.list-page {
+    .pagination-container {
+      margin-top: 0;
+      padding: 10px 16px 2px;
+      border-top: 1px solid var(--g-divider);
+      background: var(--g-card);
+    }
+
+    /* 分页条始终贴内容区底部，避免卡片留白把分页推到半空 */
+    .pagination-container .el-pagination {
+      float: none;
+    }
+  }
   .page-actions {
     display: flex;
     gap: 8px;
@@ -378,15 +395,25 @@
 /* 通用数据表：表头浅灰底 + 紧凑行高 */
 .cmd-poc,
 .poc-dialog {
+  /* 弹窗尽量占满视口高度：默认 15vh 顶部间距 + 全局 body max-height(90vh-111px)
+     会把内容挤出不必要的滚动条，这里对 POC 弹窗放开并紧凑化。 */
+  --el-dialog-margin-top: 2vh;
+
+  .el-dialog__body {
+    max-height: calc(100vh - 150px) !important;
+    padding: 12px 20px 10px !important;
+  }
+
   .data-table {
     font-size: 13px;
     th.el-table__cell {
       background: #f0f4f8 !important;
       color: #47576b;
       font-weight: 600;
+      padding: 4px 0;
     }
     td.el-table__cell {
-      padding: 8px 0;
+      padding: 4px 0;
     }
   }
 }
@@ -840,27 +867,27 @@
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 12px;
-    margin-bottom: 12px;
+    margin-bottom: 6px;
   }
   .ap-kpi {
     background: var(--g-card);
     border: 1px solid var(--g-divider);
     border-left: 3px solid var(--role-color, var(--el-color-primary));
     border-radius: 8px;
-    padding: 14px 16px;
+    padding: 10px 12px;
     b {
       display: block;
-      font-size: 26px;
+      font-size: 22px;
       font-weight: 700;
       color: var(--g-text);
       line-height: 1.2;
-      margin-bottom: 6px;
+      margin-bottom: 4px;
     }
     span {
       display: block;
       font-size: 12px;
       color: var(--g-text2);
-      line-height: 1.5;
+      line-height: 1.35;
     }
   }
   .grid2 {
@@ -927,11 +954,11 @@
     }
   }
   .ap-tabs {
-    margin-bottom: 4px;
+    margin-bottom: 2px;
   }
   .ap-filter {
-    margin: 4px 0 12px;
-    padding: 10px 0;
+    margin: 2px 0 8px;
+    padding: 6px 0;
     border-top: 1px dashed var(--g-divider);
   }
   .ap-layout {
@@ -944,28 +971,27 @@
     font-size: 13px;
     font-weight: 700;
     color: var(--g-text);
-    margin-bottom: 10px;
+    margin-bottom: 4px;
   }
   .ap-detail {
     background: var(--g-card);
     border: 1px solid var(--g-divider);
     border-radius: 8px;
-    padding: 16px;
+    padding: 10px 12px;
     position: sticky;
     top: 0;
-    min-height: 320px;
   }
   .ap-detail-head {
     border-bottom: 1px solid var(--g-divider);
-    padding-bottom: 12px;
-    margin-bottom: 12px;
+    padding-bottom: 6px;
+    margin-bottom: 6px;
     b {
       font-size: 13px;
       color: var(--g-text2);
     }
     .ap-detail-name {
-      margin: 4px 0 8px;
-      font-size: 17px;
+      margin: 4px 0 6px;
+      font-size: 16px;
       font-weight: 700;
       color: var(--g-text);
     }
@@ -975,16 +1001,16 @@
   }
   .ap-detail-body {
     h4 {
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 700;
       color: var(--g-text);
-      margin: 14px 0 8px;
+      margin: 8px 0 4px;
     }
     .h-kv {
       display: grid;
       grid-template-columns: 88px 1fr;
-      gap: 8px 12px;
-      font-size: 13px;
+      gap: 6px 12px;
+      font-size: 12px;
       > div:nth-child(odd) {
         color: var(--g-text2);
       }
@@ -995,13 +1021,13 @@
     .ap-check {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 10px;
+      gap: 6px;
       div {
         background: var(--g-content);
         border: 1px solid var(--g-divider);
         border-radius: 8px;
-        padding: 10px 12px;
-        font-size: 13px;
+        padding: 6px 8px;
+        font-size: 12px;
         color: var(--g-text);
       }
     }
@@ -1019,16 +1045,16 @@
       background: #f7fafc;
       border: 1px solid var(--g-divider);
       border-radius: 8px;
-      padding: 10px 12px;
-      font-size: 13px;
+      padding: 6px 8px;
+      font-size: 12px;
       color: var(--g-text);
-      line-height: 1.6;
+      line-height: 1.45;
     }
     .ap-actions {
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
-      margin-top: 14px;
+      margin-top: 8px;
     }
   }
 }

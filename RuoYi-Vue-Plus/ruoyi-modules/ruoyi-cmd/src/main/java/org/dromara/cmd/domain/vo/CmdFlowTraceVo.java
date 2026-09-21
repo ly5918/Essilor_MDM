@@ -105,6 +105,14 @@ public class CmdFlowTraceVo implements Serializable {
     /** 主流程步骤（按泳道图阶段顺序） */
     private List<StepVo> steps = new ArrayList<>();
 
+    /**
+     * 分步骤明细：与 {@link #steps} 按 nodeCode 一一对应。
+     * 「流程跟踪」里点开某个泳道节点后，在其下方动态展示该节点的相关业务内容
+     * （录入字段与附件 / OCR 识别结果 / DQ 检查项 / 匹配候选 / 审批动作 / 编码映射 /
+     * 集成下发 / 步骤日志 / 审计事件），全部来自真实业务表。
+     */
+    private List<StepDetailVo> stepDetails = new ArrayList<>();
+
     /** 流程上下文变量（Data context state） */
     private List<VarVo> contextVars = new ArrayList<>();
 
@@ -278,6 +286,81 @@ public class CmdFlowTraceVo implements Serializable {
 
         /** 说明 */
         private String note;
+    }
+
+    /**
+     * 分步骤明细（点击泳道节点后，在步骤条下方动态展示该节点的相关内容）
+     * <p>
+     * 与 {@link StepVo#getNodeCode()} 一一对应；前端点击步骤即切换展示对象，
+     * 因此这里不区分「节点类型」，统一用「摘要 + 字段 + 表格 + 提示」四段式，
+     * 由后端决定每个节点该出现哪些区块（节点语义留在服务端，前端只负责渲染）。
+     */
+    @Data
+    public static class StepDetailVo implements Serializable {
+
+        @Serial
+        private static final long serialVersionUID = 1L;
+
+        /** 节点编码（与 StepVo.nodeCode 一致） */
+        private String nodeCode;
+
+        /** 节点名称 */
+        private String nodeName;
+
+        /** 阶段名称 */
+        private String phaseName;
+
+        /** 泳道（角色） */
+        private String lane;
+
+        /** 节点执行状态（COMPLETED / CURRENT / PENDING / TERMINATED） */
+        private String status;
+
+        /** 一句话结论（该节点发生了什么） */
+        private String summary;
+
+        /** 关键字段（键值对） */
+        private List<FieldVo> fields = new ArrayList<>();
+
+        /** 明细表格（可为多张） */
+        private List<TableVo> tables = new ArrayList<>();
+
+        /** 提示 / 口径说明（如数据来源、POC 边界） */
+        private List<String> notes = new ArrayList<>();
+    }
+
+    /** 明细字段（键值对，可选语义色） */
+    @Data
+    public static class FieldVo implements Serializable {
+
+        @Serial
+        private static final long serialVersionUID = 1L;
+
+        /** 字段名 */
+        private String label;
+
+        /** 字段值（空值由服务端统一落成 '—'） */
+        private String value;
+
+        /** 语义色（success / warning / danger / info，空表示普通文本） */
+        private String tone;
+    }
+
+    /** 明细表格 */
+    @Data
+    public static class TableVo implements Serializable {
+
+        @Serial
+        private static final long serialVersionUID = 1L;
+
+        /** 表格标题 */
+        private String title;
+
+        /** 表头 */
+        private List<String> columns = new ArrayList<>();
+
+        /** 数据行（与表头列序一致） */
+        private List<List<String>> rows = new ArrayList<>();
     }
 
     /**

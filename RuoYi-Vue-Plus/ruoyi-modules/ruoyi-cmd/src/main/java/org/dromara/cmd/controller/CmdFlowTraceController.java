@@ -4,10 +4,13 @@ import cn.dev33.satoken.annotation.SaCheckLogin;
 import lombok.RequiredArgsConstructor;
 import org.dromara.cmd.domain.bo.ApprovalActionBo;
 import org.dromara.cmd.domain.bo.CmdFlowInstanceBo;
+import org.dromara.cmd.domain.bo.CmdFlowSceneConfigBo;
 import org.dromara.cmd.domain.vo.CmdFlowInstanceVo;
+import org.dromara.cmd.domain.vo.CmdFlowSceneConfigVo;
 import org.dromara.cmd.domain.vo.CmdFlowSceneVO;
 import org.dromara.cmd.domain.vo.CmdFlowTraceVo;
 import org.dromara.cmd.service.ICmdFlowEngineService;
+import org.dromara.cmd.service.ICmdFlowSceneConfigService;
 import org.dromara.cmd.service.ICmdFlowTraceService;
 import org.dromara.common.core.domain.PageResult;
 import org.dromara.common.core.domain.R;
@@ -18,6 +21,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -40,6 +44,7 @@ public class CmdFlowTraceController extends BaseController {
 
     private final ICmdFlowTraceService flowTraceService;
     private final ICmdFlowEngineService flowEngineService;
+    private final ICmdFlowSceneConfigService flowSceneConfigService;
 
     /**
      * 按任务编号查询流程跟踪视图
@@ -135,5 +140,31 @@ public class CmdFlowTraceController extends BaseController {
     @GetMapping("/instances")
     public R<PageResult<CmdFlowInstanceVo>> instances(CmdFlowInstanceBo bo, PageQuery pageQuery) {
         return R.ok(flowTraceService.listInstances(bo, pageQuery));
+    }
+
+    /**
+     * 查询场景的工作流配置（平台管理 › Workflow › 工作流定义 › 某一行「配置」）
+     * <p>
+     * 对应 V6.1 总设计第 16 页「Workflow配置」：流程节点、路由条件、SLA、超时升级和邮件通知。
+     * 返回泳道节点蓝图（标注平台固定 / 可配置）+ 可增删的节点审批人规则。
+     *
+     * @param sceneCode 场景编码（CUSTOMER_CREATE / CUSTOMER_CHANGE / DEACTIVATE / HIER_RELATION / IMPORT_BATCH / MERGE）
+     * @return 场景工作流配置
+     */
+    @GetMapping("/scene/{sceneCode}/config")
+    public R<CmdFlowSceneConfigVo> sceneConfig(@PathVariable String sceneCode) {
+        return R.ok(flowSceneConfigService.selectConfig(sceneCode));
+    }
+
+    /**
+     * 保存场景的工作流配置（只更新场景级可配置项与节点规则，平台固定项不可改）
+     *
+     * @param sceneCode 场景编码
+     * @param bo        配置入参（节点规则 id 为空 = 新增）
+     * @return 操作结果
+     */
+    @PutMapping("/scene/{sceneCode}/config")
+    public R<Void> updateSceneConfig(@PathVariable String sceneCode, @RequestBody CmdFlowSceneConfigBo bo) {
+        return toAjax(flowSceneConfigService.updateConfig(sceneCode, bo));
     }
 }

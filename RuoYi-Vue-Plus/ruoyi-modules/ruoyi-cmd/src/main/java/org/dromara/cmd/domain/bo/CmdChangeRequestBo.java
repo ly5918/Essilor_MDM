@@ -8,6 +8,7 @@ import org.dromara.cmd.domain.CmdChangeRequest;
 import java.io.Serial;
 import java.io.Serializable;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 变更与停用业务对象（新增 / 查询入参）cmd_change_request
@@ -61,4 +62,13 @@ public class CmdChangeRequestBo implements Serializable {
 
     /** 备注 */
     private String remark;
+
+    /**
+     * 字段级变更明细（变更场景必填）
+     * <p>
+     * 前端「发起属性变更」弹窗逐行维护「字段 / 新值」；服务端据此比对主档当前值
+     * 补全 Before 值并落入 cmd_change_diff，形成 Before / After 证据链。
+     * 停用场景可不传（停用是状态切换，不是字段改写）。
+     */
+    private List<CmdChangeDiffBo> diffs;
 }

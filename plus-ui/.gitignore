@@ -35,4 +35,4 @@ components.d.ts
 .workbuddy/
 
 # 临时文件
-_tmp_*/
+_tmp_*

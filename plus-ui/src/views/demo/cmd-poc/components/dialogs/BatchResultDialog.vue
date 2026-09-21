@@ -6,7 +6,7 @@
         :key="item.label"
         class="kpi clickable"
         :class="{ disabled: item.value === 0 }"
-        @click="item.value > 0 && showDetails(item.label)"
+        @click="item.value > 0 && selectType(item.type)"
       >
         <b>{{ item.value }}</b>
         <span>{{ item.label }} · 点击查看明细</span>
@@ -14,32 +14,74 @@
     </div>
 
     <el-table border :data="result.routes" class="data-table">
-      <el-table-column label="结果" prop="result" min-width="120" />
-      <el-table-column label="处理方式" prop="handling" min-width="200" />
-      <el-table-column label="责任角色" prop="owner" min-width="160" />
-      <el-table-column label="明细" min-width="140" align="center">
+      <el-table-column label="结果" prop="result" min-width="110" />
+      <el-table-column label="处理方式" prop="handling" min-width="190" />
+      <el-table-column label="责任角色" prop="owner" min-width="140" />
+      <el-table-column label="明细" min-width="120" align="center">
         <template #default="{ row }">
-          <el-button link type="primary" @click="showDetails(row.result)">{{ row.detail }}</el-button>
+          <el-button link type="primary" @click="selectType(routeTypeOf(row.result))">{{ row.detail }}</el-button>
         </template>
       </el-table-column>
     </el-table>
 
-    <div class="impact">统计卡片数字及表格中的记录数均支持点击，并打开对应记录明细。</div>
+    <!-- 分流明细下钻（真实行明细：cmd_import_row） -->
+    <div class="detail-block">
+      <div class="detail-head">
+        <span class="detail-title">{{ activeLabel }} 明细（{{ rowTotal }} 条）</span>
+        <el-pagination
+          v-if="rowTotal > rowPageSize"
+          v-model:current-page="rowPageNum"
+          :page-size="rowPageSize"
+          :total="rowTotal"
+          layout="prev, pager, next"
+          small
+          @current-change="loadRows"
+        />
+      </div>
+      <el-table v-loading="rowLoading" border :data="rows" class="data-table" max-height="320" size="small">
+        <el-table-column label="行号" prop="rowNo" width="70" align="center" />
+        <el-table-column label="客户名称" prop="legalName" min-width="180" show-overflow-tooltip />
+        <el-table-column label="信用代码" prop="creditCode" min-width="170" show-overflow-tooltip />
+        <el-table-column label="One ID / 候选" min-width="140">
+          <template #default="{ row }">{{ row.oneId || '—' }}</template>
+        </el-table-column>
+        <el-table-column label="质量分" prop="dqScore" width="80" align="center" />
+        <el-table-column label="问题 / 说明" prop="errorSummary" min-width="220" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.errorSummary || '—' }}</template>
+        </el-table-column>
+        <el-table-column v-if="activeType === 'SUSPECTED'" label="治理操作" width="220" align="center" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="primary" @click="onLink(row)">关联已有</el-button>
+            <el-button link type="warning" @click="onReturn(row)">退回修复</el-button>
+            <el-button link type="danger" @click="onExclude(row)">排除</el-button>
+          </template>
+        </el-table-column>
+        <template #empty>
+          <span class="empty-hint">该分流暂无行明细</span>
+        </template>
+      </el-table>
+      <div v-if="activeType === 'NEW'" class="impact">
+        New 行已随任务提交「批量导入确认」审批（工作流场景 IMPORT_BATCH）；审批通过后自动生成 One ID 并激活主档。
+      </div>
+      <div v-else-if="activeType === 'INVALID'" class="impact">
+        Invalid 行按错误策略退回修复（Fix）；修复后可在「新建导入任务」重新上传。
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { getBatchResult } from '@/api/demo/cmdPoc';
-import type { BatchResultVO, CustomerVO } from '@/api/demo/cmdPoc/types';
-import { listCustomers } from '@/api/demo/cmdPoc';
+import { ElMessage, ElMessageBox } from 'element-plus';
+import { getBatchResult, importRowAction, listImportJobRows } from '@/api/demo/cmdPoc';
+import type { BatchResultVO, ImportRowVO } from '@/api/demo/cmdPoc/types';
 import { useCmdPoc } from '../../composables/useCmdPoc';
 
 defineOptions({ name: 'CmdPocBatchResultDialog' });
 
 const props = defineProps<{ payload?: Record<string, unknown> }>();
 
-const { openDialog } = useCmdPoc();
+const { closeDialog } = useCmdPoc();
 
 const result = ref<BatchResultVO>({
   jobId: '-',
@@ -51,46 +93,115 @@ const result = ref<BatchResultVO>({
   routes: []
 });
 
-/** 原型 KPI：Exact 42 / Suspected 18 / New 26 / Review 16 / Invalid 14 */
+const rowLoading = ref(false);
+const rows = ref<ImportRowVO[]>([]);
+const rowTotal = ref(0);
+const rowPageNum = ref(1);
+const rowPageSize = 20;
+const activeType = ref<'EXACT' | 'SUSPECTED' | 'NEW' | 'INVALID'>('SUSPECTED');
+
+const jobCode = () => (props.payload?.jobId as string) ?? 'IMP-001';
+
+/** 原型 KPI：Exact / Suspected / New / Review / Invalid（四类分流 + 待复核） */
 const kpis = computed(() => [
-  { label: 'Exact', value: result.value.exact },
-  { label: 'Suspected', value: result.value.suspected },
-  { label: 'New', value: result.value.created },
-  { label: 'Review', value: result.value.review },
-  { label: 'Invalid', value: result.value.invalid }
+  { label: 'Exact', value: result.value.exact, type: 'EXACT' as const },
+  { label: 'Suspected', value: result.value.suspected, type: 'SUSPECTED' as const },
+  { label: 'New', value: result.value.created, type: 'NEW' as const },
+  { label: 'Review', value: result.value.review, type: 'SUSPECTED' as const },
+  { label: 'Invalid', value: result.value.invalid, type: 'INVALID' as const }
 ]);
 
-onMounted(async () => {
-  result.value = await getBatchResult((props.payload?.jobId as string) ?? 'IMP-001');
-});
+const activeLabel = computed(
+  () => ({ EXACT: 'Exact', SUSPECTED: 'Suspected', NEW: 'New', INVALID: 'Invalid' })[activeType.value] ?? activeType.value
+);
 
-/** 点击 KPI 或 明细 下钻到对应分类记录 */
-const showDetails = async (type: string) => {
-  const customers = await listCustomers();
-  let rows: CustomerVO[] = [];
-  switch (type) {
-    case 'Exact':
-      rows = customers.filter(c => c.oneId && c.status === 'active').slice(0, result.value.exact);
-      break;
-    case 'Suspected':
-      rows = customers.filter(c => c.status === 'pending').slice(0, result.value.suspected);
-      break;
-    case 'Review':
-      rows = customers.filter(c => c.status === 'pending').slice(0, result.value.review);
-      break;
-    case 'New':
-      rows = customers.filter(c => c.oneId.startsWith('PENDING') || c.status === 'pending').slice(0, result.value.created);
-      break;
-    case 'Invalid':
-      rows = customers.filter(c => c.status === 'inactive').slice(0, result.value.invalid);
-      break;
-    default:
-      rows = customers.slice(0, 5);
+const routeTypeOf = (result: string) => {
+  const upper = (result ?? '').toUpperCase();
+  if (upper === 'NEW' || upper === 'CREATED') {
+    return 'NEW' as const;
   }
-  openDialog('search', { rows: rows.map(r => ({ ...r })), keyword: `${type} 记录明细` });
+  if (upper === 'INVALID') {
+    return 'INVALID' as const;
+  }
+  if (upper === 'REVIEW') {
+    return 'SUSPECTED' as const;
+  }
+  return 'EXACT' as const;
 };
 
-const submit = async (): Promise<string> => `导入任务 ${result.value.jobId} 已确认，Suspected 进入人工治理`;
+const loadResult = async () => {
+  result.value = await getBatchResult(jobCode());
+};
+
+/** 点击 KPI 或 明细：加载该分流的真实行明细 */
+const selectType = async (type: 'EXACT' | 'SUSPECTED' | 'NEW' | 'INVALID') => {
+  activeType.value = type;
+  rowPageNum.value = 1;
+  await loadRows();
+};
+
+const loadRows = async () => {
+  rowLoading.value = true;
+  try {
+    const page = await listImportJobRows(jobCode(), activeType.value, rowPageNum.value, rowPageSize);
+    rows.value = page.rows;
+    rowTotal.value = page.total;
+  } finally {
+    rowLoading.value = false;
+  }
+};
+
+/** BU Scope 治理：批量关联、排除或退回修复（设计场景二泳道第 5 阶段） */
+const onLink = async (row: ImportRowVO) => {
+  const { value } = await ElMessageBox.prompt('输入要关联的已有 One ID', '关联已有 One ID', {
+    inputValue: row.oneId ?? '',
+    inputPattern: /^GC-[0-9A-Z]{6,}$/,
+    inputErrorMessage: 'One ID 格式形如 GC-000128',
+    confirmButtonText: '确认关联',
+    cancelButtonText: '取消'
+  });
+  const note = await importRowAction(row.id!, 'LINK', value);
+  ElMessage.success(note);
+  await refresh();
+};
+
+const onReturn = async (row: ImportRowVO) => {
+  await ElMessageBox.confirm(`确认将「${row.legalName ?? `第 ${row.rowNo} 行`}」退回修复？`, '退回修复', {
+    type: 'warning',
+    confirmButtonText: '确认退回',
+    cancelButtonText: '取消'
+  });
+  const note = await importRowAction(row.id!, 'RETURN');
+  ElMessage.success(note);
+  await refresh();
+};
+
+const onExclude = async (row: ImportRowVO) => {
+  await ElMessageBox.confirm(`确认排除「${row.legalName ?? `第 ${row.rowNo} 行`}」？排除后不纳入主档。`, '排除', {
+    type: 'warning',
+    confirmButtonText: '确认排除',
+    cancelButtonText: '取消'
+  });
+  const note = await importRowAction(row.id!, 'EXCLUDE');
+  ElMessage.success(note);
+  await refresh();
+};
+
+/** 治理动作后刷新统计与行明细，并通知列表页刷新 */
+const refresh = async () => {
+  await Promise.all([loadResult(), loadRows()]);
+};
+
+onMounted(async () => {
+  await loadResult();
+  await selectType('SUSPECTED');
+});
+
+const submit = async (): Promise<string> => {
+  // 关闭弹窗触发列表页刷新（BatchPanel 监听 batchResult 关闭后重查）
+  closeDialog();
+  return `导入任务 ${result.value.jobId} 处理完成：Exact 关联已有，Suspected 治理，New 审批后生成 One ID`;
+};
 
 defineExpose({ submit });
 </script>
@@ -113,6 +224,28 @@ defineExpose({ submit });
       background: var(--g-content);
     }
   }
+}
+
+.detail-block {
+  margin-top: 12px;
+}
+
+.detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.detail-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--g-text);
+}
+
+.empty-hint {
+  font-size: 12px;
+  color: var(--g-text2);
 }
 
 .impact {

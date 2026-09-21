@@ -40,6 +40,12 @@ public class CmdImportRowVo implements Serializable {
     /** 结果分流 */
     private String resultType;
 
+    /** 生成 / 关联的 One ID（EXACT 为关联到的存量，SUSPECTED 为候选，NEW 在审批生成后回填） */
+    private String oneId;
+
+    /** 处理策略（RETRY / FIX / GOVERNANCE / IGNORE） */
+    private String handling;
+
     /** 客户名称 */
     private String legalName;
 

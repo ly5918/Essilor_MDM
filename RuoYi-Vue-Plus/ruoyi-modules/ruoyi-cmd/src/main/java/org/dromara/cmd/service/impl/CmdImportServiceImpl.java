@@ -7,10 +7,23 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.fesod.sheet.FesodSheet;
 import org.apache.fesod.sheet.context.AnalysisContext;
 import org.apache.fesod.sheet.event.AnalysisEventListener;
-import org.apache.fesod.sheet.write.style.column.LongestMatchColumnWidthStyleStrategy;
+import org.apache.fesod.sheet.write.metadata.style.WriteCellStyle;
+import org.apache.fesod.sheet.write.metadata.style.WriteFont;
+import org.apache.fesod.sheet.write.style.HorizontalCellStyleStrategy;
+import org.apache.poi.ss.usermodel.FillPatternType;
+import org.apache.poi.ss.usermodel.HorizontalAlignment;
+import org.apache.poi.ss.usermodel.IndexedColors;
+import org.apache.poi.ss.usermodel.VerticalAlignment;
+import org.dromara.cmd.common.CmdConstants;
+import org.dromara.cmd.common.HeaderColumnWidthStyleStrategy;
+import org.dromara.cmd.domain.AuditEvent;
+import org.dromara.cmd.domain.CmdApprovalAction;
+import org.dromara.cmd.domain.CmdApprovalTask;
+import org.dromara.cmd.domain.CmdCustomer;
 import org.dromara.cmd.domain.CmdImportJob;
 import org.dromara.cmd.domain.CmdImportRow;
 import org.dromara.cmd.domain.CmdImportTemplate;
@@ -18,12 +31,19 @@ import org.dromara.cmd.domain.CmdImportTemplateMapping;
 import org.dromara.cmd.domain.bo.CmdImportJobBo;
 import org.dromara.cmd.domain.vo.CmdImportJobVo;
 import org.dromara.cmd.domain.vo.CmdImportResultVo;
+import org.dromara.cmd.domain.vo.CmdImportRowVo;
 import org.dromara.cmd.domain.vo.CmdImportTemplateMappingVo;
 import org.dromara.cmd.domain.vo.CmdImportTemplateVo;
+import org.dromara.cmd.mapper.CmdApprovalActionMapper;
+import org.dromara.cmd.mapper.CmdApprovalTaskMapper;
+import org.dromara.cmd.mapper.CmdCustomerMapper;
+import org.dromara.cmd.mapper.CmdFlowSceneMapper;
 import org.dromara.cmd.mapper.CmdImportJobMapper;
 import org.dromara.cmd.mapper.CmdImportRowMapper;
 import org.dromara.cmd.mapper.CmdImportTemplateMapper;
 import org.dromara.cmd.mapper.CmdImportTemplateMappingMapper;
+import org.dromara.cmd.service.ICmdAuditService;
+import org.dromara.cmd.service.ICmdFlowEngineService;
 import org.dromara.cmd.service.ICmdImportService;
 import org.dromara.common.core.domain.PageResult;
 import org.dromara.common.core.exception.ServiceException;
@@ -31,6 +51,7 @@ import org.dromara.common.core.utils.StringUtils;
 import org.dromara.common.core.utils.file.FileUtils;
 import org.dromara.common.json.utils.JsonUtils;
 import org.dromara.common.mybatis.core.page.PageQuery;
+import org.dromara.common.satoken.utils.LoginHelper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,13 +59,17 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -53,21 +78,36 @@ import java.util.Map;
 /**
  * 批量导入 服务层实现
  * <p>
- * 关键设计：
+ * 关键设计（对齐总设计 V6.1 场景二泳道图）：
  * <ol>
- *   <li>任务编号由服务端生成：IMP- 前缀 + 八位随机码，避免前端伪造</li>
- *   <li>新建任务默认进入待复核（WAIT_REVIEW），统计数字由导入过程回写</li>
- *   <li>分流策略文案为平台级展示规则，POC 阶段在 buildRoutes 中按常量生成</li>
+ *   <li>文件级预检：模板存在 + 上传表头必须包含模板全部列 + 至少一行数据，失败整批退回（不建任务）</li>
+ *   <li>行级 DQ：必填列（cmd_import_template_mapping.is_required）缺失、信用代码格式错误 → Invalid（退回修复）</li>
+ *   <li>批次内去重：同批次信用代码 / 客户名称重复 → Suspected（进入治理）</li>
+ *   <li>存量匹配：信用代码命中 active 主档 → Exact（关联已有 One ID）；
+ *       名称命中 → Suspected（候选 One ID 随行记录，供 BU/GC 治理决策）；其余 → New（审批后生成 One ID）</li>
+ *   <li>统计与状态回写：Invalid&gt;0 → Partial Success（部分成功）；有 Suspected/New → Waiting for Review；否则 Completed</li>
+ *   <li>审批发布：存在 New 行时自动创建 IMPORT_BATCH 批量导入确认待办并启动流程实例，
+ *       审批通过后由 {@link #onApproval} 为 New 行生成客户主档（One ID）</li>
  * </ol>
  *
  * @author Essilor CMD POC
  */
+@Slf4j
 @RequiredArgsConstructor
 @Service
 public class CmdImportServiceImpl implements ICmdImportService {
 
-    /** 新建任务的初始状态：待复核 */
+    /** 任务状态：待复核（有 Suspected / New 行待治理或审批） */
     private static final String STATUS_WAIT_REVIEW = "WAIT_REVIEW";
+
+    /** 任务状态：部分成功 */
+    private static final String STATUS_PARTIAL = "PARTIAL_SUCCESS";
+
+    /** 任务状态：失败 */
+    private static final String STATUS_FAILED = "FAILED";
+
+    /** 任务状态：完成 */
+    private static final String STATUS_COMPLETED = "COMPLETED";
 
     /** 模板状态：已发布 */
     private static final String STATUS_PUBLISHED = "Published";
@@ -81,11 +121,38 @@ public class CmdImportServiceImpl implements ICmdImportService {
     /** 错误策略：告警放行 */
     private static final String STRATEGY_WARNING = "Warning Row";
 
-    /** 上传后行的初始状态：待处理（DQ 与匹配在后续环节执行） */
-    private static final String ROW_STATUS_PENDING = "PENDING";
+    /** 行状态：处理成功 */
+    private static final String ROW_STATUS_SUCCESS = "SUCCESS";
 
-    /** 上传后行的默认分流：新建（由 DQ / 匹配环节改写） */
-    private static final String RESULT_TYPE_NEW = "NEW";
+    /** 行状态：失败（Invalid，退回修复） */
+    private static final String ROW_STATUS_FAILED = "FAILED";
+
+    /** 行状态：治理中（Suspected） */
+    private static final String ROW_STATUS_GOVERNANCE = "GOVERNANCE";
+
+    /** 行状态：已跳过（人工排除） */
+    private static final String ROW_STATUS_SKIPPED = "SKIPPED";
+
+    /** 结果分流：Exact（关联已有 One ID） */
+    private static final String RESULT_EXACT = CmdConstants.MATCH_EXACT;
+
+    /** 结果分流：Suspected（进入人工治理） */
+    private static final String RESULT_SUSPECTED = CmdConstants.MATCH_SUSPECTED;
+
+    /** 结果分流：New（审批后生成 One ID） */
+    private static final String RESULT_NEW = CmdConstants.MATCH_NEW;
+
+    /** 结果分流：Invalid（退回修复） */
+    private static final String RESULT_INVALID = CmdConstants.MATCH_INVALID;
+
+    /** 处理策略：退回修复 */
+    private static final String HANDLING_FIX = "FIX";
+
+    /** 处理策略：人工治理 */
+    private static final String HANDLING_GOVERNANCE = "GOVERNANCE";
+
+    /** 处理策略：忽略（人工排除） */
+    private static final String HANDLING_IGNORE = "IGNORE";
 
     /** 模板中「客户名称」对应的字段编码 */
     private static final String FIELD_LEGAL_NAME = "legal_name";
@@ -93,10 +160,39 @@ public class CmdImportServiceImpl implements ICmdImportService {
     /** 模板中「统一社会信用代码」对应的字段编码 */
     private static final String FIELD_CREDIT_CODE = "credit_code";
 
+    /** 首次提交后的业务节点名（含 BU 关键字，引擎启动后据此定位到 BU_REVIEW 节点） */
+    private static final String NODE_NAME_BU_REVIEW = "BU Scope 批量确认";
+
+    /** 批量导入确认流场景（cmd_flow_scene.scene_code） */
+    private static final String SCENE_IMPORT_BATCH = CmdConstants.SCENE_IMPORT_BATCH;
+
+    /** 首次提交的处理角色（Data Steward BU Scope） */
+    private static final String ROLE_BU_STEWARD = "BU_STEWARD";
+    private static final String NAME_BU_STEWARD = "BU Steward";
+
+    /** 场景未配置 SLA 时的兜底时长（小时） */
+    private static final long DEFAULT_SLA_HOURS = 24L;
+
+    /** POC 免登录：提交人取当前登录人，取不到时用演示账号兜底 */
+    private static final Long DEMO_APPLICANT_ID = 1L;
+    private static final String DEMO_APPLICANT_NAME = "Business User";
+
+    /** 申请编号日期段格式（AP-yyyyMMdd-0001） */
+    private static final DateTimeFormatter TASK_NO_DAY = DateTimeFormatter.ofPattern("yyyyMMdd");
+
+    /** 信用代码合法格式（18 位大写字母数字） */
+    private static final String CREDIT_CODE_PATTERN = "[0-9A-Z]{18}";
+
     private final CmdImportJobMapper jobMapper;
     private final CmdImportTemplateMapper templateMapper;
     private final CmdImportTemplateMappingMapper mappingMapper;
     private final CmdImportRowMapper rowMapper;
+    private final CmdCustomerMapper customerMapper;
+    private final CmdApprovalTaskMapper approvalTaskMapper;
+    private final CmdApprovalActionMapper approvalActionMapper;
+    private final CmdFlowSceneMapper flowSceneMapper;
+    private final ICmdFlowEngineService flowEngineService;
+    private final ICmdAuditService auditService;
 
     /**
      * 上传文件落盘目录（运维可在 application.yml 的 cmd.poc.import-upload-path 调整）。
@@ -139,7 +235,7 @@ public class CmdImportServiceImpl implements ICmdImportService {
         CmdImportJobVo job = jobMapper.selectVoOne(
             Wrappers.<CmdImportJob>lambdaQuery().eq(CmdImportJob::getJobCode, jobCode));
         if (job == null) {
-            throw new ServiceException("导入任务不存在：%s", jobCode);
+            throw new ServiceException("导入任务不存在：{}", jobCode);
         }
         CmdImportResultVo vo = new CmdImportResultVo();
         vo.setJobCode(job.getJobCode());
@@ -232,7 +328,7 @@ public class CmdImportServiceImpl implements ICmdImportService {
         CmdImportTemplate template = getTemplate(templateCode);
         List<CmdImportTemplateMapping> mappings = selectMappings(template.getTemplateCode());
         if (CollUtil.isEmpty(mappings)) {
-            throw new ServiceException("模板[%s]未配置字段映射，无法生成模板文件", template.getTemplateName());
+            throw new ServiceException("模板[{}]未配置字段映射，无法生成模板文件", template.getTemplateName());
         }
         // 模板不落物理文件：按字段映射动态生成「仅表头」的 Excel，业务填写后再上传
         List<List<String>> head = new ArrayList<>();
@@ -248,7 +344,10 @@ public class CmdImportServiceImpl implements ICmdImportService {
             FesodSheet.write(response.getOutputStream())
                 .head(head)
                 .autoCloseStream(false)
-                .registerWriteHandler(new LongestMatchColumnWidthStyleStrategy())
+                // 列宽按表头文字计算：模板只有表头没有数据行，用 LongestMatchColumnWidthStyleStrategy
+                // 会因「无内容可测」退化成窄列，表头被折成 CustomerN/ame
+                .registerWriteHandler(new HeaderColumnWidthStyleStrategy())
+                .registerWriteHandler(headStyleStrategy())
                 .sheet(sheetName)
                 .doWrite(Collections.<List<String>>emptyList());
         } catch (IOException e) {
@@ -257,27 +356,190 @@ public class CmdImportServiceImpl implements ICmdImportService {
     }
 
     /**
+     * 模板表头样式：加粗 + 浅灰底 + 居中，与业务侧看到的数据表头保持一致观感
+     *
+     * @return 表头/内容两段式样式策略
+     */
+    private HorizontalCellStyleStrategy headStyleStrategy() {
+        WriteFont headFont = new WriteFont();
+        headFont.setBold(true);
+        headFont.setFontHeightInPoints((short) 11);
+
+        WriteCellStyle headStyle = new WriteCellStyle();
+        headStyle.setWriteFont(headFont);
+        headStyle.setFillPatternType(FillPatternType.SOLID_FOREGROUND);
+        headStyle.setFillForegroundColor(IndexedColors.GREY_25_PERCENT.getIndex());
+        headStyle.setHorizontalAlignment(HorizontalAlignment.CENTER);
+        headStyle.setVerticalAlignment(VerticalAlignment.CENTER);
+
+        WriteCellStyle contentStyle = new WriteCellStyle();
+        contentStyle.setVerticalAlignment(VerticalAlignment.CENTER);
+
+        return new HorizontalCellStyleStrategy(headStyle, contentStyle);
+    }
+
+    /**
      * {@inheritDoc}
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public String uploadJob(MultipartFile file, String templateCode, String errorStrategy, String duplicateStrategy) {
+    public String uploadJob(MultipartFile file, String templateCode, String errorStrategy, String duplicateStrategy,
+                            String scene, String buScope, String sourceSystem) {
         if (file == null || file.isEmpty()) {
             throw new ServiceException("请选择要上传的文件");
         }
         CmdImportTemplate template = getTemplate(templateCode);
         List<CmdImportTemplateMapping> mappings = selectMappings(template.getTemplateCode());
+        if (CollUtil.isEmpty(mappings)) {
+            throw new ServiceException("模板[{}]未配置字段映射，无法解析上传文件", template.getTemplateName());
+        }
 
         String originalFilename = StringUtils.blankToDefault(file.getOriginalFilename(), "upload.xlsx");
         Path saved = saveFile(file, originalFilename);
         RowCollector collector = readRows(saved, template);
 
-        CmdImportJob job = buildJob(file, template, originalFilename, saved,
-            collector.getRows().size(), errorStrategy, duplicateStrategy);
+        // 文件级预检（对应泳道图「文件级预检」节点）：表头缺列或无数据行 → 整批退回，不建任务
+        String missing = preCheckHeader(collector, mappings);
+        if (StringUtils.isNotBlank(missing)) {
+            throw new ServiceException("文件预检未通过：表头缺少列 " + missing + "，已整批退回（请使用最新模板填写）");
+        }
+        if (collector.getRows().isEmpty()) {
+            throw new ServiceException("文件预检未通过：未解析到数据行，已整批退回");
+        }
+
+        CmdImportJob job = buildJob(file, template, originalFilename, saved, collector.getRows().size(),
+            errorStrategy, duplicateStrategy, scene, buScope, sourceSystem);
         jobMapper.insert(job);
-        saveRows(job, template, mappings, collector);
+
+        // 行级 DQ + 批次内去重 + 存量匹配 → 四类分流（Exact / Suspected / New / Invalid）
+        Outcome outcome = classifyRows(job, template, mappings, collector);
+        applyOutcome(job, outcome);
+
+        // 存在 New 行 → 提交「批量导入确认」审批（New 审批后生成 One ID）
+        if (outcome.created > 0) {
+            submitApproval(job, outcome);
+        }
+
+        recordImportAudit(job, outcome);
         return job.getJobCode();
     }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public PageResult<CmdImportRowVo> selectRowPage(String jobCode, String resultType, PageQuery pageQuery) {
+        CmdImportJob job = getJobByCode(jobCode);
+        LambdaQueryWrapper<CmdImportRow> lqw = Wrappers.lambdaQuery();
+        lqw.eq(CmdImportRow::getJobId, job.getId());
+        if (StringUtils.isNotBlank(resultType)) {
+            lqw.eq(CmdImportRow::getResultType, resultType.trim().toUpperCase(Locale.ROOT));
+        }
+        lqw.orderByAsc(CmdImportRow::getRowNo);
+        Page<CmdImportRowVo> page = rowMapper.selectVoPage(pageQuery.build(), lqw);
+        return PageResult.build(page.getRecords(), page.getTotal());
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public String rowAction(Long rowId, String action, String oneId) {
+        if (rowId == null) {
+            throw new ServiceException("行明细主键不能为空");
+        }
+        CmdImportRow row = rowMapper.selectById(rowId);
+        if (row == null) {
+            throw new ServiceException("导入行不存在：{}", rowId);
+        }
+        CmdImportJob job = getJobByCode(row.getJobCode());
+        String type = action == null ? "" : action.trim().toUpperCase(Locale.ROOT);
+        CmdImportRow patch = new CmdImportRow();
+        patch.setId(row.getId());
+        String message;
+        // LINK 需要把 handling / error_summary 置空，而 MyBatis-Plus updateById 默认跳过 null 字段，
+        // 故此类「清空型」治理动作在 updateById 之后再显式 update 一次
+        boolean clearNullableFields = false;
+        switch (type) {
+            case "LINK" -> {
+                // BU Scope 治理：关联已有 One ID（Suspected → Exact）
+                String target = StringUtils.blankToDefault(oneId, row.getOneId());
+                if (StringUtils.isBlank(target)) {
+                    throw new ServiceException("请填写要关联的 One ID");
+                }
+                patch.setResultType(RESULT_EXACT);
+                patch.setRowStatus(ROW_STATUS_SUCCESS);
+                patch.setOneId(target);
+                patch.setMatchState(RESULT_EXACT);
+                patch.setMatchScore(BigDecimal.valueOf(100));
+                patch.setErrorCount(0);
+                clearNullableFields = true;
+                message = "已关联 One ID " + target;
+            }
+            case "EXCLUDE" -> {
+                // 排除：本行不纳入主档（Suspected → Invalid / Skipped）
+                patch.setResultType(RESULT_INVALID);
+                patch.setRowStatus(ROW_STATUS_SKIPPED);
+                patch.setHandling(HANDLING_IGNORE);
+                patch.setErrorCount(1);
+                patch.setErrorSummary("人工排除（不纳入主档）");
+                message = "该行已排除，不再纳入主档";
+            }
+            case "RETURN" -> {
+                // 退回修复：回到 Business User 修复后重新上传（Suspected → Invalid / Fix）
+                patch.setResultType(RESULT_INVALID);
+                patch.setRowStatus(ROW_STATUS_FAILED);
+                patch.setHandling(HANDLING_FIX);
+                patch.setErrorCount(1);
+                patch.setErrorSummary("退回修复（数据疑似重复，需线下核实后再导入）");
+                message = "该行已退回修复";
+            }
+            default -> throw new ServiceException("不支持的治理动作：{}（仅支持 LINK / EXCLUDE / RETURN）", action);
+        }
+        rowMapper.updateById(patch);
+        if (clearNullableFields) {
+            rowMapper.update(Wrappers.<CmdImportRow>lambdaUpdate()
+                .eq(CmdImportRow::getId, row.getId())
+                .set(CmdImportRow::getHandling, null)
+                .set(CmdImportRow::getErrorSummary, null));
+        }
+        recalcJobCounts(job);
+        recordGovernanceAudit(job, row, type, message);
+        return message;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void onApproval(String jobCode, String actionType, String operator) {
+        CmdImportJob job = getJobByCode(jobCode);
+        String type = actionType == null ? "" : actionType.trim().toUpperCase(Locale.ROOT);
+        CmdImportJob patch = new CmdImportJob();
+        patch.setId(job.getId());
+        patch.setEndTime(LocalDateTime.now());
+        if (CmdConstants.ACTION_APPROVE.equals(type)) {
+            // 批量处理结果：New 行审批通过后生成 One ID 并激活主档
+            int published = publishNewRows(job);
+            patch.setJobStatus(STATUS_COMPLETED);
+            patch.setRemark(appendRemark(job.getRemark(), "审批通过：" + (published) + " 条 New 行已生成 One ID（审批人：" + operator + "）"));
+            jobMapper.updateById(patch);
+        } else if (CmdConstants.ACTION_REJECT.equals(type)) {
+            patch.setJobStatus(STATUS_FAILED);
+            patch.setErrorMessage("批量导入确认被拒绝（审批人：" + operator + "）");
+            jobMapper.updateById(patch);
+        } else if (CmdConstants.ACTION_RETURN.equals(type)) {
+            patch.setJobStatus(STATUS_WAIT_REVIEW);
+            patch.setRemark(appendRemark(job.getRemark(), "审批退回补充（审批人：" + operator + "）"));
+            jobMapper.updateById(patch);
+        } else {
+            log.debug("[CMD][IMPORT] 审批动作[{}]不改变导入任务状态：{}", actionType, jobCode);
+        }
+    }
+
+    // ================================ 上传处理管线 ================================
 
     /**
      * 按模板编码查询模板定义
@@ -294,7 +556,7 @@ public class CmdImportServiceImpl implements ICmdImportService {
                 .eq(CmdImportTemplate::getTemplateCode, templateCode)
                 .last("limit 1"));
         if (template == null) {
-            throw new ServiceException("导入模板不存在：%s", templateCode);
+            throw new ServiceException("导入模板不存在：{}", templateCode);
         }
         return template;
     }
@@ -310,6 +572,423 @@ public class CmdImportServiceImpl implements ICmdImportService {
             Wrappers.<CmdImportTemplateMapping>lambdaQuery()
                 .eq(CmdImportTemplateMapping::getTemplateCode, templateCode)
                 .orderByAsc(CmdImportTemplateMapping::getColumnIndex));
+    }
+
+    /**
+     * 文件级预检：上传表头必须包含模板定义的全部列
+     *
+     * @param collector 行采集器（含规范化表头）
+     * @param mappings  模板字段映射
+     * @return 缺失列名串（空串表示通过）
+     */
+    private String preCheckHeader(RowCollector collector, List<CmdImportTemplateMapping> mappings) {
+        List<String> missing = new ArrayList<>();
+        for (CmdImportTemplateMapping mapping : mappings) {
+            String column = StringUtils.blankToDefault(mapping.getColumnName(), mapping.getFieldCode());
+            if (!collector.hasColumn(column)) {
+                missing.add(column);
+            }
+        }
+        return String.join("、", missing);
+    }
+
+    /**
+     * 行级处理：DQ 校验 + 批次内去重 + 存量匹配 → 四类分流
+     *
+     * @param job       已入库的任务
+     * @param template  模板定义
+     * @param mappings  字段映射
+     * @param collector 行采集器
+     * @return 分流统计
+     */
+    private Outcome classifyRows(CmdImportJob job, CmdImportTemplate template,
+                                 List<CmdImportTemplateMapping> mappings, RowCollector collector) {
+        int dataStartRow = template.getDataStartRow() == null || template.getDataStartRow() < 2
+            ? 2 : template.getDataStartRow();
+        String nameColumn = columnNameOf(mappings, FIELD_LEGAL_NAME);
+        String codeColumn = columnNameOf(mappings, FIELD_CREDIT_CODE);
+
+        // 批次内去重索引：规范化值 → 首次出现的 Excel 行号
+        Map<String, Integer> batchCodes = new HashMap<>();
+        Map<String, Integer> batchNames = new HashMap<>();
+
+        int exact = 0;
+        int suspected = 0;
+        int created = 0;
+        int invalid = 0;
+        int index = 0;
+        for (Map<Integer, Object> row : collector.getRows()) {
+            int rowNo = dataStartRow + index;
+            String legalName = trimToNull(collector.value(row, nameColumn));
+            String creditCode = trimToNull(collector.value(row, codeColumn));
+
+            // 1) 行级 DQ：必填列（is_required=Y）缺失 + 信用代码格式
+            List<String> errors = new ArrayList<>();
+            for (CmdImportTemplateMapping mapping : mappings) {
+                if (CmdConstants.YES.equals(mapping.getIsRequired())
+                    && StringUtils.isBlank(collector.value(row, mapping.getColumnName()))) {
+                    errors.add("必填列缺失：" + StringUtils.blankToDefault(mapping.getColumnName(), mapping.getFieldCode()));
+                }
+            }
+            if (creditCode != null && !creditCode.toUpperCase(Locale.ROOT).matches(CREDIT_CODE_PATTERN)) {
+                errors.add("信用代码格式错误（应为 18 位大写字母数字）");
+            }
+
+            // 2) 四类分流：Invalid > 批次内重复(Suspected) > 存量 Exact > 名称疑似(Suspected) > New
+            String resultType;
+            String rowStatus;
+            String handling = null;
+            String matchState = null;
+            String matchOneId = null;
+            BigDecimal matchScore = null;
+            if (!errors.isEmpty()) {
+                resultType = RESULT_INVALID;
+                rowStatus = ROW_STATUS_FAILED;
+                handling = HANDLING_FIX;
+            } else if (creditCode != null && batchCodes.containsKey(norm(creditCode))) {
+                resultType = RESULT_SUSPECTED;
+                rowStatus = ROW_STATUS_GOVERNANCE;
+                handling = HANDLING_GOVERNANCE;
+                matchState = RESULT_SUSPECTED;
+                errors.add("批次内与第 " + batchCodes.get(norm(creditCode)) + " 行信用代码重复");
+            } else if (legalName != null && batchNames.containsKey(norm(legalName))) {
+                resultType = RESULT_SUSPECTED;
+                rowStatus = ROW_STATUS_GOVERNANCE;
+                handling = HANDLING_GOVERNANCE;
+                matchState = RESULT_SUSPECTED;
+                errors.add("批次内与第 " + batchNames.get(norm(legalName)) + " 行客户名称重复");
+            } else {
+                CmdCustomer exactHit = creditCode == null ? null : matchByCreditCode(creditCode);
+                if (exactHit != null) {
+                    resultType = RESULT_EXACT;
+                    rowStatus = ROW_STATUS_SUCCESS;
+                    matchState = RESULT_EXACT;
+                    matchOneId = exactHit.getOneId();
+                    matchScore = BigDecimal.valueOf(100);
+                } else {
+                    CmdCustomer nameHit = legalName == null ? null : matchByLegalName(legalName);
+                    if (nameHit != null) {
+                        resultType = RESULT_SUSPECTED;
+                        rowStatus = ROW_STATUS_GOVERNANCE;
+                        handling = HANDLING_GOVERNANCE;
+                        matchState = RESULT_SUSPECTED;
+                        matchOneId = nameHit.getOneId();
+                        matchScore = BigDecimal.valueOf(75);
+                        errors.add("与存量主档名称相同（候选 " + nameHit.getOneId() + "），需治理确认");
+                    } else {
+                        resultType = RESULT_NEW;
+                        rowStatus = ROW_STATUS_SUCCESS;
+                        matchState = RESULT_NEW;
+                    }
+                }
+            }
+
+            if (creditCode != null) {
+                batchCodes.putIfAbsent(norm(creditCode), rowNo);
+            }
+            if (legalName != null) {
+                batchNames.putIfAbsent(norm(legalName), rowNo);
+            }
+
+            CmdImportRow entity = new CmdImportRow();
+            entity.setJobId(job.getId());
+            entity.setJobCode(job.getJobCode());
+            entity.setRowNo(rowNo);
+            entity.setRowStatus(rowStatus);
+            entity.setResultType(resultType);
+            entity.setOneId(matchOneId);
+            entity.setBuScope(job.getBuScope());
+            entity.setLegalName(legalName);
+            entity.setCreditCode(creditCode);
+            entity.setDqScore(dqScoreOf(errors, resultType));
+            entity.setMatchState(matchState);
+            entity.setMatchScore(matchScore);
+            entity.setRawJson(JsonUtils.toJsonString(toNamedMap(collector, mappings, row, false)));
+            entity.setParsedJson(JsonUtils.toJsonString(toNamedMap(collector, mappings, row, true)));
+            entity.setErrorCount(errors.size());
+            entity.setErrorSummary(errors.isEmpty() ? null : String.join("；", errors));
+            entity.setHandling(handling);
+            rowMapper.insert(entity);
+            index++;
+
+            switch (resultType) {
+                case RESULT_EXACT -> exact++;
+                case RESULT_SUSPECTED -> suspected++;
+                case RESULT_NEW -> created++;
+                default -> invalid++;
+            }
+        }
+        return new Outcome(exact, suspected, created, invalid);
+    }
+
+    /**
+     * 统计与状态回写（对应泳道图「批次任务详情」：Completed / Partial / Failed、数量与原因）
+     *
+     * @param job     任务
+     * @param outcome 分流统计
+     */
+    private void applyOutcome(CmdImportJob job, Outcome outcome) {
+        CmdImportJob patch = new CmdImportJob();
+        patch.setId(job.getId());
+        patch.setExactCount(outcome.exact);
+        patch.setSuspectedCount(outcome.suspected);
+        patch.setNewCount(outcome.created);
+        patch.setReviewCount(0);
+        patch.setInvalidCount(outcome.invalid);
+        patch.setSuccessCount(outcome.exact + outcome.created);
+        patch.setJobStatus(resolveJobStatus(outcome));
+        patch.setProgress(100);
+        patch.setEndTime(LocalDateTime.now());
+        jobMapper.updateById(patch);
+    }
+
+    /**
+     * 依据分流统计推导任务状态：全部 Invalid → Failed；部分 Invalid → 部分成功；有疑似/新建 → 待复核；否则完成
+     *
+     * @param outcome 分流统计
+     * @return 任务状态
+     */
+    private String resolveJobStatus(Outcome outcome) {
+        if (outcome.invalid > 0 && outcome.invalid == outcome.total()) {
+            return STATUS_FAILED;
+        }
+        if (outcome.invalid > 0) {
+            return STATUS_PARTIAL;
+        }
+        if (outcome.suspected > 0 || outcome.created > 0) {
+            return STATUS_WAIT_REVIEW;
+        }
+        return STATUS_COMPLETED;
+    }
+
+    /**
+     * 按行明细重算任务统计与状态（治理动作后调用）
+     *
+     * @param job 任务
+     */
+    private void recalcJobCounts(CmdImportJob job) {
+        List<CmdImportRow> rows = rowMapper.selectList(
+            Wrappers.<CmdImportRow>lambdaQuery().eq(CmdImportRow::getJobId, job.getId()));
+        int exact = 0;
+        int suspected = 0;
+        int created = 0;
+        int review = 0;
+        int invalid = 0;
+        for (CmdImportRow row : rows) {
+            switch (StringUtils.defaultString(row.getResultType())) {
+                case RESULT_EXACT -> exact++;
+                case RESULT_SUSPECTED -> suspected++;
+                case RESULT_NEW -> created++;
+                case CmdConstants.MATCH_REVIEW -> review++;
+                default -> invalid++;
+            }
+        }
+        CmdImportJob patch = new CmdImportJob();
+        patch.setId(job.getId());
+        patch.setExactCount(exact);
+        patch.setSuspectedCount(suspected);
+        patch.setNewCount(created);
+        patch.setReviewCount(review);
+        patch.setInvalidCount(invalid);
+        patch.setSuccessCount(exact + created);
+        patch.setJobStatus(resolveJobStatus(new Outcome(exact, suspected, created + review, invalid)));
+        jobMapper.updateById(patch);
+    }
+
+    // ================================ 审批发布联动 ================================
+
+    /**
+     * 存在 New 行时创建「批量导入确认」审批待办并启动流程实例
+     * <p>
+     * 流程实例启动失败不回滚导入（导入本身已成功落库），仅记录日志与任务备注，
+     * 之后可在流程中心对 IMPORT_BATCH 场景手工重试。
+     *
+     * @param job     任务
+     * @param outcome 分流统计
+     */
+    private void submitApproval(CmdImportJob job, Outcome outcome) {
+        LocalDateTime now = LocalDateTime.now();
+        Applicant applicant = resolveApplicant();
+
+        CmdApprovalTask task = new CmdApprovalTask();
+        task.setTaskNo(generateTaskNo());
+        task.setTaskCategory(CmdConstants.APPR_CAT_APPROVAL);
+        task.setBizType(CmdConstants.BIZ_TYPE_IMPORT);
+        task.setBizId(job.getJobCode());
+        task.setBizTitle("批量导入确认：" + job.getFileName());
+        task.setSceneCode(SCENE_IMPORT_BATCH);
+        task.setApplicantId(applicant.id());
+        task.setApplicantName(applicant.name());
+        task.setBuScope(job.getBuScope());
+        task.setScope(CmdConstants.SCOPE_BU);
+        task.setCurrentNodeCode("BU_REVIEW");
+        task.setCurrentNodeName(NODE_NAME_BU_REVIEW);
+        task.setAssigneeName(NAME_BU_STEWARD);
+        task.setAssigneeRole(ROLE_BU_STEWARD);
+        task.setStatus(CmdConstants.APPR_STATUS_PENDING);
+        task.setRiskLevel(outcome.invalid > 0 ? "High" : "Medium");
+        task.setDuplicateState(outcome.suspected > 0 ? CmdConstants.MATCH_SUSPECTED : CmdConstants.MATCH_NEW);
+        task.setCrossBuFlag(CmdConstants.NO);
+        task.setSubmitTime(now);
+        task.setSlaDue(now.plusHours(resolveSlaHours()));
+        task.setSlaState(CmdConstants.SLA_NORMAL);
+        task.setEvidenceJson(approvalEvidenceOf(job, outcome));
+        approvalTaskMapper.insert(task);
+
+        // 业务侧轨迹：提交批量导入确认
+        CmdApprovalAction action = new CmdApprovalAction();
+        action.setTaskId(task.getId());
+        action.setTaskNo(task.getTaskNo());
+        action.setActionType(CmdConstants.ACTION_SUBMIT);
+        action.setActionName("提交批量导入确认");
+        action.setFromNodeCode("APPLY");
+        action.setOperatorId(applicant.id());
+        action.setOperatorRole(ROLE_BU_STEWARD);
+        action.setActionTime(now);
+        action.setBeforeState(CmdConstants.APPR_STATUS_DRAFT);
+        action.setAfterState(CmdConstants.APPR_STATUS_PENDING);
+        approvalActionMapper.insert(action);
+
+        // 启动 Warm-Flow 实例（防御式：引擎异常不影响导入结果）
+        try {
+            flowEngineService.startInstance(task.getTaskNo());
+        } catch (Exception e) {
+            log.error("[CMD][IMPORT] 批量导入确认流启动失败：taskNo={}", task.getTaskNo(), e);
+            CmdImportJob patch = new CmdImportJob();
+            patch.setId(job.getId());
+            patch.setRemark(appendRemark(job.getRemark(), "流程实例启动失败：" + e.getMessage()));
+            jobMapper.updateById(patch);
+        }
+    }
+
+    /**
+     * 审批通过：为全部 New 行生成客户主档（One ID + active）
+     *
+     * @param job 任务
+     * @return 生成条数
+     */
+    private int publishNewRows(CmdImportJob job) {
+        List<CmdImportRow> rows = rowMapper.selectList(Wrappers.<CmdImportRow>lambdaQuery()
+            .eq(CmdImportRow::getJobId, job.getId())
+            .eq(CmdImportRow::getResultType, RESULT_NEW));
+        int count = 0;
+        for (CmdImportRow row : rows) {
+            CmdCustomer customer = new CmdCustomer();
+            customer.setOneId(generateOneId());
+            customer.setLegalName(StringUtils.blankToDefault(row.getLegalName(), "未命名导入客户 " + row.getRowNo()));
+            customer.setCreditCode(row.getCreditCode());
+            customer.setBuScope(row.getBuScope());
+            customer.setCountry("中国");
+            customer.setStatus(CmdConstants.CUST_STATUS_ACTIVE);
+            customer.setSourceSystem("IMPORT");
+            customer.setSourceId(job.getJobCode());
+            customer.setDqScore(row.getDqScore());
+            customer.setMatchState(RESULT_NEW);
+            customer.setDuplicateFlag(CmdConstants.NO);
+            customer.setRemark("批量导入生成：" + job.getJobCode() + " 第 " + row.getRowNo() + " 行");
+            customerMapper.insert(customer);
+
+            CmdImportRow patch = new CmdImportRow();
+            patch.setId(row.getId());
+            patch.setOneId(customer.getOneId());
+            patch.setRemark("审批通过，已生成 One ID " + customer.getOneId());
+            rowMapper.updateById(patch);
+            count++;
+        }
+        return count;
+    }
+
+    // ================================ 查询 / 匹配辅助 ================================
+
+    /**
+     * 按任务编号查询任务
+     *
+     * @param jobCode 任务编号
+     * @return 任务实体
+     */
+    private CmdImportJob getJobByCode(String jobCode) {
+        CmdImportJob job = jobMapper.selectOne(
+            Wrappers.<CmdImportJob>lambdaQuery().eq(CmdImportJob::getJobCode, jobCode).last("limit 1"));
+        if (job == null) {
+            throw new ServiceException("导入任务不存在：{}", jobCode);
+        }
+        return job;
+    }
+
+    /**
+     * 存量精确匹配：统一社会信用代码 + active 主档
+     *
+     * @param creditCode 信用代码
+     * @return 命中的主档（可空）
+     */
+    private CmdCustomer matchByCreditCode(String creditCode) {
+        return customerMapper.selectOne(Wrappers.<CmdCustomer>lambdaQuery()
+            .eq(CmdCustomer::getCreditCode, creditCode)
+            .eq(CmdCustomer::getStatus, CmdConstants.CUST_STATUS_ACTIVE)
+            .last("limit 1"));
+    }
+
+    /**
+     * 存量名称匹配：客户名称相同（不限状态，作为疑似候选证据）
+     *
+     * @param legalName 客户名称
+     * @return 命中的主档（可空）
+     */
+    private CmdCustomer matchByLegalName(String legalName) {
+        return customerMapper.selectOne(Wrappers.<CmdCustomer>lambdaQuery()
+            .eq(CmdCustomer::getLegalName, legalName)
+            .last("limit 1"));
+    }
+
+    /**
+     * 按字段编码取对应的 Excel 列名
+     *
+     * @param mappings  字段映射
+     * @param fieldCode 字段编码
+     * @return 列名，未配置时返回 null
+     */
+    private String columnNameOf(List<CmdImportTemplateMapping> mappings, String fieldCode) {
+        return mappings.stream()
+            .filter(mapping -> fieldCode.equals(mapping.getFieldCode()))
+            .map(CmdImportTemplateMapping::getColumnName)
+            .findFirst()
+            .orElse(null);
+    }
+
+    /**
+     * 行数据按模板列（或字段编码）整理为有序 Map，供 raw_json / parsed_json 落库
+     *
+     * @param collector 行采集器
+     * @param mappings  字段映射
+     * @param row       Excel 原始行
+     * @param byField   true 用字段编码作 key，false 用 Excel 列名作 key
+     * @return 有序 Map
+     */
+    private Map<String, Object> toNamedMap(RowCollector collector, List<CmdImportTemplateMapping> mappings,
+                                           Map<Integer, Object> row, boolean byField) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        for (CmdImportTemplateMapping mapping : mappings) {
+            String key = byField
+                ? mapping.getFieldCode()
+                : StringUtils.blankToDefault(mapping.getColumnName(), mapping.getFieldCode());
+            map.put(key, collector.value(row, mapping.getColumnName()));
+        }
+        return map;
+    }
+
+    /**
+     * 行级质量分：100 起步，每个问题 -20，Invalid 保底 40（与单条申请 DQ 口径区分：导入按行打分）
+     *
+     * @param errors     问题列表
+     * @param resultType 分流结果
+     * @return 质量分
+     */
+    private BigDecimal dqScoreOf(List<String> errors, String resultType) {
+        int score = Math.max(0, 100 - errors.size() * 20);
+        if (RESULT_INVALID.equals(resultType)) {
+            score = Math.max(score, 40);
+        }
+        return BigDecimal.valueOf(score);
     }
 
     /**
@@ -362,98 +1041,225 @@ public class CmdImportServiceImpl implements ICmdImportService {
      * @return 待入库的任务实体
      */
     private CmdImportJob buildJob(MultipartFile file, CmdImportTemplate template, String originalFilename,
-                                  Path saved, int rowCount, String errorStrategy, String duplicateStrategy) {
+                                  Path saved, int rowCount, String errorStrategy, String duplicateStrategy,
+                                  String scene, String buScope, String sourceSystem) {
         CmdImportJob job = new CmdImportJob();
         job.setJobCode("IMP-" + IdUtil.fastSimpleUUID().substring(0, 8).toUpperCase());
         job.setJobName(template.getTemplateName() + " 批量导入");
-        job.setScene(StringUtils.blankToDefault(template.getScene(), "DOOR"));
+        // 业务上下文（设计节点「新建导入任务」）：弹窗选择优先，缺省回落模板定义
+        job.setScene(StringUtils.blankToDefault(scene, template.getScene()));
+        job.setBuScope(StringUtils.blankToDefault(buScope, template.getBuScope()));
         job.setTemplateId(template.getId());
         job.setTemplateCode(template.getTemplateCode());
         job.setTemplateVersion(template.getVersionNo());
-        job.setBuScope(template.getBuScope());
         job.setFileName(originalFilename);
         job.setFilePath(saved.toString());
         job.setFileSize(file.getSize());
         job.setTotalCount(rowCount);
         job.setSuccessCount(0);
         job.setJobStatus(STATUS_WAIT_REVIEW);
-        job.setProgress(100);
-        job.setSubmitBy("Business User");
+        job.setProgress(0);
+        String remark = "错误策略：" + StringUtils.blankToDefault(errorStrategy, STRATEGY_REJECT)
+            + "；重复策略：" + StringUtils.blankToDefault(duplicateStrategy, "GOVERNANCE");
+        if (StringUtils.isNotBlank(sourceSystem)) {
+            remark += "；来源系统：" + sourceSystem;
+        }
+        job.setRemark(remark);
+        job.setSubmitBy(resolveApplicant().name());
         job.setSubmitTime(LocalDateTime.now());
-        job.setStartTime(LocalDateTime.now());
-        job.setEndTime(LocalDateTime.now());
-        job.setRemark("错误策略：" + StringUtils.blankToDefault(errorStrategy, STRATEGY_REJECT)
-            + "；重复策略：" + StringUtils.blankToDefault(duplicateStrategy, "GOVERNANCE"));
         return job;
     }
 
     /**
-     * 逐行写入导入明细（行级）
+     * 生成五路分流策略（展示文案与统计数字联动）
      *
-     * @param job       已入库的任务
-     * @param template  模板定义
-     * @param mappings  字段映射
-     * @param collector 行采集器
+     * @param vo 结果对象（已填充统计数字）
+     * @return 分流策略列表
      */
-    private void saveRows(CmdImportJob job, CmdImportTemplate template,
-                          List<CmdImportTemplateMapping> mappings, RowCollector collector) {
-        int dataStartRow = template.getDataStartRow() == null || template.getDataStartRow() < 2
-            ? 2 : template.getDataStartRow();
-        String nameColumn = columnNameOf(mappings, FIELD_LEGAL_NAME);
-        String codeColumn = columnNameOf(mappings, FIELD_CREDIT_CODE);
-        int index = 0;
-        for (Map<Integer, Object> row : collector.getRows()) {
-            CmdImportRow entity = new CmdImportRow();
-            entity.setJobId(job.getId());
-            entity.setJobCode(job.getJobCode());
-            entity.setRowNo(dataStartRow + index);
-            entity.setRowStatus(ROW_STATUS_PENDING);
-            entity.setResultType(RESULT_TYPE_NEW);
-            entity.setBuScope(template.getBuScope());
-            entity.setLegalName(collector.value(row, nameColumn));
-            entity.setCreditCode(collector.value(row, codeColumn));
-            entity.setRawJson(JsonUtils.toJsonString(toNamedMap(collector, mappings, row, false)));
-            entity.setParsedJson(JsonUtils.toJsonString(toNamedMap(collector, mappings, row, true)));
-            entity.setErrorCount(0);
-            rowMapper.insert(entity);
-            index++;
+    private List<CmdImportResultVo.ImportRouteVo> buildRoutes(CmdImportResultVo vo) {
+        List<CmdImportResultVo.ImportRouteVo> routes = new ArrayList<>();
+        routes.add(route("Exact", "关联已有One ID", "System", vo.getExact()));
+        routes.add(route("Suspected", "进入人工治理", "BU/GC Steward", vo.getSuspected()));
+        routes.add(route("Review", "规则或业务复核", "BU Steward", vo.getReview()));
+        routes.add(route("New", "审批后生成One ID", "Steward", vo.getCreated()));
+        routes.add(route("Invalid", "返回修复", "Business User", vo.getInvalid()));
+        return routes;
+    }
+
+    private CmdImportResultVo.ImportRouteVo route(String result, String handling, String owner, Integer count) {
+        CmdImportResultVo.ImportRouteVo item = new CmdImportResultVo.ImportRouteVo();
+        item.setResult(result);
+        item.setHandling(handling);
+        item.setOwner(owner);
+        item.setDetail("查看" + count + "条");
+        return item;
+    }
+
+    /**
+     * 记录上传导入的审计事件（谁、何时、导入了什么文件、分流结果如何）
+     *
+     * @param job     任务
+     * @param outcome 分流统计
+     */
+    private void recordImportAudit(CmdImportJob job, Outcome outcome) {
+        try {
+            Applicant applicant = resolveApplicant();
+            AuditEvent audit = new AuditEvent();
+            audit.setEventType("IMPORT");
+            audit.setEventName("批量导入上传：" + job.getFileName());
+            audit.setBizType(CmdConstants.BIZ_TYPE_IMPORT);
+            audit.setBizId(job.getJobCode());
+            audit.setOperatorId(applicant.id());
+            audit.setOperatorName(applicant.name());
+            audit.setOperatorRole(ROLE_BU_STEWARD);
+            audit.setEventTime(LocalDateTime.now());
+            audit.setResult("SUCCESS");
+            audit.setRiskLevel(outcome.invalid > 0 ? "High" : "Low");
+            audit.setAfterJson("{\"total\":" + outcome.total() + ",\"exact\":" + outcome.exact
+                + ",\"suspected\":" + outcome.suspected + ",\"new\":" + outcome.created
+                + ",\"invalid\":" + outcome.invalid + "}");
+            auditService.record(audit);
+        } catch (Exception e) {
+            // 审计失败不影响导入主流程，但必须留痕便于排查
+            log.warn("[CMD][IMPORT] 导入审计记录失败：{}", job.getJobCode(), e);
         }
     }
 
     /**
-     * 按字段编码取对应的 Excel 列名
+     * 记录行级治理动作的审计事件
      *
-     * @param mappings  字段映射
-     * @param fieldCode 字段编码
-     * @return 列名，未配置时返回 null
+     * @param job  任务
+     * @param row  行明细
+     * @param type 动作类型
+     * @param note 处理说明
      */
-    private String columnNameOf(List<CmdImportTemplateMapping> mappings, String fieldCode) {
-        return mappings.stream()
-            .filter(mapping -> fieldCode.equals(mapping.getFieldCode()))
-            .map(CmdImportTemplateMapping::getColumnName)
-            .findFirst()
-            .orElse(null);
+    private void recordGovernanceAudit(CmdImportJob job, CmdImportRow row, String type, String note) {
+        try {
+            Applicant applicant = resolveApplicant();
+            AuditEvent audit = new AuditEvent();
+            audit.setEventType("IMPORT");
+            audit.setEventName("导入行治理[" + type + "]：" + row.getLegalName() + "（" + note + "）");
+            audit.setBizType(CmdConstants.BIZ_TYPE_IMPORT);
+            audit.setBizId(job.getJobCode());
+            audit.setOneId(row.getOneId());
+            audit.setOperatorId(applicant.id());
+            audit.setOperatorName(applicant.name());
+            audit.setEventTime(LocalDateTime.now());
+            audit.setResult("SUCCESS");
+            audit.setBeforeJson("{\"resultType\":\"" + StringUtils.defaultString(row.getResultType(), "") + "\"}");
+            audit.setAfterJson("{\"action\":\"" + type + "\"}");
+            auditService.record(audit);
+        } catch (Exception e) {
+            log.warn("[CMD][IMPORT] 治理审计记录失败：{} row={}", job.getJobCode(), row.getId(), e);
+        }
     }
 
     /**
-     * 行数据按模板列（或字段编码）整理为有序 Map，供 raw_json / parsed_json 落库
+     * 审批待办治理证据（审批详情页展示四类分流统计）
      *
-     * @param collector 行采集器
-     * @param mappings  字段映射
-     * @param row       Excel 原始行
-     * @param byField   true 用字段编码作 key，false 用 Excel 列名作 key
-     * @return 有序 Map
+     * @param job     任务
+     * @param outcome 分流统计
+     * @return JSON 字符串
      */
-    private Map<String, Object> toNamedMap(RowCollector collector, List<CmdImportTemplateMapping> mappings,
-                                           Map<Integer, Object> row, boolean byField) {
-        Map<String, Object> map = new LinkedHashMap<>();
-        for (CmdImportTemplateMapping mapping : mappings) {
-            String key = byField
-                ? mapping.getFieldCode()
-                : StringUtils.blankToDefault(mapping.getColumnName(), mapping.getFieldCode());
-            map.put(key, collector.value(row, mapping.getColumnName()));
+    private String approvalEvidenceOf(CmdImportJob job, Outcome outcome) {
+        Map<String, Object> evidence = new LinkedHashMap<>(8);
+        evidence.put("导入文件", job.getFileName());
+        evidence.put("总行数", outcome.total());
+        evidence.put("Exact", outcome.exact);
+        evidence.put("Suspected", outcome.suspected);
+        evidence.put("New", outcome.created);
+        evidence.put("Invalid", outcome.invalid);
+        evidence.put("处理方式", "Exact 关联已有 One ID；New 审批后生成 One ID；Suspected 进入治理；Invalid 退回修复");
+        return JsonUtils.toJsonString(evidence);
+    }
+
+    /**
+     * 生成审批待办编号（AP-yyyyMMdd-0001，与客户新建申请同一序列空间）
+     *
+     * @return 任务编号
+     */
+    private String generateTaskNo() {
+        String prefix = "AP-" + LocalDate.now().format(TASK_NO_DAY) + "-";
+        for (int seq = 1; seq <= 9999; seq++) {
+            String taskNo = prefix + String.format("%04d", seq);
+            Long exists = approvalTaskMapper.lambda().eq(CmdApprovalTask::getTaskNo, taskNo).count();
+            if (exists == null || exists == 0) {
+                return taskNo;
+            }
         }
-        return map;
+        throw new ServiceException("申请编号生成失败：当日流水号已用尽");
+    }
+
+    /**
+     * 解析提交人 / 申请人：优先当前登录人，POC 免登录取不到时使用演示账号
+     *
+     * @return 申请人（ID + 姓名）
+     */
+    private Applicant resolveApplicant() {
+        try {
+            if (LoginHelper.isLogin()) {
+                return new Applicant(LoginHelper.getUserId(),
+                    StringUtils.blankToDefault(LoginHelper.getUsername(), DEMO_APPLICANT_NAME));
+            }
+        } catch (Exception e) {
+            log.debug("[CMD][IMPORT] 未获取到登录人，使用演示申请人：{}", e.getMessage());
+        }
+        return new Applicant(DEMO_APPLICANT_ID, DEMO_APPLICANT_NAME);
+    }
+
+    /**
+     * 读取批量导入确认场景的 SLA 时长（cmd_flow_scene.sla_hours）
+     *
+     * @return SLA 时长（小时）
+     */
+    private long resolveSlaHours() {
+        Map<String, Object> scene = flowSceneMapper.selectSceneByCode(SCENE_IMPORT_BATCH);
+        Object hours = scene == null ? null : scene.get("sla_hours");
+        return hours instanceof Number number ? number.longValue() : DEFAULT_SLA_HOURS;
+    }
+
+    /**
+     * 生成 One ID（与客户新建同一规则：GC- 八位随机码，生成后永不变更）
+     *
+     * @return One ID
+     */
+    private String generateOneId() {
+        return "GC-" + IdUtil.fastSimpleUUID().substring(0, 8).toUpperCase();
+    }
+
+    private String appendRemark(String remark, String addition) {
+        return StringUtils.isBlank(remark) ? addition : remark + "；" + addition;
+    }
+
+    private String norm(String value) {
+        return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private Integer nvl(Integer value) {
+        return value == null ? 0 : value;
+    }
+
+    /**
+     * 行级处理结果统计
+     */
+    private record Outcome(int exact, int suspected, int created, int invalid) {
+        int total() {
+            return exact + suspected + created + invalid;
+        }
+    }
+
+    /**
+     * 提交人 / 申请人（登录人 / 演示账号）
+     */
+    private record Applicant(Long id, String name) {
     }
 
     /**
@@ -488,6 +1294,16 @@ public class CmdImportServiceImpl implements ICmdImportService {
         }
 
         /**
+         * 表头是否包含指定列
+         *
+         * @param columnName 列名
+         * @return true 包含
+         */
+        private boolean hasColumn(String columnName) {
+            return columnName != null && nameToIndex.containsKey(normalize(columnName));
+        }
+
+        /**
          * 按 Excel 列名取当前行的单元格值
          *
          * @param row        数据行
@@ -513,34 +1329,5 @@ public class CmdImportServiceImpl implements ICmdImportService {
         private List<Map<Integer, Object>> getRows() {
             return rows;
         }
-    }
-
-    /**
-     * 生成五路分流策略（展示文案与统计数字联动）
-     *
-     * @param vo 结果对象（已填充统计数字）
-     * @return 分流策略列表
-     */
-    private List<CmdImportResultVo.ImportRouteVo> buildRoutes(CmdImportResultVo vo) {
-        List<CmdImportResultVo.ImportRouteVo> routes = new ArrayList<>();
-        routes.add(route("Exact", "关联已有One ID", "System", vo.getExact()));
-        routes.add(route("Suspected", "进入人工治理", "BU/GC Steward", vo.getSuspected()));
-        routes.add(route("Review", "规则或业务复核", "BU Steward", vo.getReview()));
-        routes.add(route("New", "审批后生成One ID", "Steward", vo.getCreated()));
-        routes.add(route("Invalid", "返回修复", "Business User", vo.getInvalid()));
-        return routes;
-    }
-
-    private CmdImportResultVo.ImportRouteVo route(String result, String handling, String owner, Integer count) {
-        CmdImportResultVo.ImportRouteVo item = new CmdImportResultVo.ImportRouteVo();
-        item.setResult(result);
-        item.setHandling(handling);
-        item.setOwner(owner);
-        item.setDetail("查看" + count + "条");
-        return item;
-    }
-
-    private Integer nvl(Integer value) {
-        return value == null ? 0 : value;
     }
 }

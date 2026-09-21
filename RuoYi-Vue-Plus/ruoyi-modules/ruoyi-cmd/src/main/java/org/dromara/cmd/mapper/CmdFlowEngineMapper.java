@@ -95,4 +95,23 @@ public interface CmdFlowEngineMapper {
      */
     @Select("SELECT id, definition_id, flow_status, business_id, create_time FROM flow_instance WHERE id = #{instanceId}")
     Map<String, Object> selectInstance(@Param("instanceId") Long instanceId);
+
+    /**
+     * 统计运行中的流程实例数（供「流程中心 → 已激活工作流」菜单角标使用）
+     * <p>
+     * 口径：flow_status 不为 finish（Warm-Flow 结束态）的实例，即还没跑完的流程。
+     *
+     * @return 运行中实例数
+     */
+    @Select("SELECT COUNT(*) FROM flow_instance WHERE del_flag = '0' AND flow_status <> 'finish'")
+    Long countUnfinishedInstance();
+
+    /**
+     * 统计今日已结束的流程实例数（供「流程中心 → 已完成的工作流」菜单角标使用）
+     *
+     * @return 今日结束实例数
+     */
+    @Select("SELECT COUNT(*) FROM flow_instance WHERE del_flag = '0' AND flow_status = 'finish' "
+        + "AND update_time >= CURDATE() AND update_time < DATE_ADD(CURDATE(), INTERVAL 1 DAY)")
+    Long countFinishedTodayInstance();
 }

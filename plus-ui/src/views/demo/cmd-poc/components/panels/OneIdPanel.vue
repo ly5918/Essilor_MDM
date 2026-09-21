@@ -80,7 +80,7 @@
         <el-table-column label="BU" prop="bu" width="140" align="center" />
         <el-table-column label="状态" width="120" align="center">
           <template #default="{ row }">
-            <el-tag :type="CUSTOMER_STATUS_MAP[row.status].type" size="small">{{ CUSTOMER_STATUS_MAP[row.status].label }}</el-tag>
+            <el-tag :type="customerStatusMeta(row.status).type" size="small">{{ customerStatusMeta(row.status).label }}</el-tag>
           </template>
         </el-table-column>
       </el-table>
@@ -94,7 +94,7 @@ import { ElMessage } from 'element-plus';
 import { copyOneIdRule, getOneIdRule, listLegacyMappings, listOneIdPolicies, publishOneIdRule } from '@/api/demo/cmdPoc';
 import type { LegacyMappingVO, OneIdPolicyVO, OneIdRuleVO } from '@/api/demo/cmdPoc/types';
 import { useCmdPoc } from '../../composables/useCmdPoc';
-import { CUSTOMER_STATUS_MAP } from '../../constants/options';
+import { customerStatusMeta } from '../../constants/options';
 
 defineOptions({ name: 'CmdPocOneIdPanel' });
 

@@ -4,6 +4,7 @@ import cn.dev33.satoken.annotation.SaCheckLogin;
 import lombok.RequiredArgsConstructor;
 import org.dromara.cmd.domain.bo.CmdCustomerBo;
 import org.dromara.cmd.domain.bo.CmdCustomerDeactivateBo;
+import org.dromara.cmd.domain.vo.CmdCustomerStatsVo;
 import org.dromara.cmd.domain.vo.CmdCustomerSubmitVo;
 import org.dromara.cmd.domain.vo.CmdCustomerVersionVo;
 import org.dromara.cmd.domain.vo.CmdCustomerVo;
@@ -47,6 +48,20 @@ public class CmdCustomerController extends BaseController {
     @GetMapping("/list")
     public R<PageResult<CmdCustomerVo>> list(CmdCustomerBo bo, PageQuery pageQuery) {
         return R.ok(customerService.selectPageCustomerList(bo, pageQuery));
+    }
+
+    /**
+     * 按当前筛选条件统计客户指标概览（列表顶部指标带）
+     * <p>
+     * 与 /list 共用同一套查询条件，保证「指标」与「列表」口径一致；
+     * 每次请求都实时查库，不做缓存，筛选条件变化后指标同步刷新。
+     *
+     * @param bo 查询条件（与列表相同的 keyword / buScope / customerType / status）
+     * @return 指标概览（总数 / Active / 待处理 / 跨 BU / 疑似重复 / 平均质量分）
+     */
+    @GetMapping("/stats")
+    public R<CmdCustomerStatsVo> stats(CmdCustomerBo bo) {
+        return R.ok(customerService.selectCustomerStats(bo));
     }
 
     /**

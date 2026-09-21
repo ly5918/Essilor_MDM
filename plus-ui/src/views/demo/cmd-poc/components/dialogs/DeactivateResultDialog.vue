@@ -36,7 +36,7 @@ defineOptions({ name: 'CmdPocDeactivateResultDialog' });
 
 const props = defineProps<{ payload?: Record<string, unknown> }>();
 
-const result = ref<DeactivateResultVO>({ businessView: [], dbRecords: [] });
+const result = ref<DeactivateResultVO>({ businessView: [], dbRecords: [], versions: [] });
 const dbText = computed(() => result.value.dbRecords.join('\n'));
 
 onMounted(async () => {

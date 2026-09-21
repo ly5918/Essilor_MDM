@@ -1,5 +1,5 @@
 <template>
-  <section class="page">
+  <section class="page list-page">
     <el-card class="page-card" shadow="never" :body-style="{ padding: '10px 16px 14px' }">
       <div class="wv-toolbar card-toolbar">
         <div class="wv-toolbar-left">
@@ -12,16 +12,39 @@
         </div>
       </div>
 
-      <!-- 工作项：等待人工处理（对齐 Deepblue「工作项」列结构） -->
-      <el-table v-if="view === 'workitem'" v-loading="loading" border :data="rows" class="data-table">
-        <el-table-column label="图形" width="90" align="center" fixed="left">
+      <!-- 口径说明：为什么这里是「已激活」而不是「待办」 -->
+      <el-alert
+        class="wv-tip"
+        type="info"
+        :closable="false"
+        show-icon
+        title="已激活 = Warm-Flow 实例已启动且未结束。刚提交的客户新建 / 变更 / 层级申请会立刻出现在这里；审批结束（批准 / 拒绝 / 取消）后移入「已完成的工作流」。点 One ID 看这一单走到泳道图哪一步；点「流程跟踪」弹窗查看逐步明细。"
+      />
+
+      <!-- 已激活的工作流：运行中 / 等待人工处理（对齐 Deepblue「工作项」列结构） -->
+      <el-table
+        v-if="view === 'workitem'"
+        ref="tableRef"
+        v-loading="loading"
+        border
+        :data="rows"
+        :height="tableHeight"
+        class="data-table"
+      >
+        <!-- 操作列只留「流程跟踪」；泳道图改由点 One ID 打开（与「已完成的工作流」同一形态） -->
+        <el-table-column label="操作" width="118" align="center" fixed="left">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" icon="Share" @click="onViewGraph(row)">泳道图</el-button>
+            <el-button link type="primary" size="small" icon="View" @click="onViewTrace(row)">流程跟踪</el-button>
           </template>
         </el-table-column>
         <el-table-column label="One ID" width="155" fixed="left">
           <template #default="{ row }">
-            <span v-if="row.oneId" class="wv-oneid">{{ row.oneId }}</span>
+            <span
+              v-if="row.oneId"
+              class="wv-oneid"
+              title="点击查看该单的泳道图（按实际执行进度点亮节点）"
+              @click="onViewGraph(row)"
+            >{{ row.oneId }}</span>
             <span v-else class="wv-oneid-empty">—</span>
           </template>
         </el-table-column>
@@ -57,87 +80,18 @@
         </el-table-column>
       </el-table>
 
-      <!-- 已激活工作流：引擎已启动且未到终态（对齐 Deepblue「活跃的工作流」列结构） -->
-      <el-table v-else-if="view === 'active'" v-loading="loading" border :data="rows" class="data-table">
-        <el-table-column label="图形" width="90" align="center" fixed="left">
-          <template #default="{ row }">
-            <el-button link type="primary" size="small" icon="Share" @click="onViewGraph(row)">泳道图</el-button>
-          </template>
-        </el-table-column>
-        <el-table-column label="One ID" width="155" fixed="left">
-          <template #default="{ row }">
-            <span v-if="row.oneId" class="wv-oneid">{{ row.oneId }}</span>
-            <span v-else class="wv-oneid-empty">—</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="标签" min-width="185" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.bizType ?? '—' }}: {{ row.taskNo }}</template>
-        </el-table-column>
-        <el-table-column label="状态" width="100" align="center">
-          <template #default="{ row }">
-            <el-tag :type="statusTagType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="描述" prop="bizTitle" min-width="190" show-overflow-tooltip />
-        <el-table-column label="创作者" prop="applicantName" width="100" />
-        <el-table-column label="父工作流" min-width="150" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.sceneName ?? row.sceneCode }}</template>
-        </el-table-column>
-        <el-table-column label="建立日期" width="160" align="center">
-          <template #default="{ row }">{{ formatTime(row.createTime) }}</template>
-        </el-table-column>
-        <el-table-column label="进度" width="140">
-          <template #default="{ row }">
-            <el-progress :percentage="row.progressPercent ?? 0" :stroke-width="10" :text-inside="true" />
-          </template>
-        </el-table-column>
-        <el-table-column label="当前步骤" prop="currentNodeName" min-width="140" show-overflow-tooltip />
-        <el-table-column label="当前状态" width="100" align="center">
-          <template #default="{ row }">
-            <el-tag v-if="row.engineBound" type="success" size="small" effect="plain">启用</el-tag>
-            <el-tag v-else type="info" size="small" effect="plain">未启动</el-tag>
-          </template>
-        </el-table-column>
-      </el-table>
-
-      <!-- 已完成的工作流：业务终态（对齐 Deepblue「已完成的工作流」列结构） -->
-      <el-table v-else v-loading="loading" border :data="rows" class="data-table">
-        <el-table-column label="图形" width="90" align="center" fixed="left">
-          <template #default="{ row }">
-            <el-button link type="primary" size="small" icon="Share" @click="onViewGraph(row)">泳道图</el-button>
-          </template>
-        </el-table-column>
-        <el-table-column label="One ID" width="155" fixed="left">
-          <template #default="{ row }">
-            <span v-if="row.oneId" class="wv-oneid">{{ row.oneId }}</span>
-            <span v-else class="wv-oneid-empty">—</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="标签" min-width="185" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.bizType ?? '—' }}: {{ row.taskNo }}</template>
-        </el-table-column>
-        <el-table-column label="描述" prop="bizTitle" min-width="190" show-overflow-tooltip />
-        <el-table-column label="创作者" prop="applicantName" width="100" />
-        <el-table-column label="父工作流" min-width="150" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.sceneName ?? row.sceneCode }}</template>
-        </el-table-column>
-        <el-table-column label="完成日期" width="160" align="center">
-          <template #default="{ row }">{{ formatTime(row.finishTime ?? row.createTime) }}</template>
-        </el-table-column>
-        <el-table-column label="结果" width="100" align="center">
-          <template #default="{ row }">
-            <el-tag :type="statusTagType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="注释" min-width="150" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.opinion || '—' }}</template>
-        </el-table-column>
-        <el-table-column label="当前状态" width="100" align="center">
-          <template #default>
-            <el-tag type="info" size="small" effect="plain">归档</el-tag>
-          </template>
-        </el-table-column>
-      </el-table>
+      <!-- 分页 -->
+      <div class="pagination-container" v-if="total > 0">
+        <el-pagination
+          v-model:current-page="pageNum"
+          v-model:page-size="pageSize"
+          :page-sizes="[10, 20, 50, 100]"
+          :total="total"
+          layout="total, sizes, prev, pager, next, jumper"
+          @size-change="load"
+          @current-change="load"
+        />
+      </div>
     </el-card>
   </section>
 </template>
@@ -145,24 +99,28 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { listFlowInstances } from '@/api/demo/cmdPoc';
-import type { FlowInstanceVO } from '@/api/demo/cmdPoc/types';
+import type { FlowInstanceVO, PageResult } from '@/api/demo/cmdPoc/types';
 import { useCmdPoc } from '../../composables/useCmdPoc';
+import { useListTableHeight } from '../../composables/useListTableHeight';
 
 defineOptions({ name: 'CmdPocWorkflowViewTable' });
 
 /**
- * Deepblue 工作流三视图共享表格（工作项 / 已激活工作流 / 已完成的工作流）。
+ * 「流程中心 › 已激活工作流」表格（Deepblue 列结构）。
  * 列结构对齐需求截图（Novartis Deepblue - Customer Data Management China），
  * 「One ID」列承载贯穿 ID，位置紧随「图形」之后（fixed），保证不横向滚动也能看到，
  * 可按该 ID 到任意页面搜索框查询。
+ *
+ * 注意：目前只有 workitem 视图在用（`FlowWorkitemPanel`）；
+ * 「已完成的工作流」列表在 `FlowDonePanel`（需要状态筛选 + 分页），两者列结构不同，没有共用。
  */
 const props = defineProps<{
-  /** 视图类型：workitem 待办工作项 / active 运行中 / done 已完成 */
+  /** 视图类型：workitem 运行中 / 等待人工处理 */
   view: 'workitem' | 'active' | 'done';
 }>();
 
 const META: Record<string, { title: string }> = {
-  workitem: { title: '工作项' },
+  workitem: { title: '已激活工作流' },
   active: { title: '已激活工作流' },
   done: { title: '已完成的工作流' }
 };
@@ -171,20 +129,32 @@ const meta = META[props.view];
 const loading = ref(false);
 const rows = ref<FlowInstanceVO[]>([]);
 const keyword = ref('');
+const pageNum = ref(1);
+const pageSize = ref(10);
+const total = ref(0);
 
 const { openDialog } = useCmdPoc();
+
+/** 表格高度自适应：分页条固定在内容区底部，不随数据条数浮动 */
+const { tableRef, tableHeight, recalc } = useListTableHeight(70);
 
 const load = async () => {
   loading.value = true;
   try {
-    const query =
-      props.view === 'workitem'
-        ? { status: 'PENDING', keyword: keyword.value.trim() || undefined }
-        : { runState: props.view === 'active' ? 'RUNNING' : 'DONE', keyword: keyword.value.trim() || undefined };
+    // 「已激活的工作流」= 引擎实例已启动且未结束（runState=RUNNING，与后端 FINAL_STATUSES 口径互补）：
+    // 用 status=PENDING 会漏掉「实例在跑但当前节点是自动节点」的中间态，也不符合「已激活」这个叫法。
+    const query = {
+      runState: props.view === 'done' ? 'DONE' : 'RUNNING',
+      keyword: keyword.value.trim() || undefined,
+      pageNum: pageNum.value,
+      pageSize: pageSize.value
+    };
     const page = await listFlowInstances(query);
     rows.value = page.rows ?? [];
+    total.value = page.total ?? 0;
   } finally {
     loading.value = false;
+    recalc();
   }
 };
 
@@ -197,6 +167,16 @@ const onViewGraph = (row: unknown) => {
     flowCode: inst.flowCode,
     taskNo: inst.taskNo
   });
+};
+
+/**
+ * 流程跟踪：与「已完成的工作流」行内按钮是**同一个弹窗**（同形不同态）。
+ * detailType='active' 供 mock 分支推导「实例进行到一半」；live 分支忽略该参数。
+ */
+const onViewTrace = (row: unknown) => {
+  const inst = row as FlowInstanceVO;
+  if (!inst?.taskNo) return;
+  openDialog('flowTrace', { taskNo: inst.taskNo, detailType: 'active' });
 };
 
 const RISK_TAG: Record<string, 'danger' | 'warning' | 'info'> = { High: 'danger', Medium: 'warning', Low: 'info' };
@@ -263,6 +243,10 @@ onMounted(load);
   color: var(--el-text-color-secondary);
 }
 
+.wv-tip {
+  margin-bottom: 10px;
+}
+
 .wv-sub {
   display: block;
   margin-top: 2px;
@@ -276,6 +260,7 @@ onMounted(load);
   font-size: 12px;
   font-weight: 600;
   color: var(--el-color-primary);
+  cursor: pointer;
 }
 
 .wv-oneid-empty {

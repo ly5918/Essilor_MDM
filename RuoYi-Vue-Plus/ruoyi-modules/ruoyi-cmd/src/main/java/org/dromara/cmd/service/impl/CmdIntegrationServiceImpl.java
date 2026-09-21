@@ -72,7 +72,7 @@ public class CmdIntegrationServiceImpl implements ICmdIntegrationService {
     public String retry(String runCode) {
         IntRun run = runMapper.selectOne(Wrappers.<IntRun>lambdaQuery().eq(IntRun::getRunCode, runCode));
         if (run == null) {
-            throw new ServiceException("集成运行记录不存在：%s", runCode);
+            throw new ServiceException("集成运行记录不存在：{}", runCode);
         }
         IntRun update = new IntRun();
         update.setId(run.getId());

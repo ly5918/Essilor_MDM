@@ -65,6 +65,12 @@ public class CmdCustomerVersionVo implements Serializable {
     /** 来源系统 */
     private String sourceSystem;
 
+    /** 触发该版本的流程实例 */
+    private Long flowInstanceId;
+
+    /** 关联变更申请（cmd_change_request.id） */
+    private Long changeRequestId;
+
     /** 创建时间 */
     @ExcelProperty(value = "变更时间")
     private LocalDateTime createTime;

@@ -94,7 +94,7 @@
 
     <!-- 嵌套 OCR 弹窗：与全局 OCR 弹窗同一组件，确认后立即回填 -->
     <el-dialog v-model="ocrVisible" class="poc-dialog" title="OCR识别结果" width="640px" append-to-body destroy-on-close>
-      <OcrDialog ref="ocrDialogRef" @apply="onApplyOcr" />
+      <OcrDialog ref="ocrDialogRef" embedded @apply="onApplyOcr" />
       <template #footer>
         <el-button @click="ocrVisible = false">关闭</el-button>
         <el-button type="primary" @click="onOcrConfirm">写回表单</el-button>
@@ -122,7 +122,7 @@ defineOptions({ name: 'CmdPocNewCustomerDialog' });
 
 defineProps<{ payload?: Record<string, unknown> }>();
 
-const { publishedFields, loadCustomers, ocrPrefill, setOcrPrefill } = useCmdPoc();
+const { publishedFields, loadCustomers, ocrPrefill, setOcrPrefill, refreshBadge } = useCmdPoc();
 
 /** 已在「业务上下文」维护或由系统托管的字段，不在动态区重复渲染 */
 const CONTEXT_FIELD_CODES = ['customer_type', 'bu_scope', 'product_line', 'source_system', 'status'];
@@ -226,9 +226,14 @@ const openOcr = () => {
 
 /** 嵌套 OCR 弹窗的「写回表单」 */
 const onOcrConfirm = async () => {
-  const message = await ocrDialogRef.value?.submit();
-  ocrVisible.value = false;
-  if (message) ElMessage.success(message);
+  try {
+    const message = await ocrDialogRef.value?.submit();
+    ocrVisible.value = false;
+    if (message) ElMessage.success(message);
+  } catch (error) {
+    // 未上传营业执照等前置校验失败：保持 OCR 弹窗打开，只提示不关闭
+    if (error instanceof Error) ElMessage.warning(error.message);
+  }
 };
 
 /**
@@ -270,6 +275,7 @@ const submit = async (): Promise<string> => {
   });
   const result = await submitCustomer(form);
   await loadCustomers();
+  refreshBadge();
   const node = result.currentNodeName ?? 'BU Scope 初审';
   return `客户申请已提交：One ID ${result.oneId ?? '-'}｜申请编号 ${result.taskNo ?? '-'}，已进入「${node}」，可在「治理与审批」查看待办`;
 };

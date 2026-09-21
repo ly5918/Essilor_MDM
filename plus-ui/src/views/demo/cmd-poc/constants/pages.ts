@@ -25,8 +25,7 @@ export const PAGE_META: Record<PageId, PocPageMeta> = {
   dqscore: { title: 'Data Quality Scorecard', sub: '技术规则、业务规则、分数卡与历史重评估' },
   coverage: { title: 'POC覆盖检查', sub: '12个正式Demo Topic与当前交互原型' },
   audit: { title: '审计中心', sub: '变更、审批、合并、权限与管理员操作' },
-  flowCenter: { title: '流程中心', sub: 'CMD 业务工作流（V6.1）部署与流程图查看' },
-  flowWorkitem: { title: '工作项', sub: '等待人工处理的工作项（One ID 贯穿查询）' },
-  flowActive: { title: '已激活工作流', sub: '运行中的工作流实例（One ID 贯穿查询）' },
-  flowDone: { title: '已完成的工作流', sub: '已结束的工作流实例（One ID 贯穿查询）' }
+  flowDefinition: { title: '工作流定义', sub: 'CMD 业务场景与 Warm-Flow 流程定义映射、部署、按场景配置与泳道图查看' },
+  flowWorkitem: { title: '已激活工作流', sub: '运行中、未结束的实例（One ID 贯穿查询），点 One ID 看泳道图' },
+  flowDone: { title: '已完成的工作流', sub: '已结束的实例（已批准 / 已拒绝 / 已取消 / 已完成），点「流程跟踪」弹窗看该次执行的完整链路，弹窗内可再看泳道图' }
 };

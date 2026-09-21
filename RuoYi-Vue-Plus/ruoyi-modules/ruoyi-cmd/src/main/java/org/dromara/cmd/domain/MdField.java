@@ -40,6 +40,9 @@ public class MdField extends BaseEntity {
     /** 值集编码 */
     private String valueSetCode;
 
+    /** 默认值 */
+    private String defaultValue;
+
     /** 是否必填（Y是 N否） */
     private String isRequired;
 
@@ -57,6 +60,24 @@ public class MdField extends BaseEntity {
 
     /** 是否敏感字段 */
     private String isSensitive;
+
+    /** 是否物理列（Y 表示该字段落在客户主档的实体列上） */
+    private String isPhysical;
+
+    /** 物理列名（is_physical=Y 时有效，如 customer_name） */
+    private String physicalColumn;
+
+    /** 最小长度 */
+    private Integer minLength;
+
+    /** 最大长度 */
+    private Integer maxLength;
+
+    /** 正则校验表达式 */
+    private String regexPattern;
+
+    /** 扩展属性（JSON 字符串） */
+    private String extJson;
 
     /** 作用范围（GLOBAL / BU / CUSTOMER_TYPE） */
     private String scopeType;

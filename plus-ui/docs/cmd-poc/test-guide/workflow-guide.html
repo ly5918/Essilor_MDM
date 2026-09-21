@@ -59,13 +59,15 @@
       <li><a href="#ch2">新建客户申请（OCR 识别）</a></li>
       <li><a href="#ch3">提交申请 · 拿到贯穿 ID</a></li>
       <li><a href="#ch4">用 One ID 在任意页面追踪</a></li>
-      <li><a href="#ch5">切到 BU 角色 · 工作项</a></li>
-      <li><a href="#ch6">流程跟踪（泳道图 + 步骤日志）</a></li>
+      <li><a href="#ch5">切到 BU 角色 · 已激活工作流</a></li>
+      <li><a href="#ch6">流程跟踪弹窗（泳道图 + 步骤明细 + 步骤日志）</a></li>
       <li><a href="#ch7">BU 审批：四个动作</a></li>
       <li><a href="#ch8">审批通过后的去向</a></li>
       <li><a href="#ch9">三张工作流视图</a></li>
       <li><a href="#ch10">审计追溯（Auditor）</a></li>
       <li><a href="#ch11">给不懂业务的人：一句话总结</a></li>
+      <li><a href="#ch12">四分支实战对照（拒绝 / 退回 / 升级 GC）</a></li>
+      <li><a href="#ch13">提交出错提示与常见报错</a></li>
     </ol>
   </nav>
 
@@ -88,7 +90,7 @@
       <tr><td>BU Data Steward（BU 管家）</td><td>初审 BU 范围内的客户申请</td></tr>
       <tr><td>GC Steward（全局管家）</td><td>对"升级上来"的高风险/跨区域客户做全局决策</td></tr>
       <tr><td>Auditor（审计员）</td><td>只读追溯：谁、在什么时候、改了什么</td></tr>
-      <tr><td>Platform Admin（平台管理员）</td><td>看流程定义、集成监控等</td></tr>
+      <tr><td>Platform Admin（平台管理员）</td><td>配字段 / 规则 / 模板 / Workflow（含工作流定义），看集成监控</td></tr>
     </table>
     <p>演示系统顶部有个<strong>"模拟角色"下拉</strong>，不用真登录，直接切角色即可。</p>
   </section>
@@ -139,38 +141,44 @@
     <h2>4. 用 One ID 在任意页面追踪</h2>
     <div class="step"><span class="num">步骤 10</span>回到客户管理列表，在搜索框输入 <code>GC-23F62B7A</code> 或 <code>AP-20260919-0006</code>，点查询——立刻命中这条客户（此时状态是 Pending，表示审批中）。</div>
     <figure><img src="shots/S09-search-oneid.png" alt="用 One ID 搜索"><figcaption>图 10：用 One ID 搜索，精准命中刚提交的客户</figcaption></figure>
-    <div class="tip"><b>关键能力：</b>这个搜索框在<strong>客户管理、治理与审批、工作项、已激活/已完成工作流、审计中心</strong>等所有列表都一样——也就是说你拿同一个号，能在全系统追着这条客户跑。</div>
+    <div class="tip"><b>关键能力：</b>这个搜索框在<strong>客户管理、治理与审批、已激活工作流、已完成的工作流、流程跟踪弹窗、审计中心</strong>等所有列表都一样——也就是说你拿同一个号，能在全系统追着这条客户跑。</div>
   </section>
 
-  <!-- 5 切角色 工作项 -->
+  <!-- 5 切角色 已激活工作流 -->
   <section id="ch5">
-    <h2>5. 切到 BU 角色 · 工作项</h2>
-    <div class="step"><span class="num">步骤 11</span>顶部把角色切成 <strong>BU Data Steward</strong>。左侧菜单展开 <strong>流程中心</strong> → 点 <strong>「工作项」</strong>。这里列出"当前轮到我处理的待办"。你刚提交的申请就在第一条。</div>
-    <figure><img src="shots/S11-bu-workitem.png" alt="BU 工作项"><figcaption>图 11：BU Data Steward 的"工作项"——待我初审的申请排在首位</figcaption></figure>
-    <div class="tip"><b>菜单说明：</b>「流程中心」下有三个视图，都是 RuoYi 二级子菜单样式：
+    <h2>5. 切到 BU 角色 · 已激活工作流</h2>
+    <div class="step"><span class="num">步骤 11</span>顶部把角色切成 <strong>BU Data Steward</strong>。左侧菜单展开 <strong>流程中心</strong> → 点 <strong>「已激活工作流」</strong>。这里列出"引擎实例已启动、还没跑完的单子"。你刚提交的申请就在第一条。</div>
+    <figure><img src="shots/S11-bu-workitem.png" alt="BU 已激活工作流"><figcaption>图 11：BU Data Steward 的"已激活工作流"——刚提交、实例还没跑完的申请排在首位</figcaption></figure>
+    <div class="tip"><b>菜单说明：</b>「流程中心」下有<strong>两个</strong>菜单（RuoYi 二级子菜单样式，都是<strong>运行态</strong>视图）：
       <ul>
-        <li><b>工作项</b>：当前需要我处理、还没办的（PENDING）。</li>
-        <li><b>已激活工作流</b>：正在跑、还没结束的流程（含别人在处理或等待的）。</li>
-        <li><b>已完成的工作流</b>：已经批完/拒绝/退回、走到终态的。</li>
+        <li><b>已激活工作流</b>：引擎实例已启动、<strong>还没跑完</strong>的单子（有在途实例）。点 One ID 打开泳道图，点「流程跟踪」看这一单的完整链路。</li>
+        <li><b>已完成的工作流</b>：已经跑完的实例<strong>列表</strong>（已批准 / 已拒绝 / 已取消 / 已完成），可按状态筛、按 One ID / 申请编号搜。</li>
+        <li><b>流程跟踪（弹窗，不是菜单）</b>：某一单的<strong>详情</strong>——Warm-Flow BPMN 流程图 + 11 步泳道步骤条 + <strong>步骤明细</strong> + Data context state + 审批轨迹。点列表行内「流程跟踪」即弹出，与「工作流定义 → 某行配置」同一形态。</li>
       </ul>
     </div>
   </section>
 
   <!-- 6 泳道图 -->
   <section id="ch6">
-    <h2>6. 流程跟踪（泳道图 + 步骤日志）</h2>
-    <div class="step"><span class="num">步骤 12</span>在工作项第一条点 <strong>「泳道图」</strong>按钮，打开"流程跟踪"窗口。它把整条工作流画成泳道图：横向是阶段（提交 → 校验 → 初审 → 决策 → 完成），纵向是处理人角色。</div>
+    <h2>6. 流程跟踪（泳道图 + 步骤明细 + 步骤日志）</h2>
+    <div class="step"><span class="num">步骤 12</span>在「已激活工作流」第一条点 <strong>「流程跟踪」</strong>打开跟踪弹窗，再点弹窗里的 <strong>「泳道图」</strong>按钮（或直接点该行的 One ID），打开泳道图窗口。它把整条工作流画成泳道图：横向是阶段（提交 → 校验 → 初审 → 决策 → 完成），纵向是处理人角色。</div>
     <figure><img src="shots/S12-flowgraph-pending.png" alt="泳道图-待审批"><figcaption>图 12：实例视图泳道图——绿色是已完成的自动步骤（5/11），蓝色"BU 初审"是当前卡住的节点</figcaption></figure>
 
     <div class="step"><span class="num">步骤 13</span>把窗口往下滚，看底部的 <strong>「工作流步骤执行日志」</strong>。这一步是新增的：系统把工作流<em>每一步</em>都记下来了，且每一步都带 One ID，所以可以精确复盘"谁、在哪个节点、做了什么"。</div>
     <figure><img src="shots/S13-step-log.png" alt="步骤执行日志"><figcaption>图 13：步骤执行日志——提交、录入、OCR、DQ 打分、查重 5 个自动步骤全程留痕，且都挂 One ID</figcaption></figure>
     <div class="ok"><b>为什么这步重要：</b>之前工作流"调起来"后，机器做的几步（OCR/DQ/查重）是黑盒。现在每一步都写进 <code>cmd_workflow_step_log</code> 表，可查、可审计。</div>
+
+    <div class="step"><span class="num">步骤 13+</span>从左侧 <strong>流程中心 → 已完成的工作流</strong> 进<strong>列表页</strong>：这里列出所有<strong>已结束</strong>的实例，可按状态（已批准 / 已拒绝 / 已取消 / 已完成）筛，也可按 <code>One ID</code> / <code>申请编号</code> / 客户主题搜。点任意一行的 <strong>「查看流程跟踪」</strong>，即<strong>弹出流程跟踪窗口</strong>（不切页、不占菜单）。</div>
+    <figure><img src="shots/FT-flowdone-page.png" alt="工作流-已完成的工作流（列表页）"><figcaption>图 6A：流程中心 → 已完成的工作流（<strong>列表页</strong>：已结束实例，点行内「流程跟踪」弹出跟踪窗口）</figcaption></figure>
+    <div class="step"><span class="num">步骤 13++</span>弹出的<strong>流程跟踪窗口</strong>与任务详情右侧按钮打开的是<strong>同一个窗口</strong>（Warm-Flow 实例流程图 + 11 步泳道步骤条 + 步骤明细 + Data context state + 审批轨迹 + 步骤日志），右下角「关闭」回到列表。<strong>点步骤条上任意一步</strong>（如「录入与附件」「OCR 与智能补全」），下方「步骤明细」面板立刻切到那一步。</div>
+    <figure><img src="shots/FT-flowtrace-page.png" alt="工作流-流程跟踪（弹窗）"><figcaption>图 6A-1：流程跟踪<strong>弹窗</strong>：单条实例的完整链路，<strong>点步骤条任意一步</strong>可看该节点明细。<strong>不点不弹</strong>，不会再一进页面就自动铺开某条实例</figcaption></figure>
+    <div class="tip"><b>入口说明（避免混淆）：</b>「流程跟踪」有<strong>两处</strong>入口，但<strong>是同一个弹窗</strong>——①「已激活工作流」/「已完成的工作流」列表行内「流程跟踪」；② 任务 / 审批记录右侧的「流程跟踪」按钮。两处共用同一组件，展示内容完全一致，不存在两套数据或重复实现。</div>
   </section>
 
   <!-- 7 四个动作 -->
   <section id="ch7">
     <h2>7. BU 审批：四个动作（核心业务）</h2>
-    <div class="step"><span class="num">步骤 14</span>回到 BU 角色，进 <strong>治理与审批</strong> 菜单（也可在"工作项"里直接处理）。用申请编号搜到这条，<strong>点中这一行</strong>，右侧会展开详情和四个动作按钮。</div>
+    <div class="step"><span class="num">步骤 14</span>回到 BU 角色，进 <strong>治理与审批</strong> 菜单（也可在"已激活工作流"里直接处理）。用申请编号搜到这条，<strong>点中这一行</strong>，右侧会展开详情和四个动作按钮。</div>
     <figure><img src="shots/S14-bu-approval-queue.png" alt="审批队列"><figcaption>图 14：治理与审批队列——按申请编号搜到待办</figcaption></figure>
     <figure><img src="shots/S15-bu-approval-detail.png" alt="审批详情"><figcaption>图 15：点中行后右侧出现详情 + 四个动作</figcaption></figure>
 
@@ -196,7 +204,7 @@
         <li><code>AP-20260919-0003</code> 分支C-退回补充（Returned）</li>
         <li><code>AP-20260919-0001</code> 分支A-批准通过（Approved）</li>
       </ul>
-      想在泳道图里看"拒绝"分支长啥样，可在"已完成的工作流"里打开 AP-20260919-0002。
+      想看"拒绝"分支长啥样，可在"流程中心 → 已完成的工作流"里用申请编号搜到 AP-20260919-0002，点「查看流程跟踪」弹出。
     </div>
   </section>
 
@@ -206,7 +214,7 @@
     <div class="step"><span class="num">步骤 17</span>批准后，这条客户<strong>正式成为主数据</strong>。验证三处：
       <ul>
         <li><b>客户主档</b>：用 One ID 搜，状态列变成 <span class="pill green">Active</span>。</li>
-        <li><b>已完成的工作流</b>：出现在"流程中心 → 已完成的工作流"里。</li>
+        <li><b>流程跟踪</b>：在"流程中心 → 已完成的工作流"里能看到它（状态=已完成），点「查看流程跟踪」弹出看全链路与逐步明细。</li>
         <li><b>业务视角</b>：切回 Business User，客户管理列表里它从 Pending 变成 Active，业务方可以正式使用。</li>
       </ul>
     </div>
@@ -217,13 +225,16 @@
 
   <!-- 9 三个视图 -->
   <section id="ch9">
-    <h2>9. 三张工作流视图（流程中心）</h2>
-    <p>左侧 <strong>流程中心</strong> 下有三个菜单，分别看流程的不同状态。它们都带 One ID 列，且都能按 One ID 搜。</p>
-    <figure><img src="shots/S19-flow-workitem.png" alt="工作项视图"><figcaption>图 20：工作项（待我处理）</figcaption></figure>
-    <figure><img src="shots/S20-flow-active.png" alt="已激活工作流"><figcaption>图 21：已激活工作流（正在跑、未结束）</figcaption></figure>
-    <figure><img src="shots/S18-flow-done.png" alt="已完成的工作流"><figcaption>图 22：已完成的工作流（已到终态），One ID 列已前置最显眼</figcaption></figure>
+    <h2>9. 工作流菜单与流程跟踪弹窗</h2>
+    <p>左侧 <strong>流程中心</strong> 下有<strong>两个</strong>菜单（<strong>运行态</strong>视图）：<b>已激活工作流</b>（引擎实例已启动、还没跑完的）、<b>已完成的工作流</b>（已结束实例的列表）。它们都带 One ID 列，且都能按 One ID 搜。<b>流程跟踪</b>不再单占菜单——点两者行内的「查看流程跟踪」即<strong>弹出窗口</strong>（单条实例的完整链路，含逐步明细），与「工作流定义 → 某行配置」同一形态。</p>
+    <div class="tip"><b>「工作流定义」去哪了？</b>它是<strong>配置态</strong>能力，按 V6.1 归属 Platform Admin：入口是「<strong>平台管理 → Workflow 卡片 → 管理</strong>」。业务与管家角色只跑流程、不改流程定义，所以「流程中心」菜单里不再重复放这一项。</div>
+    <div class="tip"><b>工作流能配什么？</b>在「工作流定义」页任选一行点【配置】，弹窗 4 个页签覆盖 V6.1 第 16 页要求的<strong>流程节点、路由条件、SLA、超时升级与邮件通知</strong>。<br />
+      <b>不能改（平台固定）</b>：场景编码、流程编码（绑定 Warm-Flow 流程定义与引擎节点定位）、业务入口、OCR / DQ / Duplicate Check / One ID 等系统自动节点、发布与运行追踪、审计证据链，以及主干 <b>BU 初审</b>（不可停用）。<br />
+      <b>能改（按场景可配置）</b>：节点路由规则可<strong>新增 / 停用</strong>（= 增删工作流项目）、命中条件表达式、办理角色、会签 or 或签、节点 SLA、场景 SLA、超时动作与超时升级、邮件通知方式与接收对象，以及 <strong>GC 决策节点是否启用</strong>（V6.1 待确认项：High End 必经、Mainstream 可只走 BU 初审）。<br />
+      配置<strong>真的落库</strong>（写平台配置表），保存后重新打开仍在；图形化流程设计统一由「泳道图」承载，配置弹窗里不再重复画阶段链。</div>
+    <figure><img src="shots/S19-flow-workitem.png" alt="已激活工作流视图"><figcaption>图 20：已激活工作流（实例已启动、还没跑完）</figcaption></figure>
 
-    <div class="step"><span class="num">步骤 18</span>在"已完成的工作流"里打开这条，点「泳道图」——此时是<strong>实例视图</strong>，全部 11 个节点都点亮（绿色），代表流程完整跑完。</div>
+    <div class="step"><span class="num">步骤 18</span>到「流程中心 → 已完成的工作流」用 One ID / 申请编号搜到这<strong>已结束</strong>的一条，点「查看流程跟踪」弹出窗口，即<strong>实例视图</strong>：全部 11 个节点都点亮（绿色），代表流程完整跑完；点任意一步还能看该节点的明细。</div>
     <figure><img src="shots/S21-flowgraph-approved.png" alt="完成的泳道图"><figcaption>图 23：已完成的实例视图——11/11 节点全绿</figcaption></figure>
     <figure><img src="shots/S22-step-log-approved.png" alt="批准步骤日志"><figcaption>图 24：步骤日志里第 6 步"人工批准(BU)"也留了痕，带操作人和意见</figcaption></figure>
   </section>
@@ -243,11 +254,64 @@
     <ol>
       <li><b>业务方</b>（Business User）：填表 → OCR 写回 → 提交。拿到 <code>One ID</code> 和 <code>申请编号</code>。</li>
       <li><b>机器</b>自动做：落档、DQ 打分、查重（这 5 步在泳道图底部步骤日志里看得见）。</li>
-      <li><b>BU 管家</b>在"工作项"里收到待办 → 打开泳道图看进度 → 在"治理与审批"里点 批准/拒绝/退回/升级GC。</li>
-      <li><b>批准后</b>：客户变 <span class="pill green">Active</span> 主数据；流程出现在"已完成的工作流"；审计中心多一条记录。</li>
+      <li><b>BU 管家</b>在"已激活工作流"里看到在途单 → 点 One ID / 跟踪弹窗里的「泳道图」看进度 → 在"治理与审批"里点 批准/拒绝/退回/升级GC。</li>
+      <li><b>批准后</b>：客户变 <span class="pill green">Active</span> 主数据；在"流程中心 → 已完成的工作流"里能看到这条已完成实例（点「查看流程跟踪」弹出看全链路）；审计中心多一条记录。</li>
       <li><b>全程</b>：拿同一个 <code>One ID</code>，从客户管理、审批、工作流视图到审计，任何页面都能追到这条客户。</li>
     </ol>
-    <div class="tip"><b>一个还没做成独立菜单的点：</b>"流程跟踪（泳道图）"目前是藏在每条工作项 / 审批记录的 <strong>「泳道图」按钮</strong> 里，没有单独放成侧边栏菜单项。如果你希望它也像"工作项/已激活/已完成"那样作为流程中心下的独立菜单，我可以再帮你加（需要改菜单配置 + 一个独立泳道图面板）。你说一声即可。</div>
+    <div class="ok"><b>已支持：</b>"工作流"现为 <strong>已激活工作流 / 已完成的工作流</strong> 两个菜单，<strong>流程跟踪改为弹窗</strong>（点行内「流程跟踪」弹出，不再是单独的菜单页）；"工作流定义"已归 Platform Admin 的「平台管理 → Workflow」。列表与弹窗分工明确，弹窗与任务右侧「流程跟踪」<strong>共用同一视图</strong>，不重复、不冲突。</div>
+  </section>
+
+  <!-- 12 四分支 -->
+  <section id="ch12">
+    <h2>12. 四分支实战对照（拒绝 / 退回 / 升级 GC / 批准）</h2>
+    <p>BU 初审有四个动作。第 7、8 章已演示「批准」，这里把另外三个分支（拒绝、退回补充、升级 GC）也逐一跑通并对照。四个分支的差异集中体现在 <strong>客户主档最终状态</strong> 与 <strong>泳道图节点的收尾形态</strong> 上。</p>
+
+    <h3>12.1 四个动作 → 结果一览表</h3>
+    <table>
+      <tr><th>动作</th><th>按钮样式</th><th>客户主档状态</th><th>流程终态</th><th>泳道图收尾形态</th></tr>
+      <tr><td><b>批准</b></td><td><span class="pill green">批准</span></td><td><span class="pill green">Active</span></td><td>已完成</td><td>11/11 全绿，末节点「生成/合成 One ID」变绿</td></tr>
+      <tr><td><b>拒绝</b></td><td><span class="pill red">拒绝</span></td><td><span class="pill red">Rejected</span></td><td>终止</td><td>已过节点绿，当前/后续节点变灰或 <b>stopped</b>，拒绝边画成虚线</td></tr>
+      <tr><td><b>退回补充</b></td><td><span class="pill blue">退回补充</span></td><td><span class="pill blue">Returned</span></td><td>回到业务</td><td>流程回到起点，业务可修改后<strong>再次提交</strong></td></tr>
+      <tr><td><b>升级 GC</b></td><td><span class="pill blue">升级 GC</span></td><td>保持 <span class="pill blue">Pending</span></td><td>转 GC 决策</td><td>范围从 BU 扩大为全局，末节点「GC Scope 决策」变蓝（当前）</td></tr>
+    </table>
+
+    <h3>12.2 分支一：拒绝（Rejected）</h3>
+    <div class="step"><span class="num">步骤 20</span>BU 角色 → 治理与审批，用申请编号搜到待办，点中该行。</div>
+    <figure><img src="shots/BR1-reject-search.png" alt="按申请编号搜到待办"><figcaption>图 12A：按申请编号搜到待拒绝的记录</figcaption></figure>
+    <div class="step"><span class="num">步骤 21</span>在右侧详情点 <strong>「拒绝」</strong>，意见框填写拒绝理由（如"证照与申报主体不一致"），确认。</div>
+    <figure><img src="shots/BR2-reject-detail.png" alt="拒绝详情"><figcaption>图 12B：右侧详情 + 拒绝动作</figcaption></figure>
+    <figure><img src="shots/BR3-reject-result.png" alt="拒绝结果"><figcaption>图 12C：拒绝成功——待办数 -1，已处理数 +1</figcaption></figure>
+    <div class="step"><span class="num">步骤 22</span>到「流程中心 → 已完成的工作流」用同一申请编号搜到它，点「查看流程跟踪」弹出看拒绝分支的收尾。</div>
+    <figure><img src="shots/BR-reject-swimlane.png" alt="拒绝分支泳道图"><figcaption>图 12D：拒绝分支泳道图——流程在 BU 初审处终止，后续节点灰显 / stopped</figcaption></figure>
+    <div class="tip"><b>验证点：</b>客户主档状态应为 <span class="pill red">Rejected</span>；审计中心会新增一条「拒绝」事件。</div>
+
+    <h3>12.3 分支二：退回补充（Returned）</h3>
+    <div class="step"><span class="num">步骤 23</span>另取一条待办，点 <strong>「退回补充」</strong>，填写需要补齐的材料（如"请补充门店授权书"）。</div>
+    <div class="step"><span class="num">步骤 24</span>客户转 <span class="pill blue">Returned</span>，业务角色在客户管理里能看到它、修改后重新提交，流程重新从「创建客户申请」开始。</div>
+    <figure><img src="shots/BR-return-swimlane.png" alt="退回补充分支泳道图"><figcaption>图 12E：退回补充分支泳道图——流程回到起点，等待业务再次提交</figcaption></figure>
+
+    <h3>12.4 分支三：升级 GC（Escalated）</h3>
+    <div class="step"><span class="num">步骤 25</span>选一条超出 BU 权限的待办（如跨区域 / 高风险），点 <strong>「升级 GC」</strong>。</div>
+    <div class="step"><span class="num">步骤 26</span>该记录从 BU 队列转入 GC 队列：切到 <strong>GC Steward</strong> 角色 → 全局治理决策，即可看到它，由 GC 做最终合并 / 创建决策。</div>
+    <figure><img src="shots/BR-escalate-swimlane.png" alt="升级GC分支泳道图"><figcaption>图 12F：升级 GC 分支泳道图——范围扩大为全局，末节点「GC Scope 决策」成为当前节点</figcaption></figure>
+    <div class="ok"><b>四分支小结：</b>同一个申请，因初审动作不同，会走向 4 条完全不同的终态。贯穿全过程的仍是同一个 <code>One ID</code> 与 <code>申请编号</code>——用它们在「流程跟踪」弹窗里可以随时复查每条分支的真实走向。</div>
+  </section>
+
+  <!-- 13 出错提示 -->
+  <section id="ch13">
+    <h2>13. 提交出错提示与常见报错</h2>
+    <p>系统对必填项、格式、验证码等都有前端校验，出错时会<strong>就地红字提示</strong>，不会把脏数据写进库。下面演示最常见的"必填项漏填"。</p>
+    <div class="step"><span class="num">步骤 27</span>Business User → 客户管理 → 点「新建客户」，<strong>不填任何内容</strong>直接点「提交申请」。</div>
+    <figure><img src="shots/FT-error-required.png" alt="必填项校验报错"><figcaption>图 13A：漏填必填项时，表单在对应字段下方红字提示（如"请输入客户法定名称"）</figcaption></figure>
+    <div class="tip"><b>常见报错速查：</b>
+      <ul>
+        <li><b>必填项为空</b> → 字段下方红字「请输入 XXX」，提交被拦截。</li>
+        <li><b>验证码错误</b>（登录页）→ 「验证码错误，请重新输入」，并自动刷新验证码。</li>
+        <li><b>OCR 未识别就提交</b> → 核心字段仍为空 → 触发必填校验；即便提交，DQ 也会因缺字段扣分、风险等级升高。</li>
+        <li><b>重复客户</b> → 系统查重命中后给出疑似重复提示，需走合并 / 关联流程，而非直接新建。</li>
+      </ul>
+    </div>
+    <div class="ok"><b>设计原则：</b>能在前端拦住的错误绝不放到后端；前端没拦住的，后端 DQ 规则会再兜一层，并把风险等级透出到泳道图与审批列表。</div>
   </section>
 
   <footer>

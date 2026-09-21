@@ -69,6 +69,25 @@ public class CmdOcrServiceImpl implements ICmdOcrService {
     }
 
     /**
+     * {@inheritDoc}
+     */
+    @Override
+    public CmdOcrRecognizeVo recognizeOfCustomer(String legalName, String creditCode) {
+        // 优先按法定名称精确匹配，其次按统一社会信用代码；都未命中回退默认素材
+        for (CmdOcrRecognizeVo vo : SAMPLES.values()) {
+            if (StringUtils.isNotBlank(legalName) && legalName.equals(vo.getLicense().getName())) {
+                return vo;
+            }
+        }
+        for (CmdOcrRecognizeVo vo : SAMPLES.values()) {
+            if (StringUtils.isNotBlank(creditCode) && creditCode.equals(vo.getLicense().getCreditCode())) {
+                return vo;
+            }
+        }
+        return SAMPLES.get(DEFAULT_KEY);
+    }
+
+    /**
      * 归一化文件名：去掉路径与扩展名后转小写
      * <p>
      * 注意：这里用 JDK 原生的 lastIndexOf/substring 而不是 StringUtils.substringAfterLast，

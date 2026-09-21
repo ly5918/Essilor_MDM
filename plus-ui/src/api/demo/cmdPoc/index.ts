@@ -25,16 +25,30 @@ import type {
   AuditEventVO,
   AuditExportForm,
   BatchResultVO,
+  ChangeDetailVO,
   ChangeDiffVO,
+  ChangeFieldVO,
   ChangeRequestForm,
   ChangeRequestQuery,
   ChangeRequestVO,
   ChangeStatus,
+  ChangeVersionVO,
+  CmdChangeDetailRow,
+  CmdChangeDiffRow,
+  CmdChangeFieldRow,
+  CmdChangeKpiRow,
   CmdChangeRequestRow,
+  CmdChangeTrailRow,
+  CmdCustomerVersionRow,
+  CmdDeactivateResultRow,
   CmdCustomerRow,
   CmdDashboardRow,
   CmdFlowTraceRow,
   CmdHierarchyNodeRow,
+  CmdHierarchyRelationRow,
+  CmdHierarchyRelationHistRow,
+  CmdHierarchyUnassignedRow,
+  CmdHierarchyValidateRow,
   CmdIntegrationRunRow,
   CmdImportJobRow,
   CmdImportResultRow,
@@ -43,6 +57,7 @@ import type {
   CoverageItemVO,
   CustomerForm,
   CustomerQuery,
+  CustomerStats,
   CustomerSubmitVO,
   CustomerVO,
   DqRuleRow,
@@ -60,9 +75,19 @@ import type {
   FlowInstanceVO,
   FlowSceneVO,
   HierarchyNodeVO,
+  HierarchyAssignForm,
+  HierarchyChildForm,
+  HierarchyRelationEditForm,
   HierarchyRelationForm,
+  HierarchyRelationHistVO,
+  HierarchyRelationVO,
+  HierarchySearchFilters,
+  HierarchyUnassignedVO,
+  HierarchyValidateForm,
+  HierarchyValidateVO,
   ImportJobStatus,
   ImportJobVO,
+  ImportRowVO,
   ImportTemplateVO,
   ImportUploadForm,
   IntegrationConnForm,
@@ -94,7 +119,8 @@ import type {
   RolePermissionVO,
   TemplateMappingVO,
   TodoVO,
-  WorkflowConfigVO,
+  FlowSceneConfigBo,
+  FlowSceneConfigVO,
   WorkflowStepVO
 } from './types';
 import * as mock from './mock';
@@ -148,10 +174,25 @@ async function unwrap<T>(promise: AxiosPromise<T>): Promise<T> {
   return res.data;
 }
 
+/**
+ * 后端 LocalDateTime → 页面展示串
+ * 后端返回 'yyyy-MM-dd HH:mm:ss'（application.yml 已配置全局格式），
+ * 也兼容 ISO 'yyyy-MM-ddTHH:mm:ss'，因此统一做一次归一化。
+ */
+function toDateText(value?: string | null): string {
+  if (!value) return '';
+  return String(value).replace('T', ' ').slice(0, 10);
+}
+
+function toDateTimeText(value?: string | null): string {
+  if (!value) return '';
+  return String(value).replace('T', ' ').slice(0, 19);
+}
+
 /* ============================== 1. 工作台 ============================== */
-export const getDashboardStats = async (): Promise<DashboardStatVO[]> => {
+export const getDashboardStats = async (buScope?: string): Promise<DashboardStatVO[]> => {
   if (!useLive('dashboard')) return delay(mock.mockDashboardStats);
-  const vo = await unwrap<CmdDashboardRow>(request({ url: '/cmd/dashboard/stats', method: 'get' }));
+  const vo = await unwrap<CmdDashboardRow>(request({ url: '/cmd/dashboard/stats', method: 'get', params: { buScope } }));
   return [
     { key: 'customerTotal', label: '客户总数', value: vo.customerTotal ?? 0, hint: '当前 Scope 可见' },
     { key: 'customerActive', label: '生效中客户', value: vo.customerActive ?? 0, hint: 'status = active' },
@@ -160,9 +201,9 @@ export const getDashboardStats = async (): Promise<DashboardStatVO[]> => {
   ];
 };
 
-export const getTodo = async (): Promise<TodoVO> => {
+export const getTodo = async (buScope?: string): Promise<TodoVO> => {
   if (!useLive('dashboard')) return delay(mock.mockTodo);
-  const vo = await unwrap<CmdDashboardRow>(request({ url: '/cmd/dashboard/stats', method: 'get' }));
+  const vo = await unwrap<CmdDashboardRow>(request({ url: '/cmd/dashboard/stats', method: 'get', params: { buScope } }));
   const count = Number(vo.customerPending ?? 0);
   return {
     count,
@@ -172,33 +213,178 @@ export const getTodo = async (): Promise<TodoVO> => {
   };
 };
 
+/** 获取当前用户审批待办统计（myTodo / myDone / returned / slaOverdue），用于菜单 badge */
+export const getApprovalStats = async (): Promise<Record<string, number>> => {
+  if (!useLive('approval')) return delay({ myTodo: 0, myDone: 0, returned: 0, slaOverdue: 0 });
+  const stats = await unwrap<Record<string, number>>(request({ url: '/cmd/approval/stats', method: 'get' }));
+  return stats ?? {};
+};
+
 export const listNotifications = (): Promise<NotificationVO[]> =>
   USE_MOCK ? delay(mock.mockNotifications) : unwrap(request({ url: '/cmd/dashboard/notifications', method: 'get' }));
 
 /* ============================== 2. 客户主数据 ============================== */
-/** 后端行 → 前端展示对象：字段名对齐（buScope→bu、createTime→updatedAt），面板无需感知后端差异 */
+/**
+ * 后端行 → 前端展示对象
+ * <p>
+ * 做两件事：① 字段名对齐（buScope→bu、updateTime→updatedAt）；② 空值收敛，
+ * 保证详情弹窗每个字段都有稳定的展示值（空串走「—」占位），面板代码无需感知后端差异。
+ * 字段覆盖 cmd_customer 全部业务列，详情弹窗据此完整展示，无需二次查询。
+ */
 function toCustomerVO(row: CmdCustomerRow): CustomerVO {
   return {
     oneId: row.oneId ?? '',
     legalName: row.legalName ?? '',
+    legalNameEn: row.legalNameEn ?? '',
+    shortName: row.shortName ?? '',
     customerType: row.customerType ?? '',
+    customerLevel: row.customerLevel ?? '',
     bu: row.buScope ?? '',
+    gcScopeFlag: row.gcScopeFlag ?? '',
     productLine: row.productLine ?? '',
     sourceSystem: row.sourceSystem ?? '',
+    sourceId: row.sourceId ?? '',
     creditCode: row.creditCode ?? '',
+    taxNo: row.taxNo ?? '',
+    country: row.country ?? '',
+    province: row.province ?? '',
+    city: row.city ?? '',
     address: row.address ?? '',
+    postalCode: row.postalCode ?? '',
     payerId: row.payerId ?? '',
+    contactName: row.contactName ?? '',
+    contactPhone: row.contactPhone ?? '',
+    contactEmail: row.contactEmail ?? '',
     status: (row.status ?? 'active') as CustomerVO['status'],
     dqScore: Number(row.dqScore ?? 0),
+    dqGrade: row.dqGrade ?? '',
+    matchState: row.matchState ?? '',
+    duplicateFlag: row.duplicateFlag ?? '',
+    mergedToOneId: row.mergedToOneId ?? '',
     versionNo: row.versionNo ?? 1,
-    updatedAt: (row.updateTime ?? row.createTime ?? '').slice(0, 10)
+    effectiveFrom: row.effectiveFrom ?? '',
+    effectiveTo: row.effectiveTo ?? '',
+    approvedBy: row.approvedBy ?? undefined,
+    approvedTime: row.approvedTime ?? '',
+    flowInstanceId: row.flowInstanceId ?? undefined,
+    flowStatus: row.flowStatus ?? '',
+    remark: row.remark ?? '',
+    extJson: row.extJson ?? '',
+    createdAt: row.createTime ?? '',
+    updatedAt: row.updateTime ?? row.createTime ?? ''
   };
 }
 
-export const listCustomers = async (query?: CustomerQuery): Promise<CustomerVO[]> => {
-  if (!useLive('customer')) return delay(mock.mockCustomers);
-  const page = await unwrap<PageResult<CmdCustomerRow>>(request({ url: '/cmd/customer/list', method: 'get', params: query }));
-  return (page?.rows ?? []).map(toCustomerVO);
+/**
+ * 前端筛选条件 → 后端查询参数
+ * <p>
+ * 只做字段名对齐（前端 bu ↔ 后端 buScope），空串一律转 undefined，
+ * 避免把空条件当等值条件传给后端（会查出 0 条）。
+ * 列表与指标统计共用，保证两者条件完全一致。
+ */
+function toCustomerParams(query?: CustomerQuery) {
+  return {
+    keyword: query?.keyword?.trim() || undefined,
+    buScope: query?.bu || undefined,
+    customerType: query?.customerType || undefined,
+    status: query?.status || undefined
+  };
+}
+
+/** mock 模式下的本地条件过滤（真实模式由后端 SQL 完成，仅用于关闭后端联调时兜底） */
+function filterMockCustomers(query?: CustomerQuery): CustomerVO[] {
+  const kw = (query?.keyword ?? '').trim().toLowerCase();
+  return mock.mockCustomers.filter(row => {
+    const matchKeyword =
+      !kw ||
+      [row.legalName, row.legalNameEn, row.shortName, row.oneId, row.creditCode, row.payerId].some(value =>
+        (value ?? '').toLowerCase().includes(kw)
+      );
+    const matchBu = !query?.bu || (row.bu ?? '').includes(query.bu);
+    const matchType = !query?.customerType || row.customerType === query.customerType;
+    const matchStatus = !query?.status || row.status === query.status;
+    return matchKeyword && matchBu && matchType && matchStatus;
+  });
+}
+
+/** 与后端 CmdCustomerServiceImpl#selectCustomerStats 相同的统计口径 */
+function buildMockStats(rows: CustomerVO[]): CustomerStats {
+  const scored = rows.filter(row => Number(row.dqScore ?? 0) > 0);
+  return {
+    total: rows.length,
+    activeCount: rows.filter(row => row.status === 'active').length,
+    pendingCount: rows.filter(row => row.status === 'pending' || row.status === 'returned').length,
+    crossBuCount: rows.filter(row => row.gcScopeFlag === 'Y').length,
+    duplicateCount: rows.filter(row => row.duplicateFlag === 'Y').length,
+    avgDqScore: scored.length
+      ? Math.round(scored.reduce((sum, row) => sum + Number(row.dqScore ?? 0), 0) / scored.length)
+      : 0
+  };
+}
+
+/**
+ * 分页查询客户主档（服务端分页 + 服务端条件过滤）
+ * <p>
+ * 每次调用都实时查库，不做前端缓存；不传 pageNum/pageSize 时后端返回权限内全量
+ * （供「客户层级」「One ID 管理」等需要全量列表的页面复用）。
+ */
+export const listCustomers = async (query?: CustomerQuery): Promise<PageResult<CustomerVO>> => {
+  if (!useLive('customer')) {
+    const rows = filterMockCustomers(query);
+    const pageNum = query?.pageNum ?? 1;
+    const pageSize = query?.pageSize ?? rows.length;
+    return delay({ rows: rows.slice((pageNum - 1) * pageSize, pageNum * pageSize), total: rows.length });
+  }
+  const page = await unwrap<PageResult<CmdCustomerRow>>(
+    request({
+      url: '/cmd/customer/list',
+      method: 'get',
+      params: { ...toCustomerParams(query), pageNum: query?.pageNum, pageSize: query?.pageSize }
+    })
+  );
+  return {
+    rows: (page?.rows ?? []).map(toCustomerVO),
+    total: page?.total ?? 0
+  };
+};
+
+/**
+ * 按当前筛选条件统计客户指标概览（列表顶部指标带）
+ * <p>
+ * 与 listCustomers 同条件实时查库，保证「指标」与「列表」永远对得上。
+ */
+export const getCustomerStats = async (query?: CustomerQuery): Promise<CustomerStats> => {
+  if (!useLive('customer')) return delay(buildMockStats(filterMockCustomers(query)));
+  const stats = await unwrap<CustomerStats>(
+    request({ url: '/cmd/customer/stats', method: 'get', params: toCustomerParams(query) })
+  );
+  return (
+    stats ?? {
+      total: 0,
+      activeCount: 0,
+      pendingCount: 0,
+      crossBuCount: 0,
+      duplicateCount: 0,
+      avgDqScore: 0
+    }
+  );
+};
+
+/**
+ * 查询单个客户完整主档（客户详情弹窗数据源）
+ * <p>
+ * 走 /cmd/customer/oneId/{oneId}，保证详情看到的是数据库当前值，
+ * 而不是列表缓存里的快照（列表与详情可能因版本变更产生时间差）。
+ */
+export const getCustomerDetail = async (oneId: string): Promise<CustomerVO | null> => {
+  if (!useLive('customer')) {
+    const hit = mock.mockCustomers.find(item => item.oneId === oneId);
+    return delay(hit ? { ...hit } : null);
+  }
+  const row = await unwrap<CmdCustomerRow>(
+    request({ url: `/cmd/customer/oneId/${encodeURIComponent(oneId)}`, method: 'get' })
+  );
+  return row ? toCustomerVO(row) : null;
 };
 
 /** CUSTOMER 模型的动态字段 → 客户主档列（其余动态字段整体进 ext_json 扩展属性） */
@@ -289,19 +475,33 @@ const FIELD_TYPE_TEXT: Record<string, MetadataFieldVO['type']> = {
 export const listMetadataFields = async (): Promise<MetadataFieldVO[]> => {
   if (!useLive('metadata')) return delay(mock.mockMetadataFields);
   const rows = await unwrap<CmdMdFieldRow[]>(request({ url: '/cmd/metadata/field/list', method: 'get' }));
-  return (rows ?? []).map(row => ({
-    code: row.fieldCode ?? '',
-    label: row.fieldName ?? '',
-    scope: FIELD_SCOPE_TEXT[row.scopeType ?? ''] ?? 'GC Core',
-    type: FIELD_TYPE_TEXT[(row.dataType ?? '').toUpperCase()] ?? 'Text',
-    required: row.isRequired === 'Y',
-    bu: row.ownerBu ?? 'All',
-    // 说明：md_field.model_code 是「数据模型」（如 CUSTOMER），不是客户类型，
-    // 早期实现直接把它当 customerType 过滤条件，导致动态字段全部被过滤为空。
-    // 字段按模型维度适用于全部客户类型，故统一取 All（与原型「根据业务上下文加载字段」一致）。
-    customerType: 'All',
-    status: row.status === '1' ? 'Published' : 'Draft'
-  }));
+  // md_field 里同一 field_code 可能有多条（种子数据 model_code 分别是 All / CUSTOMER / Door），
+  // 直接平铺会让业务表单出现重复字段（如「客户法定名称」出现两次）→ 按 field_code 去重，保留首条。
+  const seen = new Set<string>();
+  return (rows ?? [])
+    .filter(row => {
+      const code = row.fieldCode ?? '';
+      if (!code || seen.has(code)) return false;
+      seen.add(code);
+      return true;
+    })
+    .map(row => ({
+      code: row.fieldCode ?? '',
+      label: row.fieldName ?? '',
+      scope: FIELD_SCOPE_TEXT[row.scopeType ?? ''] ?? 'GC Core',
+      type: FIELD_TYPE_TEXT[(row.dataType ?? '').toUpperCase()] ?? 'Text',
+      required: row.isRequired === 'Y',
+      bu: row.ownerBu ?? 'All',
+      // 说明：md_field.model_code 取值是 All / CUSTOMER / Door 混用（不是干净的「数据模型」维度），
+      // 早期实现把它当 customerType 过滤条件，导致动态字段被过滤为空。
+      // 字段按模型维度适用于全部客户类型，故统一取 All（与原型「根据业务上下文加载字段」一致）。
+      customerType: 'All',
+      // 说明：后端 MdField.status 的语义是「0 正常 / 1 停用」（RuoYi 惯例），不是 Draft/Published。
+      // 早期实现按 status==='1' ? Published : Draft 映射，而种子数据全部为 '0'（正常），
+      // 结果所有字段被判成 Draft，动态客户字段区渲染为 0 个（表单空白）。
+      // 现按 0 → Published（可用于业务表单）、1 → Draft（已停用，不进表单）映射。
+      status: row.status === '0' ? 'Published' : 'Draft'
+    }));
 };
 
 export const saveMetadataField = async (data: MetadataFieldForm): Promise<string> => {
@@ -319,7 +519,8 @@ export const saveMetadataField = async (data: MetadataFieldForm): Promise<string
         isRequired: data.required ? 'Y' : 'N',
         ownerBu: data.bu,
         modelCode: data.customerType,
-        status: data.status === 'Published' ? '1' : '0'
+        // 与 listMetadataFields 的读取映射保持同向：Published → '0'（正常/启用）、Draft → '1'（停用）
+        status: data.status === 'Published' ? '0' : '1'
       }
     })
   );
@@ -439,16 +640,29 @@ function toImportJobVO(row: CmdImportJobRow): ImportJobVO {
     totalRows: row.totalCount ?? 0,
     status: IMPORT_STATUS_TEXT[row.jobStatus ?? ''] ?? 'Waiting for Review',
     submittedAt: row.submitTime ?? row.createTime ?? '',
-    submittedBy: row.submitBy ?? ''
+    submittedBy: row.submitBy ?? '',
+    scene: row.scene ?? '',
+    buScope: row.buScope ?? '',
+    templateCode: row.templateCode ?? '',
+    templateVersion: '',
+    exactCount: row.exactCount ?? 0,
+    suspectedCount: row.suspectedCount ?? 0,
+    newCount: row.newCount ?? 0,
+    reviewCount: row.reviewCount ?? 0,
+    invalidCount: row.invalidCount ?? 0,
+    remark: row.remark ?? ''
   };
 }
 
-export const listImportJobs = async (): Promise<ImportJobVO[]> => {
-  if (!useLive('import')) return delay(mock.mockImportJobs);
+export const listImportJobs = async (pageNum = 1, pageSize = 10): Promise<PageResult<ImportJobVO>> => {
+  if (!useLive('import')) return delay({ rows: mock.mockImportJobs, total: mock.mockImportJobs.length });
   const page = await unwrap<PageResult<CmdImportJobRow>>(
-    request({ url: '/cmd/import/job/list', method: 'get', params: { pageNum: 1, pageSize: 100 } })
+    request({ url: '/cmd/import/job/list', method: 'get', params: { pageNum, pageSize } })
   );
-  return (page.rows ?? []).map(toImportJobVO);
+  return {
+    rows: (page.rows ?? []).map(toImportJobVO),
+    total: page.total ?? 0
+  };
 };
 
 export const getBatchResult = async (jobId: string): Promise<BatchResultVO> => {
@@ -463,6 +677,33 @@ export const getBatchResult = async (jobId: string): Promise<BatchResultVO> => {
     invalid: vo.invalid ?? 0,
     routes: vo.routes ?? []
   };
+};
+
+/**
+ * 分页查询导入行明细（结果分流下钻「查看 N 条」）
+ * @param jobId      任务编号
+ * @param resultType 结果分流（EXACT / SUSPECTED / NEW / INVALID，可空查全部）
+ */
+export const listImportJobRows = async (jobId: string, resultType?: string, pageNum = 1, pageSize = 20): Promise<PageResult<ImportRowVO>> => {
+  if (!useLive('import')) return delay({ rows: [], total: 0 });
+  const page = await unwrap<PageResult<ImportRowVO>>(
+    request({
+      url: `/cmd/import/job/${jobId}/rows`,
+      method: 'get',
+      params: { resultType: resultType || undefined, pageNum, pageSize }
+    })
+  );
+  return { rows: page.rows ?? [], total: page.total ?? 0 };
+};
+
+/**
+ * 行级治理动作（BU Scope 治理：LINK 关联已有 One ID / EXCLUDE 排除 / RETURN 退回修复）
+ */
+export const importRowAction = async (rowId: number, action: 'LINK' | 'EXCLUDE' | 'RETURN', oneId?: string): Promise<string> => {
+  if (!useLive('import')) return delay(`演示模式：已执行 ${action}`);
+  return unwrap<string>(
+    request({ url: `/cmd/import/row/${rowId}/action`, method: 'post', data: { action, oneId } })
+  );
 };
 
 export const createImportJob = async (fileName: string): Promise<string> => {
@@ -518,6 +759,9 @@ export const uploadImportJob = async (data: ImportUploadForm): Promise<string> =
   formData.append('templateCode', data.templateCode);
   if (data.errorStrategy) formData.append('errorStrategy', data.errorStrategy);
   if (data.duplicateStrategy) formData.append('duplicateStrategy', data.duplicateStrategy);
+  if (data.scene) formData.append('scene', data.scene);
+  if (data.buScope) formData.append('buScope', data.buScope);
+  if (data.sourceSystem) formData.append('sourceSystem', data.sourceSystem);
   const jobCode = await unwrap<string>(
     request({
       url: '/cmd/import/job/upload',
@@ -548,7 +792,9 @@ export const listTemplateMappings = async (templateCode?: string): Promise<Templ
 const HIERARCHY_TYPE_LABEL: Record<string, string> = {
   COMMERCIAL: 'Commercial Entity',
   LEGAL: 'Main Account',
-  DOOR: 'Door'
+  DOOR: 'Door',
+  // 待归位节点：已批准主数据尚未挂到父节点，类型未定型
+  UNASSIGNED: '待归位'
 };
 
 function toHierarchyNode(row: CmdHierarchyNodeRow): HierarchyNodeVO {
@@ -573,6 +819,10 @@ function toHierarchyNode(row: CmdHierarchyNodeRow): HierarchyNodeVO {
     childrenCount: row.childrenCount ?? 0,
     descendants: row.descendants ?? 0,
     parent: row.parentOneId ?? '无',
+    // 根节点（parentOneId 为空）用于「返回根节点」定位；depth / hierarchyType 用于详情与级别推导展示
+    parentOneId: row.parentOneId ?? '',
+    depth: row.depth ?? 0,
+    hierarchyType: row.hierarchyType ?? '',
     path: (row.pathNames ?? name).split('/').join(' / '),
     ancestorIds,
     validity: `${from || '—'} → ${to || '9999-12-31'}`,
@@ -583,13 +833,16 @@ function toHierarchyNode(row: CmdHierarchyNodeRow): HierarchyNodeVO {
 
 /** 平铺列表按 parentOneId 组装成树，并回填父节点显示名 */
 function buildHierarchyTree(rows: CmdHierarchyNodeRow[]): HierarchyNodeVO[] {
-  const nodes = rows.map(toHierarchyNode);
+  // 待归位节点（UNASSIGNED）尚未挂父节点，进树会被误当成根节点，因此在此剔除；
+  // 它们由「待归位主数据」区（getUnassignedNodes）单独展示，两者互补覆盖全部主数据。
+  const mounted = rows.filter(row => (row.hierarchyType ?? '') !== 'UNASSIGNED');
+  const nodes = mounted.map(toHierarchyNode);
   const byOneId = new Map<string, HierarchyNodeVO>();
-  rows.forEach((row, index) => {
+  mounted.forEach((row, index) => {
     if (row.oneId) byOneId.set(row.oneId, nodes[index]);
   });
   const roots: HierarchyNodeVO[] = [];
-  rows.forEach((row, index) => {
+  mounted.forEach((row, index) => {
     const parent = row.parentOneId ? byOneId.get(row.parentOneId) : undefined;
     if (parent) {
       nodes[index].parentName = parent.name;
@@ -601,9 +854,11 @@ function buildHierarchyTree(rows: CmdHierarchyNodeRow[]): HierarchyNodeVO[] {
   return roots;
 }
 
-export const getHierarchy = async (): Promise<HierarchyNodeVO[]> => {
+export const getHierarchy = async (filters?: HierarchySearchFilters): Promise<HierarchyNodeVO[]> => {
   if (!useLive('hierarchy')) return delay(mock.mockHierarchy);
-  const rows = await unwrap<CmdHierarchyNodeRow[]>(request({ url: '/cmd/hierarchy/nodes', method: 'get' }));
+  const rows = await unwrap<CmdHierarchyNodeRow[]>(
+    request({ url: '/cmd/hierarchy/nodes', method: 'get', params: toHierarchyParams(undefined, filters) })
+  );
   return buildHierarchyTree(rows ?? []);
 };
 
@@ -613,17 +868,61 @@ export const getHierarchyNode = async (key: string): Promise<HierarchyNodeVO | u
   return row ? toHierarchyNode(row) : undefined;
 };
 
-export const searchHierarchy = async (keyword: string): Promise<HierarchyNodeVO[]> => {
+/**
+ * 分页查询直接子节点（树上「加载更多子节点 · 已显示 X / Y」点击后按需追加）
+ *
+ * @param parentOneId 父节点 One ID
+ * @param offset      偏移量
+ * @param limit       每批条数
+ */
+export const getHierarchyChildren = async (
+  parentOneId: string,
+  offset: number,
+  limit: number
+): Promise<HierarchyNodeVO[]> => {
+  if (!useLive('hierarchy')) return delay([]);
+  const rows = await unwrap<CmdHierarchyNodeRow[]>(
+    request({
+      url: `/cmd/hierarchy/childrenPage/${parentOneId}`,
+      method: 'get',
+      params: { offset, limit }
+    })
+  );
+  return (rows ?? []).map(toHierarchyNode);
+};
+
+/**
+ * 页面下拉文案 → 后端查询参数
+ * 「全部层级」「All Authorized BU」这类占位项不下传（后端按不过滤处理）。
+ */
+function toHierarchyParams(keyword?: string, filters?: HierarchySearchFilters): Record<string, string> {
+  const params: Record<string, string> = {};
+  const kw = (keyword ?? '').trim();
+  if (kw) params.keyword = kw;
+  if (filters?.hierarchyType && filters.hierarchyType !== '全部类型') {
+    params.hierarchyType = HIERARCHY_TYPE_REVERSE[filters.hierarchyType] ?? filters.hierarchyType;
+  }
+  if (filters?.level && filters.level !== '全部层级') params.level = filters.level;
+  if (filters?.buScope && filters.buScope !== 'All Authorized BU') params.buScope = filters.buScope;
+  if (filters?.status && filters.status !== '全部状态') params.status = filters.status;
+  return params;
+}
+
+export const searchHierarchy = async (keyword: string, filters?: HierarchySearchFilters): Promise<HierarchyNodeVO[]> => {
   if (!useLive('hierarchy')) {
     const k = keyword.toLowerCase();
     return delay(
-      Object.values(mock.mockHierarchyNodes).filter(
-        n => n.name.toLowerCase().includes(k) || n.oneId.toLowerCase().includes(k)
-      )
+      Object.values(mock.mockHierarchyNodes).filter(n => {
+        const hitKeyword = !k || n.name.toLowerCase().includes(k) || n.oneId.toLowerCase().includes(k);
+        const hitLevel = !filters?.level || filters.level === '全部层级' || n.level === filters.level;
+        const hitStatus = !filters?.status || filters.status === '全部状态' || n.status === filters.status;
+        const hitType = !filters?.hierarchyType || n.type === filters.hierarchyType;
+        return hitKeyword && hitLevel && hitStatus && hitType;
+      })
     );
   }
   const rows = await unwrap<CmdHierarchyNodeRow[]>(
-    request({ url: '/cmd/hierarchy/nodes', method: 'get', params: { keyword } })
+    request({ url: '/cmd/hierarchy/nodes', method: 'get', params: toHierarchyParams(keyword, filters) })
   );
   return (rows ?? []).map(toHierarchyNode);
 };
@@ -636,7 +935,7 @@ export const addHierarchyRelation = async (data: HierarchyRelationForm): Promise
       url: '/cmd/hierarchy/relation',
       method: 'post',
       data: {
-        hierarchyType: data.hierarchyType,
+        hierarchyType: data.hierarchyType ? HIERARCHY_TYPE_REVERSE[data.hierarchyType] ?? data.hierarchyType : undefined,
         relationType: data.relationType,
         parentOneId: data.parentId,
         childOneId: data.childId,
@@ -649,22 +948,310 @@ export const addHierarchyRelation = async (data: HierarchyRelationForm): Promise
   return '层级关系已保存，Loop Check 通过';
 };
 
+/** 展示文案 → 后端层级类型枚举 */
+const HIERARCHY_TYPE_REVERSE: Record<string, string> = {
+  'Legal Hierarchy': 'LEGAL',
+  'Sales Hierarchy': 'DOOR',
+  'Payer Hierarchy': 'PAYER'
+};
+
+/** 根节点查询（层级树「返回根节点」）：无父节点的顶层 Commercial Entity */
+export const getHierarchyRoots = async (buScope?: string): Promise<HierarchyNodeVO[]> => {
+  if (!useLive('hierarchy')) {
+    return delay(
+      Object.values(mock.mockHierarchyNodes).filter(n => !n.parentOneId)
+    );
+  }
+  const rows = await unwrap<CmdHierarchyNodeRow[]>(
+    request({ url: '/cmd/hierarchy/roots', method: 'get', params: buScope ? { buScope } : {} })
+  );
+  return (rows ?? []).map(toHierarchyNode);
+};
+
+/** 层级关系行 → 前端展示对象 */
+function toHierarchyRelationVO(row: CmdHierarchyRelationRow): HierarchyRelationVO {
+  return {
+    id: Number(row.id ?? 0),
+    relationCode: row.relationCode ?? '',
+    hierarchyType: row.hierarchyType ?? '',
+    relationType: row.relationType ?? '',
+    parentOneId: row.parentOneId ?? '',
+    childOneId: row.childOneId ?? '',
+    payerOneId: row.payerOneId ?? '',
+    buScope: row.buScope ?? '',
+    crossBuFlag: row.crossBuFlag ?? 'N',
+    effectiveFrom: toDateText(row.effectiveFrom),
+    effectiveTo: toDateText(row.effectiveTo),
+    status: row.status ?? 'Pending',
+    changeReason: row.changeReason ?? '',
+    sourceType: row.sourceType ?? ''
+  };
+}
+
+/** 查询某节点当前生效的挂载关系（「编辑层级关系」回显，实时读库） */
+export const getNodeActiveRelation = async (childOneId: string): Promise<HierarchyRelationVO | undefined> => {
+  if (!useLive('hierarchy')) return delay(undefined);
+  const row = await unwrap<CmdHierarchyRelationRow>(
+    request({ url: `/cmd/hierarchy/relationByChild/${childOneId}`, method: 'get' })
+  );
+  return row && row.id ? toHierarchyRelationVO(row) : undefined;
+};
+
+/** 查询某节点全部层级关系（父 / 子两个方向，历史与现状一并返回） */
+export const getHierarchyRelations = async (oneId: string): Promise<HierarchyRelationVO[]> => {
+  if (!useLive('hierarchy')) return delay([]);
+  const rows = await unwrap<CmdHierarchyRelationRow[]>(
+    request({ url: `/cmd/hierarchy/relations/${oneId}`, method: 'get' })
+  );
+  return (rows ?? []).map(toHierarchyRelationVO);
+};
+
+/** 查询层级关系历史版本（历史归属追溯：改过几次、以前挂在谁下面） */
+export const getHierarchyRelationHistory = async (query: {
+  relationId?: number;
+  oneId?: string;
+}): Promise<HierarchyRelationHistVO[]> => {
+  if (!useLive('hierarchy')) return delay([]);
+  const rows = await unwrap<CmdHierarchyRelationHistRow[]>(
+    request({ url: '/cmd/hierarchy/relationHistory', method: 'get', params: query })
+  );
+  return (rows ?? []).map(row => ({
+    id: Number(row.id ?? 0),
+    relationId: Number(row.relationId ?? 0),
+    relationCode: row.relationCode ?? '',
+    versionNo: Number(row.versionNo ?? 1),
+    operation: row.operation ?? 'UPDATE',
+    relationType: row.relationType ?? '',
+    parentOneId: row.parentOneId ?? '',
+    childOneId: row.childOneId ?? '',
+    payerOneId: row.payerOneId ?? '',
+    effectiveFrom: toDateText(row.effectiveFrom),
+    effectiveTo: toDateText(row.effectiveTo),
+    status: row.status ?? '',
+    snapshotJson: row.snapshotJson,
+    changeReason: row.changeReason ?? '',
+    createTime: toDateTimeText(row.createTime)
+  }));
+};
+
+/**
+ * 提交前实时校验（调后端 /cmd/hierarchy/validate，不修改业务数据但会写 Loop Check 证据日志）
+ * 校验口径与提交时完全一致，因此弹窗里看到的结论就是数据库的判断。
+ */
+export const validateHierarchyRelation = async (data: HierarchyValidateForm): Promise<HierarchyValidateVO> => {
+  if (!useLive('hierarchy')) {
+    return delay({
+      checkCode: 'MOCK',
+      passed: true,
+      relationLabel: `${data.parentOneId} → ${data.childOneId}`,
+      parentName: '',
+      childName: '',
+      parentLevel: 'A2',
+      parentDepth: 2,
+      childLevel: 'A1',
+      childDepth: 3,
+      previewPath: `/${data.parentOneId}/${data.childOneId}/`,
+      previewPathNames: '',
+      crossBu: false,
+      requiresGcApproval: false,
+      relationType: 'A2_A1',
+      maxDepth: 3,
+      childMounted: false,
+      childCurrentParentOneId: '',
+      childCurrentLevel: '',
+      checks: [],
+      executeTime: '',
+      durationMs: 0
+    });
+  }
+  const row = await unwrap<CmdHierarchyValidateRow>(
+    request({ url: '/cmd/hierarchy/validate', method: 'post', data })
+  );
+  return {
+    checkCode: row?.checkCode ?? '',
+    passed: row?.passed === true,
+    blockedReason: row?.blockedReason,
+    relationLabel: row?.relationLabel ?? '',
+    parentName: row?.parentName ?? '',
+    childName: row?.childName ?? '',
+    parentLevel: row?.parentLevel ?? '',
+    parentDepth: row?.parentDepth ?? 0,
+    childLevel: row?.childLevel ?? '',
+    childDepth: row?.childDepth ?? 0,
+    previewPath: row?.previewPath ?? '',
+    previewPathNames: row?.previewPathNames ?? '',
+    crossBu: row?.crossBu === true,
+    requiresGcApproval: row?.requiresGcApproval === true,
+    relationType: row?.relationType ?? '',
+    maxDepth: row?.maxDepth ?? 3,
+    childMounted: row?.childMounted === true,
+    childCurrentParentOneId: row?.childCurrentParentOneId ?? '',
+    childCurrentLevel: row?.childCurrentLevel ?? '',
+    checks: (row?.checks ?? []).map(item => ({
+      checkType: item.checkType ?? '',
+      label: item.label ?? '',
+      checkResult: (item.checkResult as 'PASS' | 'FAIL' | 'WARN') ?? 'PASS',
+      message: item.message ?? '',
+      conflictPath: item.conflictPath,
+      suggestion: item.suggestion
+    })),
+    executeTime: toDateTimeText(row?.executeTime),
+    durationMs: Number(row?.durationMs ?? 0)
+  };
+};
+
+/** 增加子节点（真实落库：服务端登记节点 + 级别推导 + 路径重建 + 更新祖先计数 + 关系留痕） */
+export const addHierarchyChild = async (data: HierarchyChildForm): Promise<string> => {
+  if (!useLive('hierarchy')) return delay(`已新增子节点：${data.childOneId}`);
+  await unwrap(request({ url: '/cmd/hierarchy/child', method: 'post', data }));
+  return '子节点已新增，层级树与关系历史已同步更新';
+};
+
+/** 编辑层级关系（真实落库：支持改挂父节点，历史版本不覆盖） */
+export const updateHierarchyRelation = async (data: HierarchyRelationEditForm): Promise<string> => {
+  if (!useLive('hierarchy')) return delay('层级关系已保存');
+  const { id, ...payload } = data;
+  await unwrap(request({ url: `/cmd/hierarchy/relation/${id}`, method: 'put', data: payload }));
+  return '层级关系已保存，历史版本已留痕';
+};
+
+/** 待归位主数据行 → 页面 VO（批准成为主数据但尚未归位的客户） */
+function toUnassignedVO(row: CmdHierarchyUnassignedRow): HierarchyUnassignedVO {
+  return {
+    oneId: row.oneId ?? '',
+    name: row.legalName ?? '',
+    bu: row.buScope ?? '—',
+    status: row.customerStatus === 'active' ? 'Active' : (row.customerStatus ?? '—'),
+    source: row.sourceSystem ?? '—',
+    approvedTime: (row.approvedTime ?? '').toString().replace('T', ' ').slice(0, 16) || '—',
+    registered: row.registered === true,
+    nodeCode: row.nodeCode ?? '',
+    suggestedLevel: row.suggestedLevel ?? 'A1',
+    remark: row.remark ?? ''
+  };
+}
+
+/**
+ * 查询「待归位主数据」：已批准成为主数据，但还没挂到 A3-A2-A1 树上的客户。
+ * 这是「批准 → 主数据 → 层级」之间的衔接环节，归位后即进入层级树。
+ */
+export const getUnassignedNodes = async (query?: {
+  keyword?: string;
+  buScope?: string;
+}): Promise<HierarchyUnassignedVO[]> => {
+  if (!useLive('hierarchy')) return delay(mock.mockHierarchyUnassigned.map(toUnassignedVO));
+  const rows = await unwrap<CmdHierarchyUnassignedRow[]>(
+    request({ url: '/cmd/hierarchy/unassigned', method: 'get', params: query })
+  );
+  return (rows ?? []).map(toUnassignedVO);
+};
+
+/** 层级归位：把待归位主数据挂到目标父节点之下（服务端做 Loop Check + 级别推导 + 路径重建） */
+export const assignHierarchyNode = async (data: HierarchyAssignForm): Promise<string> => {
+  if (!useLive('hierarchy')) return delay(`归位完成：${data.oneId} 已挂到 ${data.parentId} 之下`);
+  await unwrap(
+    request({
+      url: '/cmd/hierarchy/assign',
+      method: 'post',
+      data: {
+        oneId: data.oneId,
+        parentOneId: data.parentId,
+        changeReason: data.changeReason,
+        remark: data.remark
+      }
+    })
+  );
+  return '归位完成，节点已进入 A3-A2-A1 层级树';
+};
+
 export const loopCheck = (): Promise<string> =>
   USE_MOCK
     ? delay('检测到循环路径：A1-000128 → A2-0188 → A1-000128。系统阻止提交，并保留冲突路径用于修正。')
     : unwrap(request({ url: '/cmd/hierarchy/loopCheck', method: 'get' }));
 
 /* ============================== 8. 变更与停用 ============================== */
-/* ---- 变更与停用：后端状态 → 页面状态 ---- */
-const CHANGE_STATUS_MAP: Record<string, ChangeStatus> = {
+/* ---- 变更与停用：后端状态 → 页面展示状态 ---- */
+/** 后端 cmd_change_request.status → 页面展示状态 */
+const CHANGE_STATUS_TEXT: Record<string, ChangeStatus> = {
   DRAFT: 'Draft',
   PENDING: 'Under Review',
   APPROVED: 'Approved',
   REJECTED: 'Rejected',
-  EFFECTED: 'Approved'
+  RETURNED: 'Returned',
+  EFFECTIVE: 'Effective',
+  CANCELLED: 'Cancelled'
 };
 
+/**
+ * 页面展示状态 → 后端查询值。
+ * 'Inactive' 是停用已生效的历史展示口径，查询时归并到 EFFECTIVE。
+ */
+const CHANGE_STATUS_QUERY: Record<string, string> = {
+  Draft: 'DRAFT',
+  'Under Review': 'PENDING',
+  Approved: 'APPROVED',
+  Effective: 'EFFECTIVE',
+  Rejected: 'REJECTED',
+  Returned: 'RETURNED',
+  Cancelled: 'CANCELLED',
+  Inactive: 'EFFECTIVE'
+};
+
+/** 后端变化类型 → 页面文案 */
+const CHANGE_FLAG_TEXT: Record<string, string> = {
+  ADD: '新增',
+  MODIFY: '修改',
+  DELETE: '清空',
+  SAME: '未变'
+};
+
+/** 时间戳 → 'YYYY-MM-DD HH:mm' */
+function fmtTime(value?: string): string {
+  return (value ?? '').toString().slice(0, 16).replace('T', ' ') || '—';
+}
+
+/** 后端字段差异行 → 页面 Before / After 行 */
+function toChangeDiffVO(row: CmdChangeDiffRow): ChangeDiffVO {
+  return {
+    field: row.fieldName ?? row.fieldCode ?? '',
+    before: row.beforeValue ?? '(空)',
+    after: row.afterValue ?? '(清空)',
+    changeFlag: CHANGE_FLAG_TEXT[row.changeFlag ?? ''] ?? row.changeFlag ?? '',
+    isKey: row.isKeyField === 'Y',
+    sensitive: row.isSensitive === 'Y'
+  };
+}
+
+/** 后端版本快照行 → 页面版本历史行 */
+function toChangeVersionVO(row: CmdCustomerVersionRow): ChangeVersionVO {
+  return {
+    versionNo: row.versionNo ?? 0,
+    changeType: row.changeType ?? '',
+    changeReason: row.changeReason ?? '',
+    changedFields: row.changedFields ?? '',
+    status: row.status ?? '',
+    sourceSystem: row.sourceSystem ?? '',
+    dqScore: row.dqScore,
+    createTime: fmtTime(row.createTime)
+  };
+}
+
+/** 后端审批轨迹行 → 页面轨迹行 */
+function toChangeTrailVO(row: CmdChangeTrailRow): ApprovalTrailVO {
+  return {
+    time: fmtTime(row.time),
+    role: row.role ?? '—',
+    action: row.action ?? '—',
+    result: row.result ?? '—',
+    operator: row.operator ?? '',
+    node: row.node ?? '',
+    opinion: row.opinion ?? ''
+  };
+}
+
+/** 后端申请行 → 页面申请行 */
 function toChangeRequestVO(row: CmdChangeRequestRow): ChangeRequestVO {
+  const rawStatus = row.status ?? 'DRAFT';
   return {
     requestId: row.requestCode ?? '',
     oneId: row.oneId ?? '',
@@ -672,25 +1259,97 @@ function toChangeRequestVO(row: CmdChangeRequestRow): ChangeRequestVO {
     bu: row.buScope ?? '',
     changeType: row.changeType === 'Deactivate' ? 'Deactivate' : 'Update',
     content: row.changeReason ?? '',
-    status: CHANGE_STATUS_MAP[row.status ?? ''] ?? 'Draft',
-    submittedAt: (row.createTime ?? '').toString().slice(0, 16).replace('T', ' '),
-    submittedBy: 'Business User'
+    status: CHANGE_STATUS_TEXT[rawStatus] ?? 'Draft',
+    rawStatus,
+    submittedAt: fmtTime(row.createTime),
+    submittedBy: 'Business User',
+    isKeyChange: row.isKeyChange,
+    targetStatus: row.targetStatus,
+    relationCheck: row.relationCheck,
+    relationMsg: row.relationMsg,
+    effectiveDate: fmtTime(row.effectiveDate),
+    effectiveTime: row.effectiveTime ? fmtTime(row.effectiveTime) : '',
+    remark: row.remark
   };
 }
 
-export const listChangeRequests = async (query?: ChangeRequestQuery): Promise<ChangeRequestVO[]> => {
-  if (!useLive('change')) return delay(filterChangeRequests(mock.mockChangeRequests, query));
+/**
+ * 可变更字段目录（配置驱动：读取 md_field 中 CUSTOMER 模型且已配置物理列的字段）
+ * 「哪些字段可变更、哪些属关键属性、哪些敏感」全部由平台管理维护，前后端共用同一口径。
+ */
+export const getChangeFields = async (): Promise<ChangeFieldVO[]> => {
+  if (!useLive('change')) {
+    return delay(
+      [
+        { fieldCode: 'legal_name', fieldName: '客户法定名称', dataType: 'STRING', isRequired: 'Y', isKeyField: 'Y', isSensitive: 'N' },
+        { fieldCode: 'credit_code', fieldName: '统一社会信用代码', dataType: 'STRING', isRequired: 'N', isKeyField: 'Y', isSensitive: 'N' },
+        { fieldCode: 'address', fieldName: '注册地址', dataType: 'STRING', isRequired: 'Y', isKeyField: 'N', isSensitive: 'N' },
+        { fieldCode: 'contact_phone', fieldName: '联系电话', dataType: 'STRING', isRequired: 'N', isKeyField: 'N', isSensitive: 'Y' }
+      ] as ChangeFieldVO[]
+    );
+  }
+  const rows = await unwrap<CmdChangeFieldRow[]>(request({ url: '/cmd/change/fields', method: 'get' }));
+  return (rows ?? []).map(row => ({
+    fieldCode: row.fieldCode ?? '',
+    fieldName: row.fieldName ?? '',
+    dataType: row.dataType ?? 'STRING',
+    valueSetCode: row.valueSetCode,
+    isRequired: row.isRequired ?? 'N',
+    isKeyField: row.isKeyField ?? 'N',
+    isSensitive: row.isSensitive ?? 'N',
+    maxLength: row.maxLength,
+    regexPattern: row.regexPattern,
+    physicalColumn: row.physicalColumn
+  }));
+};
+
+/**
+ * 变更与停用指标卡（工作台 4 张卡：待审批变更 / 待审批停用 / 本月已生效 / One ID 重生成）
+ * 「One ID 重生成」由后端恒定返回 0，用于量化证明 One ID 稳定、不重新生成。
+ */
+export const getChangeKpi = async (): Promise<Array<{ label: string; value: number; hint: string }>> => {
+  if (!useLive('change')) {
+    return delay([
+      { label: '待审批变更', value: 4, hint: '属性变更申请处于待审批' },
+      { label: '待审批停用', value: 2, hint: '逻辑停用申请处于待审批' },
+      { label: '本月已生效', value: 11, hint: '本月内完成生效的变更与停用' },
+      { label: 'One ID重生成', value: 0, hint: 'One ID 稳定：变更只递增版本，不重新生成' }
+    ]);
+  }
+  const rows = await unwrap<CmdChangeKpiRow[]>(request({ url: '/cmd/change/kpi', method: 'get' }));
+  return (rows ?? []).map(row => ({
+    label: row.label ?? '',
+    value: row.value ?? 0,
+    hint: row.hint ?? ''
+  }));
+};
+
+/** 分页查询变更 / 停用申请 */
+export const listChangeRequests = async (query?: ChangeRequestQuery): Promise<PageResult<ChangeRequestVO>> => {
+  if (!useLive('change')) {
+    const rows = filterChangeRequests(mock.mockChangeRequests, query);
+    return delay({ rows, total: rows.length });
+  }
   const page = await unwrap<PageResult<CmdChangeRequestRow>>(
     request({
       url: '/cmd/change/list',
       method: 'get',
-      // 后端查询字段名与前端略有差异，在此对齐（keyword 模糊匹配 编号/One ID/客户名）
-      params: { ...query, keyword: query?.keyword, changeType: query?.changeType, status: query?.status }
+      params: {
+        pageNum: query?.pageNum,
+        pageSize: query?.pageSize,
+        keyword: query?.keyword,
+        changeType: query?.changeType,
+        // 状态到后端取值的映射在 api 层完成，面板只传展示口径
+        status: query?.status ? (CHANGE_STATUS_QUERY[query.status] ?? '') : undefined,
+        buScope: query?.buScope,
+        oneId: query?.oneId
+      }
     })
   );
-  return (page?.rows ?? []).map(toChangeRequestVO);
+  return { rows: (page?.rows ?? []).map(toChangeRequestVO), total: page?.total ?? 0 };
 };
 
+/** 提交属性变更申请（字段级差异由服务端与主档当前值比对后生成 Before） */
 export const submitChangeRequest = async (data: ChangeRequestForm): Promise<string> => {
   if (!useLive('change')) return delay('变更申请已提交，进入审批流程');
   await unwrap(
@@ -699,22 +1358,137 @@ export const submitChangeRequest = async (data: ChangeRequestForm): Promise<stri
       method: 'post',
       data: {
         oneId: data.oneId,
-        changeType: data.changeType,
-        targetStatus: data.changeType === 'Deactivate' ? 'inactive' : 'active',
-        changeReason: data.field ? `${data.field}：${data.newValue}（${data.reason}）` : data.reason
+        changeType: data.changeType || 'Update',
+        changeReason: data.reason,
+        effectiveDate: data.effectiveDate,
+        diffs: data.fields
+          .filter(item => item.fieldCode)
+          .map(item => ({
+            fieldCode: item.fieldCode,
+            fieldName: item.fieldName,
+            afterValue: item.afterValue
+          }))
       }
     })
   );
-  return '变更申请已保存至数据库，进入审批流程';
+  return '变更申请已提交至审批中心，批准后可生效（One ID 不变）';
 };
 
-export const getChangeDetail = (requestId: string): Promise<{ diffs: ChangeDiffVO[]; trail: ApprovalTrailVO[] }> =>
-  USE_MOCK
-    ? delay({ diffs: mock.mockChangeDiffs, trail: mock.mockChangeTrail })
-    : unwrap(request({ url: `/cmd/change/${requestId}/detail`, method: 'get' }));
+/** 提交逻辑停用申请（不执行物理删除，仅状态切换） */
+export const submitDeactivateRequest = async (data: DeactivateForm): Promise<string> => {
+  if (!useLive('change')) return delay('停用申请已提交，等待审批生效');
+  await unwrap(
+    request({
+      url: '/cmd/change',
+      method: 'post',
+      data: {
+        oneId: data.oneId,
+        changeType: 'Deactivate',
+        targetStatus: data.targetStatus,
+        changeReason: data.reason,
+        effectiveDate: data.effectiveDate,
+        remark: data.remark
+      }
+    })
+  );
+  return '停用申请已提交至审批中心，批准后生效为 Inactive / Archived（不物理删除）';
+};
 
-export const getDeactivateResult = (oneId: string): Promise<DeactivateResultVO> =>
-  USE_MOCK ? delay(mock.mockDeactivateResult) : unwrap(request({ url: `/cmd/change/${oneId}/deactivateResult`, method: 'get' }));
+/** 申请详情：Before / After 差异 + 影响面 + 审批轨迹 + 版本上下文 */
+export const getChangeDetail = async (requestId: string): Promise<ChangeDetailVO> => {
+  if (!useLive('change')) {
+    return delay({
+      requestId,
+      oneId: mock.mockChangeRequests[0]?.oneId ?? '',
+      customerName: mock.mockChangeRequests[0]?.customerName ?? '',
+      changeType: 'Update' as const,
+      targetStatus: 'active',
+      isKeyChange: true,
+      bu: 'High End',
+      reason: mock.mockChangeRequests[0]?.content ?? '',
+      status: 'Under Review' as ChangeStatus,
+      rawStatus: 'PENDING',
+      effectiveDate: '—',
+      effectiveTime: '',
+      relationCheck: 'PASS',
+      relationMsg: '关联层级与 Payer 关系校验通过',
+      impacts: ['层级关系：未挂到 A3-A2-A1 树上'],
+      approvalTaskNo: '',
+      submittedAt: mock.mockChangeRequests[0]?.submittedAt ?? '',
+      approvedByName: '',
+      approvedTime: '',
+      diffs: mock.mockChangeDiffs,
+      trail: mock.mockChangeTrail,
+      versions: [],
+      remark: ''
+    });
+  }
+  const row = await unwrap<CmdChangeDetailRow>(request({ url: `/cmd/change/${requestId}/detail`, method: 'get' }));
+  const rawStatus = row.status ?? 'PENDING';
+  return {
+    requestId: row.requestCode ?? requestId,
+    oneId: row.oneId ?? '',
+    customerName: row.legalName ?? '',
+    changeType: row.changeType === 'Deactivate' ? 'Deactivate' : 'Update',
+    targetStatus: row.targetStatus ?? '',
+    isKeyChange: row.isKeyChange === 'Y',
+    bu: row.buScope ?? '—',
+    reason: row.changeReason ?? '',
+    status: CHANGE_STATUS_TEXT[rawStatus] ?? 'Draft',
+    rawStatus,
+    effectiveDate: fmtTime(row.effectiveDate),
+    effectiveTime: row.effectiveTime ? fmtTime(row.effectiveTime) : '',
+    relationCheck: row.relationCheck ?? '',
+    relationMsg: row.relationMsg ?? '',
+    impacts: row.impacts ?? [],
+    approvalTaskNo: row.approvalTaskNo ?? '',
+    submittedAt: fmtTime(row.createTime),
+    approvedByName: row.approvedByName ?? '',
+    approvedTime: row.approvedTime ? fmtTime(row.approvedTime) : '',
+    currentVersionNo: row.currentVersionNo,
+    effectiveVersionNo: row.effectiveVersionNo,
+    diffs: (row.diffs ?? []).map(toChangeDiffVO),
+    trail: (row.trail ?? []).map(toChangeTrailVO),
+    versions: (row.versions ?? []).map(toChangeVersionVO),
+    remark: row.remark ?? ''
+  };
+};
+
+/** 客户主档版本历史（证明「换版本不换 One ID」） */
+export const getChangeVersions = async (oneId: string): Promise<ChangeVersionVO[]> => {
+  if (!useLive('change')) return delay([] as ChangeVersionVO[]);
+  const rows = await unwrap<CmdCustomerVersionRow[]>(
+    request({ url: `/cmd/change/versions/${oneId}`, method: 'get' })
+  );
+  return (rows ?? []).map(toChangeVersionVO);
+};
+
+/** 逻辑停用结果（业务视图 + 落库记录，证明无物理删除） */
+export const getDeactivateResult = async (oneId: string): Promise<DeactivateResultVO> => {
+  if (!useLive('change')) return delay(mock.mockDeactivateResult);
+  const row = await unwrap<CmdDeactivateResultRow>(
+    request({ url: `/cmd/change/${oneId}/deactivateResult`, method: 'get' })
+  );
+  return {
+    businessView: (row.businessView ?? []).map(item => ({ key: item.key ?? '', value: item.value ?? '' })),
+    dbRecords: row.dbRecords ?? [],
+    versions: (row.versions ?? []).map(toChangeVersionVO)
+  };
+};
+
+/** 生效申请：写主档新版本，One ID 保持不变（仅审批通过的申请可生效） */
+export const effectChangeRequest = async (requestCode: string): Promise<string> => {
+  if (!useLive('change')) return delay('已生效，主档生成新版本，One ID 不变');
+  await unwrap(request({ url: `/cmd/change/${requestCode}/effect`, method: 'post' }));
+  return '已生效：主档写入新版本，One ID 保持不变';
+};
+
+/** 撤回申请（同步取消关联审批待办） */
+export const cancelChangeRequest = async (requestCode: string): Promise<string> => {
+  if (!useLive('change')) return delay('申请已撤回');
+  await unwrap(request({ url: `/cmd/change/${requestCode}/cancel`, method: 'post' }));
+  return '申请已撤回，关联审批待办同步取消';
+};
 
 /* ============================== 9. 审批 ============================== */
 export const getApprovalFlow = (key: string): Promise<ApprovalFlowVO> =>
@@ -747,15 +1521,18 @@ function toApprovalTaskVO(row: CmdApprovalTaskRow): ApprovalTaskVO {
 }
 
 /** 按分类拉取清单（后端以 taskCategory 区分队列表） */
-async function fetchTasksByCategory(scope: 'bu' | 'gc', category: string): Promise<ApprovalTaskVO[]> {
+async function fetchTasksByCategory(scope: 'bu' | 'gc', category: string, pageNum = 1, pageSize = 10): Promise<PageResult<ApprovalTaskVO>> {
   const page = await unwrap<PageResult<CmdApprovalTaskRow>>(
     request({
       url: '/cmd/approval/list',
       method: 'get',
-      params: { scope: scope.toUpperCase(), taskCategory: category, pageNum: 1, pageSize: 100 }
+      params: { scope: scope.toUpperCase(), taskCategory: category, pageNum, pageSize }
     })
   );
-  return (page.rows ?? []).map(toApprovalTaskVO);
+  return {
+    rows: (page.rows ?? []).map(toApprovalTaskVO),
+    total: page.total ?? 0
+  };
 }
 
 export const getApprovalKpis = async (scope: 'bu' | 'gc'): Promise<ApprovalKpiVO[]> => {
@@ -766,25 +1543,49 @@ export const getApprovalKpis = async (scope: 'bu' | 'gc'): Promise<ApprovalKpiVO
   return (rows ?? []).map(row => ({ label: row.label ?? '', value: row.value ?? 0, hint: row.hint ?? '' }));
 };
 
+/**
+ * 侧边导航「数据统计」角标（key = 菜单 id，value = 待处理条数）
+ *
+ * 全应用统一入口：一次请求拿到当前角色**全部菜单**的实时统计，
+ * 由后端按业务表聚合，保证「菜单上的数字」与「点进去页面的数字」一致。
+ * 新增菜单只需后端补一条统计，前端无需改动（角标按菜单 id 自动挂载）。
+ */
+export const getNavBadges = async (role: string): Promise<Record<string, number>> => {
+  if (USE_MOCK) return delay(mock.mockNavBadges[role] ?? {});
+  const data = await unwrap<Record<string, number>>(
+    request({ url: '/cmd/nav/badge', method: 'get', params: { role } })
+  );
+  const badges: Record<string, number> = {};
+  Object.entries(data ?? {}).forEach(([key, value]) => {
+    badges[key] = Number(value ?? 0);
+  });
+  return badges;
+};
+
 /** 全部待办 = 审批任务 + 治理复核 + 升级与退回（后端三个分类合并） */
-export const listApprovalTasks = async (scope: 'bu' | 'gc'): Promise<ApprovalTaskVO[]> => {
-  if (!useLive('approval')) return delay(mock.mockApprovalTasks[scope]);
+export const listApprovalTasks = async (scope: 'bu' | 'gc', pageNum = 1, pageSize = 10): Promise<PageResult<ApprovalTaskVO>> => {
+  if (!useLive('approval')) return delay({ rows: mock.mockApprovalTasks[scope], total: mock.mockApprovalTasks[scope].length });
   const [approval, governance, returned] = await Promise.all([
-    fetchTasksByCategory(scope, 'APPROVAL'),
-    fetchTasksByCategory(scope, 'GOVERNANCE'),
-    fetchTasksByCategory(scope, 'RETURNED')
+    fetchTasksByCategory(scope, 'APPROVAL', pageNum, pageSize),
+    fetchTasksByCategory(scope, 'GOVERNANCE', pageNum, pageSize),
+    fetchTasksByCategory(scope, 'RETURNED', pageNum, pageSize)
   ]);
-  return [...approval, ...governance, ...returned];
+  // 合并三个分类，取前 pageSize 条
+  const all = [...approval.rows, ...governance.rows, ...returned.rows];
+  const total = approval.total + governance.total + returned.total;
+  return { rows: all.slice(0, pageSize), total };
 };
 
 export const getApprovalReturned = async (scope: 'bu' | 'gc'): Promise<ApprovalTaskVO[]> => {
   if (!useLive('approval')) return delay(mock.mockApprovalReturned[scope]);
-  return fetchTasksByCategory(scope, 'RETURNED');
+  const page = await fetchTasksByCategory(scope, 'RETURNED');
+  return page.rows;
 };
 
 export const getApprovalDone = async (scope: 'bu' | 'gc'): Promise<ApprovalTaskVO[]> => {
   if (!useLive('approval')) return delay(mock.mockApprovalDone[scope]);
-  return fetchTasksByCategory(scope, 'DONE');
+  const page = await fetchTasksByCategory(scope, 'DONE');
+  return page.rows;
 };
 
 export const getApprovalTaskDetail = async (taskNo: string): Promise<ApprovalTaskDetailVO> => {
@@ -924,6 +1725,21 @@ export const getFlowTrace = async (taskNo: string, detailType = 'create'): Promi
     graph: mapGraph(vo.graph),
     bypass: vo.bypass,
     steps,
+    /**
+     * 分步骤明细（点击步骤后展示）：后端已按节点语义决定每个节点出现哪些区块，
+     * 这里只做「缺省值补全」，不做二次拼装，避免与后端口径分叉。
+     */
+    stepDetails: (vo.stepDetails ?? []).map(d => ({
+      nodeCode: d.nodeCode ?? '',
+      nodeName: d.nodeName,
+      phaseName: d.phaseName,
+      lane: d.lane,
+      status: d.status,
+      summary: d.summary,
+      fields: (d.fields ?? []).map(f => ({ label: f.label ?? '', value: f.value, tone: f.tone })),
+      tables: (d.tables ?? []).map(t => ({ title: t.title, columns: t.columns ?? [], rows: t.rows ?? [] })),
+      notes: d.notes ?? []
+    })),
     contextVars: (vo.contextVars ?? []).map(v => ({ name: v.name ?? '', value: v.value })),
     actions: (vo.actions ?? []).map(a => ({
       actionType: a.actionType ?? '',
@@ -946,7 +1762,7 @@ export const startFlowInstance = async (taskNo: string): Promise<number | string
 };
 
 /**
- * 流程中心：列出所有 CMD 业务场景（V6.1 总设计业务流）及其 Warm-Flow 部署状态
+ * 工作流：列出所有 CMD 业务场景（V6.1 总设计业务流）及其 Warm-Flow 部署状态
  * 后端 GET /cmd/flow/scenes（CmdFlowTraceController）
  */
 export const listFlowScenes = async (): Promise<FlowSceneVO[]> => {
@@ -955,7 +1771,7 @@ export const listFlowScenes = async (): Promise<FlowSceneVO[]> => {
 };
 
 /**
- * 流程中心：按场景查看流程详细图（泳道图）
+ * 工作流：按场景查看流程详细图（泳道图）
  * 后端 GET /cmd/flow/graph/scene/{sceneCode}
  *
  * @param sceneCode 场景编码
@@ -986,9 +1802,15 @@ export const getWorkflowSteps = async (params: { oneId?: string; taskNo?: string
 };
 
 /**
- * 流程中心：流程实例记录（每一次执行过的工作流，可查看 / 用 Graph 回看泳道图）
+ * 工作流：流程实例记录（每一次执行过的工作流，可查看 / 用 Graph 回看泳道图）
  * 后端 GET /cmd/flow/instances（CmdFlowTraceController）
  */
+/**
+ * 业务终态集合：与后端 `CmdFlowTraceServiceImpl.FINAL_STATUSES` 逐字对齐，
+ * 保证 Mock 与真实后端的「已完成 / 进行中」口径一致（前端有、后端没有的偏差最难查）。
+ */
+const FINAL_INSTANCE_STATUSES = ['APPROVED', 'REJECTED', 'CANCELLED', 'COMPLETED'];
+
 export const listFlowInstances = async (query: FlowInstanceQuery = {}): Promise<PageResult<FlowInstanceVO>> => {
   if (!useLive('approval')) {
     const kw = (query.keyword ?? '').trim().toLowerCase();
@@ -1002,8 +1824,8 @@ export const listFlowInstances = async (query: FlowInstanceQuery = {}): Promise<
       const matchBiz = !query.bizType || r.bizType === query.bizType;
       const runState = query.runState;
       const matchRun = !runState
-        || (runState === 'DONE' && r.status === 'APPROVED')
-        || (runState === 'RUNNING' && r.status !== 'APPROVED')
+        || (runState === 'DONE' && FINAL_INSTANCE_STATUSES.includes(r.status))
+        || (runState === 'RUNNING' && !FINAL_INSTANCE_STATUSES.includes(r.status))
         || (runState === 'NEW' && !r.engineBound);
       return matchKw && matchStatus && matchBiz && matchRun;
     });
@@ -1015,7 +1837,7 @@ export const listFlowInstances = async (query: FlowInstanceQuery = {}): Promise<
 };
 
 /**
- * 流程中心：将单个场景部署（幂等）到 Warm-Flow 引擎
+ * 工作流：将单个场景部署（幂等）到 Warm-Flow 引擎
  * 后端 POST /cmd/flow/deploy/{sceneCode}
  */
 export const deployFlowScene = async (sceneCode: string): Promise<number | string> => {
@@ -1119,26 +1941,28 @@ const AUDIT_RESULT_TEXT: Record<string, AuditEventVO['result']> = {
   FAILED: 'Failed'
 };
 
-export const listAuditEvents = async (keyword?: string): Promise<AuditEventVO[]> => {
+export const listAuditEvents = async (keyword?: string, pageNum = 1, pageSize = 10): Promise<PageResult<AuditEventVO>> => {
   const kw = (keyword ?? '').trim().toLowerCase();
   if (!useLive('audit')) {
     const rows = mock.mockAuditEvents as AuditEventVO[];
-    return delay(
-      kw ? rows.filter(r => r.id.toLowerCase().includes(kw) || r.event.toLowerCase().includes(kw)) : rows
-    );
+    const filtered = kw ? rows.filter(r => r.id.toLowerCase().includes(kw) || r.event.toLowerCase().includes(kw)) : rows;
+    return delay({ rows: filtered, total: filtered.length });
   }
   const page = await unwrap<PageResult<CmdAuditEventRow>>(
-    request({ url: '/cmd/audit/list', method: 'get', params: { pageNum: 1, pageSize: 100, keyword: kw || undefined } })
+    request({ url: '/cmd/audit/list', method: 'get', params: { pageNum, pageSize, keyword: kw || undefined } })
   );
-  return (page.rows ?? []).map(row => ({
-    id: row.eventId ?? '',
-    time: row.eventTime ?? '',
-    event: row.eventName ?? '',
-    role: row.operatorRole ?? '',
-    result: AUDIT_RESULT_TEXT[row.result ?? ''] ?? 'Success',
-    oneId: row.oneId ?? '',
-    bizId: row.bizId ?? ''
-  }));
+  return {
+    rows: (page.rows ?? []).map(row => ({
+      id: row.eventId ?? '',
+      time: row.eventTime ?? '',
+      event: row.eventName ?? '',
+      role: row.operatorRole ?? '',
+      result: AUDIT_RESULT_TEXT[row.result ?? ''] ?? 'Success',
+      oneId: row.oneId ?? '',
+      bizId: row.bizId ?? ''
+    })),
+    total: page.total ?? 0
+  };
 };
 
 export const exportAudit = async (data: AuditExportForm): Promise<string> => {
@@ -1190,11 +2014,28 @@ export const listCoverage = (): Promise<CoverageItemVO[]> =>
   USE_MOCK ? delay(mock.mockCoverage) : unwrap(request({ url: '/cmd/coverage/list', method: 'get' }));
 
 /* ============================== 13. 工作流 / OCR ============================== */
-export const getWorkflow = (): Promise<WorkflowConfigVO> =>
-  USE_MOCK ? delay(mock.mockWorkflow) : unwrap(request({ url: '/cmd/workflow/config', method: 'get' }));
 
-export const saveWorkflow = (data: WorkflowConfigVO): Promise<string> =>
-  USE_MOCK ? delay('工作流配置已保存') : unwrap(request({ url: '/cmd/workflow/config', method: 'put', data }));
+/**
+ * 场景级工作流配置（平台管理 › Workflow › 工作流定义 › 某一行「配置」）
+ * 后端 GET /cmd/flow/scene/{sceneCode}/config
+ *
+ * 返回 V6.1 第 16 页要求的全部配置项：流程节点（含平台固定 / 可配置标注）、
+ * 路由条件、SLA、超时升级与邮件通知。
+ */
+export const getFlowSceneConfig = async (sceneCode: string): Promise<FlowSceneConfigVO> => {
+  if (!useLive('approval')) return delay(mock.buildMockSceneConfig(sceneCode));
+  const cfg = await unwrap<FlowSceneConfigVO>(
+    request({ url: `/cmd/flow/scene/${sceneCode}/config`, method: 'get' })
+  );
+  return { ...cfg, nodes: cfg.nodes ?? [], rules: cfg.rules ?? [] };
+};
+
+/** 保存场景级工作流配置（后端 PUT /cmd/flow/scene/{sceneCode}/config） */
+export const saveFlowSceneConfig = async (sceneCode: string, data: FlowSceneConfigBo): Promise<string> => {
+  if (!useLive('approval')) return delay('工作流配置已保存');
+  await unwrap(request({ url: `/cmd/flow/scene/${sceneCode}/config`, method: 'put', data }));
+  return '工作流配置已保存';
+};
 
 /**
  * OCR 识别：返回营业执照原件信息 + 字段识别值（原型「OCR识别结果」弹窗）

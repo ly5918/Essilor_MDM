@@ -9,9 +9,20 @@
 import { computed, inject, provide, reactive, ref, type ComputedRef, type InjectionKey, type Ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import * as cmdPocApi from '@/api/demo/cmdPoc';
-import type { CustomerVO, MetadataFieldVO, OcrResultVO, PageId, RoleKey } from '@/api/demo/cmdPoc/types';
+import type { CustomerVO, HierarchyNodeVO, MetadataFieldVO, OcrResultVO, PageId, RoleKey } from '@/api/demo/cmdPoc/types';
 import { DIALOG_MAP, type DialogKey } from '../constants/dialogs';
+import { PAGE_META } from '../constants/pages';
 import { getRole, type PocRole } from '../constants/roles';
+
+/** 客户在层级体系中的位置（客户列表「层级」列 / 客户详情展示） */
+export interface HierarchyIndexItem {
+  /** A3 / A2 / A1；待归位时为 '—' */
+  level: string;
+  /** 完整路径（已归位时才有值） */
+  path: string;
+  /** true=已挂到 A3-A2-A1 树；false=已批准但待归位 */
+  mounted: boolean;
+}
 
 export interface DialogState {
   /** 当前打开的弹窗 key，空串表示无 */
@@ -46,6 +57,25 @@ export interface CmdPocContext {
   /** 客户主数据缓存 */
   customers: Ref<CustomerVO[]>;
   loadCustomers: () => Promise<void>;
+  /**
+   * 层级索引：oneId → 层级位置。
+   * 由「已归位的 A3-A2-A1 树」+「待归位主数据」合并而成，
+   * 是客户列表「层级」列与客户详情展示层级归属的唯一依据。
+   */
+  hierarchyIndex: Ref<Map<string, HierarchyIndexItem>>;
+  /** 拉取层级索引（树 + 待归位） */
+  loadHierarchyIndex: () => Promise<void>;
+  /** 层级变更版本号：归位成功后自增，客户层级页据此重新拉取树与待归位列表 */
+  hierarchyVersion: Ref<number>;
+  /** 标记层级已变更 */
+  markHierarchyChanged: () => void;
+  /**
+   * 变更 / 停用数据版本号：提交申请、生效、撤回成功后自增，
+   * 「变更与停用」面板据此重新拉取指标卡、列表与版本历史。
+   */
+  changeVersion: Ref<number>;
+  /** 标记变更 / 停用数据已变更 */
+  markChangeChanged: () => void;
   /** 元数据字段缓存（Master Data Extension 演示核心） */
   metadataFields: Ref<MetadataFieldVO[]>;
   loadMetadataFields: () => Promise<void>;
@@ -66,6 +96,10 @@ export interface CmdPocContext {
   sidebarCollapsed: Ref<boolean>;
   /** 切换左侧菜单折叠 */
   toggleSidebar: () => void;
+  /** badge 刷新信号（自增计数器，审批/提交等操作后触发，PocSidebar 监听后重新获取 badge） */
+  badgeVersion: Ref<number>;
+  /** 触发菜单 badge 刷新 */
+  refreshBadge: () => void;
 }
 
 export const CMD_POC_KEY: InjectionKey<CmdPocContext> = Symbol('cmdPoc');
@@ -81,8 +115,18 @@ export function createCmdPoc(defaultRole: RoleKey): CmdPocContext {
   const currentPage = ref<PageId>('dash');
   const currentSub = ref('');
 
-  const currentMenu = computed(() => role.value.menus.find(menu => menu.id === currentPage.value));
-  const pageTitle = computed(() => currentMenu.value?.label ?? '工作台');
+  const currentMenu = computed(() => {
+    const flat = role.value.menus.flatMap(menu => (menu.children?.length ? [menu, ...menu.children] : [menu]));
+    return flat.find(item => item.id === currentPage.value);
+  });
+  /**
+   * 当前页面标题：
+   * 1) 优先取角色菜单文案（同一页面在不同角色下可有不同叫法，如「客户管理 / 客户主档」）；
+   * 2) 无菜单项的卡片入口页（工作流定义 / One ID规则 / DQ Scorecard）回退到页面元信息标题，
+   *    否则标签栏会错误地显示「工作台」；
+   * 3) 最后才是「工作台」兜底。
+   */
+  const pageTitle = computed(() => currentMenu.value?.label ?? PAGE_META[currentPage.value]?.title ?? '工作台');
 
   const dialog = reactive<DialogState>({ current: '', payload: {} });
   const openDialog = (key: DialogKey, payload?: Record<string, unknown>) => {
@@ -101,7 +145,44 @@ export function createCmdPoc(defaultRole: RoleKey): CmdPocContext {
 
   const customers = ref<CustomerVO[]>([]);
   const loadCustomers = async () => {
-    customers.value = await cmdPocApi.listCustomers();
+    customers.value = (await cmdPocApi.listCustomers()).rows ?? [];
+  };
+
+  const hierarchyIndex = ref<Map<string, HierarchyIndexItem>>(new Map());
+  const hierarchyVersion = ref(0);
+  const markHierarchyChanged = () => {
+    hierarchyVersion.value += 1;
+  };
+
+  const changeVersion = ref(0);
+  const markChangeChanged = () => {
+    changeVersion.value += 1;
+  };
+
+  /**
+   * 拉取层级索引：
+   * 1) 已归位节点 → level = A1/A2/A3，path = 完整路径；
+   * 2) 待归位主数据 → level = '—'，mounted = false。
+   */
+  const loadHierarchyIndex = async () => {
+    const [tree, unassigned] = await Promise.all([
+      cmdPocApi.getHierarchy(),
+      cmdPocApi.getUnassignedNodes()
+    ]);
+    const index = new Map<string, HierarchyIndexItem>();
+    const walk = (nodes: HierarchyNodeVO[]) => {
+      nodes.forEach(node => {
+        if (node.oneId) index.set(node.oneId, { level: node.level, path: node.path, mounted: true });
+        walk(node.children ?? []);
+      });
+    };
+    walk(tree);
+    unassigned.forEach(item => {
+      if (item.oneId && !index.has(item.oneId)) {
+        index.set(item.oneId, { level: '—', path: '', mounted: false });
+      }
+    });
+    hierarchyIndex.value = index;
   };
 
   const metadataFields = ref<MetadataFieldVO[]>([]);
@@ -136,6 +217,11 @@ export function createCmdPoc(defaultRole: RoleKey): CmdPocContext {
     sidebarCollapsed.value = !sidebarCollapsed.value;
   };
 
+  const badgeVersion = ref(0);
+  const refreshBadge = () => {
+    badgeVersion.value += 1;
+  };
+
   const ctx: CmdPocContext = {
     roleKey,
     role,
@@ -150,6 +236,12 @@ export function createCmdPoc(defaultRole: RoleKey): CmdPocContext {
     goMenu,
     customers,
     loadCustomers,
+    hierarchyIndex,
+    loadHierarchyIndex,
+    hierarchyVersion,
+    markHierarchyChanged,
+    changeVersion,
+    markChangeChanged,
     metadataFields,
     loadMetadataFields,
     upsertMetadataField,
@@ -158,7 +250,9 @@ export function createCmdPoc(defaultRole: RoleKey): CmdPocContext {
     ocrPrefill,
     setOcrPrefill,
     sidebarCollapsed,
-    toggleSidebar
+    toggleSidebar,
+    badgeVersion,
+    refreshBadge
   };
 
   provide(CMD_POC_KEY, ctx);

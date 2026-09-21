@@ -67,6 +67,27 @@ export interface CmdHierarchyNodeRow {
 }
 
 /**
+ * 后端待归位主数据行（对应 CmdHierarchyUnassignedVo）
+ * 说明：口径是「已审批通过成为主数据（active），但还没挂到 A3-A2-A1 树上」。
+ * 批准后主数据会自动出现在这里，Data Steward 归位后即进入层级树。
+ */
+export interface CmdHierarchyUnassignedRow {
+  oneId?: string;
+  legalName?: string;
+  buScope?: string;
+  customerStatus?: string;
+  sourceSystem?: string;
+  dqScore?: number;
+  approvedTime?: string;
+  /** 是否已在层级节点表登记（true=已登记待归位，false=尚未登记） */
+  registered?: boolean;
+  nodeCode?: string;
+  /** 建议层级级别（POC 默认 A1） */
+  suggestedLevel?: string;
+  remark?: string;
+}
+
+/**
  * 后端工作台统计（对应 CmdDashboardVo）
  * 说明：全部由业务表实时聚合，页面不维护冗余统计。
  */
@@ -90,22 +111,47 @@ export interface CmdDashboardRow {
  * 后端客户行（对应 CmdCustomerVo，字段为后端驼峰命名）
  * 说明：后端用 buScope / createTime，前端展示用 bu / updatedAt，
  *      在 api 层做一次映射，面板代码无需感知后端字段差异。
+ *      本行与 cmd_customer 表业务列一一对应（除 delFlag），客户详情弹窗按此完整展示。
  */
 export interface CmdCustomerRow {
   id?: number;
   oneId?: string;
   legalName?: string;
+  legalNameEn?: string;
+  shortName?: string;
   customerType?: string;
   customerLevel?: string;
   productLine?: string;
   buScope?: string;
+  gcScopeFlag?: string;
   sourceSystem?: string;
+  sourceId?: string;
   creditCode?: string;
+  taxNo?: string;
+  country?: string;
+  province?: string;
+  city?: string;
   address?: string;
+  postalCode?: string;
   payerId?: string;
+  contactName?: string;
+  contactPhone?: string;
+  contactEmail?: string;
   status?: string;
   dqScore?: number | string | null;
+  dqGrade?: string;
+  matchState?: string;
+  duplicateFlag?: string;
+  mergedToOneId?: string;
   versionNo?: number;
+  effectiveFrom?: string;
+  effectiveTo?: string;
+  approvedBy?: number | null;
+  approvedTime?: string | null;
+  flowInstanceId?: number | null;
+  flowStatus?: string | null;
+  remark?: string | null;
+  extJson?: string | null;
   createTime?: string;
   updateTime?: string;
 }
@@ -156,45 +202,116 @@ export type PageId =
   | 'coverage'
   | 'oneid'
   | 'dqscore'
-  | 'flowCenter'
-  /** Deepblue 三视图：待人工处理的工作项 */
+  /** Platform Admin › 平台管理 › Workflow「管理」进入的工作流定义页（无侧边栏菜单项） */
+  | 'flowDefinition'
+  /** 工作流 › 已激活的工作流：待人工处理的运行中实例（列表页） */
   | 'flowWorkitem'
-  /** Deepblue 三视图：运行中的工作流实例 */
-  | 'flowActive'
-  /** Deepblue 三视图：已结束（批准/拒绝/退回）的工作流实例 */
+  /** 工作流 › 已完成的工作流：已结束实例列表（列表页），行内「查看流程跟踪」弹窗看详情 */
   | 'flowDone';
 
+/**
+ * 菜单标识：
+ * - 叶子菜单＝可路由页面（PageId）；
+ * - 二级菜单容器（如「工作流」）＝`sub-` 前缀伪 id，仅用于 el-sub-menu 展开态，**不可路由**。
+ */
+export type MenuId = PageId | `sub-${string}`;
+
 /** 客户状态 */
-export type CustomerStatus = 'active' | 'pending' | 'inactive' | 'draft';
+/**
+ * 客户状态
+ * <p>
+ * 前四类为业务状态；rejected / returned 由审批流写入
+ * （rejected=审批拒绝，returned=退回待补充），列表与详情必须能稳定渲染。
+ */
+export type CustomerStatus = 'active' | 'pending' | 'inactive' | 'draft' | 'rejected' | 'returned';
 
 /** ------------------------------------------------------------------
  * 1. 客户主数据
  * ------------------------------------------------------------------ */
+/**
+ * 客户主数据（前端展示对象）
+ * <p>
+ * 字段一是「列表列」需要的少量主干字段，二是「客户详情弹窗」需要完整展示的
+ * cmd_customer 全部业务列（基本信息 / 联络与地址 / 治理与质量 / 生效与流程）。
+ * 后端字段名差异（buScope→bu、sourceSystem、updateTime→updatedAt）在 api 层统一转换。
+ */
 export interface CustomerVO {
   /** One ID，全局唯一且终身稳定 */
   oneId: string;
   /** 工商名称 */
   legalName: string;
+  /** 客户英文名称 */
+  legalNameEn?: string;
+  /** 客户简称 */
+  shortName?: string;
   /** 客户类型：Door / Payer / A1 / A2 / A3 */
   customerType: string;
+  /** 客户层级（A1 / A2 / A3），来自 cmd_customer.customer_level */
+  customerLevel?: string;
   /** 所属 BU，跨 BU 时用 / 分隔 */
   bu: string;
+  /** 是否跨 BU 全局可见（Y / N） */
+  gcScopeFlag?: string;
   /** Product Line */
   productLine: string;
   /** 来源系统 */
   sourceSystem: string;
+  /** 来源系统主键（外部系统原始 ID，追溯用） */
+  sourceId?: string;
   /** 统一社会信用代码 */
   creditCode: string;
+  /** 税号 */
+  taxNo?: string;
+  /** 国家/地区 */
+  country?: string;
+  /** 省份 */
+  province?: string;
+  /** 城市 */
+  city?: string;
   /** 经营地址 */
   address: string;
+  /** 邮编 */
+  postalCode?: string;
   /** Payer 编码 */
   payerId?: string;
+  /** 联系人 */
+  contactName?: string;
+  /** 联系电话 */
+  contactPhone?: string;
+  /** 邮箱 */
+  contactEmail?: string;
   /** 状态 */
   status: CustomerStatus;
   /** 数据质量总分 */
   dqScore: number;
+  /** 质量等级（A / B / C / D） */
+  dqGrade?: string;
+  /** 匹配状态（EXACT / SUSPECTED / NEW / REVIEW / INVALID） */
+  matchState?: string;
+  /** 疑似重复标记（Y / N） */
+  duplicateFlag?: string;
+  /** 合并指向的 One ID（被合并后指向主记录） */
+  mergedToOneId?: string;
   /** 当前数据版本 */
   versionNo: number;
+  /** 生效时间 */
+  effectiveFrom?: string;
+  /** 失效时间（逻辑停用写入） */
+  effectiveTo?: string;
+  /** 审批人用户 ID */
+  approvedBy?: number;
+  /** 审批时间 */
+  approvedTime?: string;
+  /** 关联流程实例 ID */
+  flowInstanceId?: number;
+  /** 工作流实例状态（Warm-Flow 镜像） */
+  flowStatus?: string;
+  /** 备注 */
+  remark?: string;
+  /** 扩展属性（未建模的动态字段，JSON 字符串；详情页按键值对展示） */
+  extJson?: string | null;
+  /** 创建时间 */
+  createdAt?: string;
   /** 最近更新时间 */
   updatedAt: string;
   /** 最近更新人 */
@@ -202,11 +319,31 @@ export interface CustomerVO {
 }
 
 export interface CustomerQuery extends PageQuery {
-  /** 名称 / One ID / 信用代码 模糊匹配 */
+  /** 名称 / 英文名 / 简称 / One ID / 信用代码 / Payer 编码 模糊匹配 */
   keyword?: string;
   bu?: string;
   status?: CustomerStatus;
   customerType?: string;
+}
+
+/**
+ * 客户指标概览（后端 CmdCustomerStatsVo）
+ * <p>
+ * 随「当前筛选条件」实时统计，与列表共用同一套条件，口径不会与列表打架。
+ */
+export interface CustomerStats {
+  /** 客户总数 */
+  total: number;
+  /** 生效中（status = active） */
+  activeCount: number;
+  /** 待处理（pending 待审批 + returned 退回待补充） */
+  pendingCount: number;
+  /** 跨 BU 全局可见（gc_scope_flag = Y） */
+  crossBuCount: number;
+  /** 疑似重复（duplicate_flag = Y） */
+  duplicateCount: number;
+  /** 平均质量分（未评分的 0 分不计入分母） */
+  avgDqScore: number;
 }
 
 export interface CustomerForm {
@@ -386,6 +523,45 @@ export interface ImportJobVO {
   status: ImportJobStatus;
   submittedAt: string;
   submittedBy: string;
+  /** 业务场景（DOOR / LEGAL / GROUP ...） */
+  scene?: string;
+  /** 归属 BU */
+  buScope?: string;
+  /** 模板编码与版本 */
+  templateCode?: string;
+  templateVersion?: string;
+  /** 四类分流统计（Exact / Suspected / New / Invalid）+ 待复核 */
+  exactCount?: number;
+  suspectedCount?: number;
+  newCount?: number;
+  reviewCount?: number;
+  invalidCount?: number;
+  /** 任务备注（策略与审批结论） */
+  remark?: string;
+}
+
+/** 导入行明细（结果分流下钻，对应 CmdImportRowVo） */
+export interface ImportRowVO {
+  id?: number;
+  jobCode?: string;
+  rowNo?: number;
+  rowStatus?: string;
+  resultType?: string;
+  oneId?: string;
+  handling?: string;
+  legalName?: string;
+  creditCode?: string;
+  buScope?: string;
+  dqScore?: number;
+  matchState?: string;
+  matchScore?: number;
+  errorCount?: number;
+  errorSummary?: string;
+  /** 原始行数据（键＝Excel 列名，用于「查看上传数据」还原用户上传内容） */
+  rawJson?: string;
+  /** 解析后数据（键＝字段编码） */
+  parsedJson?: string;
+  remark?: string;
 }
 
 /**
@@ -398,6 +574,8 @@ export interface CmdImportJobRow {
   jobName?: string;
   scene?: string;
   buScope?: string;
+  templateCode?: string;
+  templateVersion?: string;
   fileName?: string;
   totalCount?: number;
   exactCount?: number;
@@ -498,6 +676,12 @@ export interface ImportUploadForm {
   errorStrategy?: string;
   /** 重复策略 */
   duplicateStrategy?: string;
+  /** 业务场景（设计节点「新建导入任务」：选择业务场景） */
+  scene?: string;
+  /** 归属 BU */
+  buScope?: string;
+  /** 来源系统 */
+  sourceSystem?: string;
 }
 
 /** 模板字段映射 */
@@ -530,6 +714,12 @@ export interface HierarchyNodeVO {
   parent: string;
   /** 父节点显示名（有值时优先展示） */
   parentName?: string;
+  /** 父节点 One ID（空 = 根节点，用于「返回根节点」判断） */
+  parentOneId?: string;
+  /** 层级深度（A3=1 / A2=2 / A1=3） */
+  depth?: number;
+  /** 层级类型（COMMERCIAL / LEGAL / DOOR） */
+  hierarchyType?: string;
   /** 完整路径 */
   path: string;
   /** 祖先 One ID 列表（用于展开并高亮树节点） */
@@ -539,8 +729,227 @@ export interface HierarchyNodeVO {
   /** 状态 */
   status: 'Active' | 'Future' | 'Expired';
   children?: HierarchyNodeVO[];
+  /** 是否为「加载更多子节点」占位节点（点击后按需追加下一批） */
+  isLoadMore?: boolean;
+  /** 占位节点对应的父节点 One ID（点击时按它去取下一批） */
+  loadMoreParentId?: string;
+  /** 占位节点文案里的「已显示」数量 */
+  loadMoreShown?: number;
+  /** 占位节点文案里的子节点总数 */
+  loadMoreTotal?: number;
 }
 
+/**
+ * 层级搜索 / 筛选条件（页面左侧「搜索与导航」四个下拉 + 关键字）
+ * 传入后由后端 SQL 过滤，保证下拉切换后结果实时变化。
+ */
+export interface HierarchySearchFilters {
+  /** 层级类型（Legal Hierarchy / Sales Hierarchy / Payer Hierarchy） */
+  hierarchyType?: string;
+  /** 层级级别（A1 / A2 / A3；「全部层级」= 不过滤） */
+  level?: string;
+  /** 归属 BU（「All Authorized BU」= 不过滤） */
+  buScope?: string;
+  /** 状态（Active / Future / Expired） */
+  status?: string;
+}
+
+/** 后端 cmd_hierarchy_relation 行 */
+export interface CmdHierarchyRelationRow {
+  id?: number;
+  relationCode?: string;
+  hierarchyType?: string;
+  relationType?: string;
+  parentOneId?: string;
+  childOneId?: string;
+  payerOneId?: string;
+  buScope?: string;
+  crossBuFlag?: string;
+  effectiveFrom?: string;
+  effectiveTo?: string;
+  status?: string;
+  changeReason?: string;
+  sourceType?: string;
+  approvalId?: number;
+  createTime?: string;
+}
+
+/** 层级关系（前端展示对象） */
+export interface HierarchyRelationVO {
+  id: number;
+  relationCode: string;
+  hierarchyType: string;
+  relationType: string;
+  parentOneId: string;
+  childOneId: string;
+  payerOneId: string;
+  buScope: string;
+  /** Y = 跨 BU，需 GC Scope 审批 */
+  crossBuFlag: string;
+  effectiveFrom: string;
+  effectiveTo: string;
+  /** Pending / Effective / Expired / Rejected */
+  status: string;
+  changeReason: string;
+  sourceType: string;
+}
+
+/** 后端 cmd_hierarchy_relation_hist 行 */
+export interface CmdHierarchyRelationHistRow {
+  id?: number;
+  relationId?: number;
+  relationCode?: string;
+  versionNo?: number;
+  operation?: string;
+  hierarchyType?: string;
+  relationType?: string;
+  parentOneId?: string;
+  childOneId?: string;
+  payerOneId?: string;
+  effectiveFrom?: string;
+  effectiveTo?: string;
+  status?: string;
+  snapshotJson?: string;
+  changeReason?: string;
+  createBy?: number;
+  createTime?: string;
+}
+
+/** 层级关系历史版本（历史归属追溯） */
+export interface HierarchyRelationHistVO {
+  id: number;
+  relationId: number;
+  relationCode: string;
+  /** 关系版本号 */
+  versionNo: number;
+  /** CREATE / UPDATE / EXPIRE */
+  operation: string;
+  relationType: string;
+  parentOneId: string;
+  childOneId: string;
+  payerOneId: string;
+  effectiveFrom: string;
+  effectiveTo: string;
+  status: string;
+  /** 改动前后快照（JSON 字符串） */
+  snapshotJson?: string;
+  changeReason: string;
+  /** 历史发生时间 */
+  createTime: string;
+}
+
+/** 后端 /cmd/hierarchy/validate 原始返回 */
+export interface CmdHierarchyValidateRow {
+  checkCode?: string;
+  passed?: boolean;
+  blockedReason?: string;
+  relationLabel?: string;
+  parentOneId?: string;
+  childOneId?: string;
+  childName?: string;
+  parentName?: string;
+  parentLevel?: string;
+  parentDepth?: number;
+  childLevel?: string;
+  childDepth?: number;
+  previewPath?: string;
+  previewPathNames?: string;
+  crossBu?: boolean;
+  requiresGcApproval?: boolean;
+  relationType?: string;
+  hierarchyType?: string;
+  maxDepth?: number;
+  childMounted?: boolean;
+  childCurrentParentOneId?: string;
+  childCurrentLevel?: string;
+  checks?: {
+    checkType?: string;
+    label?: string;
+    checkResult?: string;
+    message?: string;
+    conflictPath?: string;
+    suggestion?: string;
+  }[];
+  executeTime?: string;
+  durationMs?: number;
+}
+
+/** 单条校验明细 */
+export interface HierarchyCheckVO {
+  checkType: string;
+  label: string;
+  /** PASS 通过 / FAIL 阻塞 / WARN 警告（需 GC 决策） */
+  checkResult: 'PASS' | 'FAIL' | 'WARN';
+  message: string;
+  /** 冲突路径证据 */
+  conflictPath?: string;
+  suggestion?: string;
+}
+
+/** 层级关系实时校验结果（提交前校验） */
+export interface HierarchyValidateVO {
+  checkCode: string;
+  passed: boolean;
+  blockedReason?: string;
+  relationLabel: string;
+  parentName: string;
+  childName: string;
+  parentLevel: string;
+  parentDepth: number;
+  childLevel: string;
+  childDepth: number;
+  previewPath: string;
+  previewPathNames: string;
+  crossBu: boolean;
+  requiresGcApproval: boolean;
+  relationType: string;
+  maxDepth: number;
+  childMounted: boolean;
+  childCurrentParentOneId: string;
+  childCurrentLevel: string;
+  checks: HierarchyCheckVO[];
+  executeTime: string;
+  durationMs: number;
+}
+
+/** 层级关系实时校验入参（不落业务数据） */
+export interface HierarchyValidateForm {
+  /** 编辑场景传关系主键，用于排除自身 */
+  id?: number;
+  parentOneId: string;
+  childOneId: string;
+  relationType?: string;
+  payerOneId?: string;
+  changeReason?: string;
+}
+
+/** 增加子节点入参（落库） */
+export interface HierarchyChildForm {
+  parentOneId: string;
+  childOneId: string;
+  relationType?: string;
+  payerOneId?: string;
+  effectiveFrom?: string;
+  effectiveTo?: string;
+  changeReason?: string;
+  remark?: string;
+}
+
+/** 编辑层级关系入参（落库，历史不覆盖） */
+export interface HierarchyRelationEditForm {
+  id: number;
+  /** 子节点只读回显（服务端不允许替换子节点） */
+  childOneId: string;
+  parentOneId: string;
+  relationType?: string;
+  payerOneId?: string;
+  effectiveFrom?: string;
+  effectiveTo?: string;
+  changeReason?: string;
+  remark?: string;
+}
+
+/** 新增层级关系 / 发起申请入参（草稿态关系，需审批） */
 export interface HierarchyRelationForm {
   hierarchyType: string;
   relationType: string;
@@ -549,14 +958,66 @@ export interface HierarchyRelationForm {
   payerOneId: string;
   effectiveDate: string;
   reason: string;
-  /** 校验示例：pass / same / multiple / loop */
-  validationCase: string;
+  /**
+   * 演示专用：选择「通过 / 父子相同 / 多父冲突 / 路径循环」四类校验示例，
+   * 用于展示 BLOCKED 提示。不提交服务端，后端只收 HierarchyRelationForm 的正式字段。
+   */
+  validationCase?: string;
+}
+
+/**
+ * 待归位主数据（客户层级 → 待归位主数据 列表行）
+ * 说明：批准成为主数据后自动出现在这里，Data Steward 归位后进入 A3-A2-A1 树。
+ */
+export interface HierarchyUnassignedVO {
+  oneId: string;
+  /** 客户名称 */
+  name: string;
+  bu: string;
+  /** 客户状态（Active） */
+  status: string;
+  /** 来源系统 */
+  source: string;
+  /** 审批通过时间 */
+  approvedTime: string;
+  /** 是否已登记待归位节点 */
+  registered: boolean;
+  nodeCode: string;
+  /** 建议层级级别 */
+  suggestedLevel: string;
+  remark: string;
+}
+
+/**
+ * 层级归位表单（客户层级 → 待归位主数据 → 归位）
+ * 语义：把已批准的主数据挂到某个 A3 / A2 节点之下，使其成为层级树上的 A2 / A1。
+ */
+export interface HierarchyAssignForm {
+  /** 待归位客户 One ID */
+  oneId: string;
+  /** 目标父节点 One ID */
+  parentId: string;
+  /** 变更原因 */
+  changeReason: string;
+  remark?: string;
 }
 
 /** ------------------------------------------------------------------
  * 7. 变更 / 逻辑停用
  * ------------------------------------------------------------------ */
-export type ChangeStatus = 'Under Review' | 'Approved' | 'Rejected' | 'Inactive' | 'Draft';
+/**
+ * 页面展示状态（前端口径）。
+ * 与后端 cmd_change_request.status 的对应关系在 api 层统一转换，面板不感知后端取值。
+ */
+export type ChangeStatus =
+  | 'Under Review'
+  | 'Approved'
+  | 'Effective'
+  | 'Rejected'
+  | 'Returned'
+  | 'Cancelled'
+  | 'Inactive'
+  | 'Draft';
 
 export interface ChangeRequestVO {
   requestId: string;
@@ -572,21 +1033,54 @@ export interface ChangeRequestVO {
   status: ChangeStatus;
   submittedAt: string;
   submittedBy?: string;
+  /** 后端原始状态（DRAFT / PENDING / APPROVED / REJECTED / RETURNED / EFFECTIVE / CANCELLED），用于判定可用操作 */
+  rawStatus?: string;
+  /** 是否关键属性变更（Y / N） */
+  isKeyChange?: string;
+  /** 目标状态（停用场景：inactive / archived） */
+  targetStatus?: string;
+  /** 关联关系影响检查结论（PASS / WARN / FAIL） */
+  relationCheck?: string;
+  /** 关联关系影响检查说明 */
+  relationMsg?: string;
+  /** 计划生效日期 */
+  effectiveDate?: string;
+  /** 实际生效时间 */
+  effectiveTime?: string;
+  /** 关联审批待办编号 */
+  approvalTaskNo?: string;
+  remark?: string;
 }
 
 export interface ChangeRequestQuery extends PageQuery {
   keyword?: string;
   changeType?: 'Update' | 'Deactivate' | '';
   status?: ChangeStatus | '';
+  buScope?: string;
+  oneId?: string;
+}
+
+/** 单行字段变更（表单采集：字段编码 + 新值；Before 由服务端从主档回填） */
+export interface ChangeFieldItem {
+  /** 字段编码（md_field.field_code，如 credit_code / address） */
+  fieldCode: string;
+  /** 字段中文名（仅用于展示） */
+  fieldName?: string;
+  /** 变更后值 */
+  afterValue: string;
 }
 
 /** 变更申请表单 */
 export interface ChangeRequestForm {
   oneId: string;
+  /** Update / Deactivate */
   changeType: string;
-  field: string;
-  newValue: string;
+  /** 变更原因 */
   reason: string;
+  /** 计划生效日期（YYYY-MM-DD HH:mm:ss） */
+  effectiveDate: string;
+  /** 字段级变更明细（属性变更场景必填；停用场景留空，服务端按状态切换生成差异行） */
+  fields: ChangeFieldItem[];
 }
 
 /** 停用申请表单 */
@@ -598,19 +1092,80 @@ export interface DeactivateForm {
   remark: string;
 }
 
-/** Before / After 差异行 */
+/** Before / After 差异行（页面展示口径） */
 export interface ChangeDiffVO {
   field: string;
   before: string;
   after: string;
+  /** 变化类型：ADD / MODIFY / DELETE / SAME */
+  changeFlag?: string;
+  /** 是否关键字段（Y / N） */
+  isKey?: boolean;
+  /** 是否敏感字段（Y / N） */
+  sensitive?: boolean;
 }
 
-/** 审批轨迹行 */
+/** 审批轨迹行（页面展示口径） */
 export interface ApprovalTrailVO {
   time: string;
   role: string;
   action: string;
   result: string;
+  /** 操作人 */
+  operator?: string;
+  /** 流程节点 */
+  node?: string;
+  /** 审批意见 */
+  opinion?: string;
+}
+
+/** 版本历史行（页面展示口径，证明「换版本不换 One ID」） */
+export interface ChangeVersionVO {
+  versionNo: number;
+  /** CREATE / UPDATE / DEACTIVATE / MERGE / RESTORE */
+  changeType: string;
+  changeReason: string;
+  /** 本次变更的字段编码列表 */
+  changedFields: string;
+  status: string;
+  sourceSystem: string;
+  dqScore?: number;
+  /** 是否由本次申请触发（用于详情弹窗高亮） */
+  requestCode?: string;
+  createTime: string;
+}
+
+/** 变更详情（差异 + 影响面 + 轨迹 + 版本上下文） */
+export interface ChangeDetailVO {
+  requestId: string;
+  oneId: string;
+  customerName: string;
+  changeType: 'Update' | 'Deactivate';
+  targetStatus: string;
+  isKeyChange: boolean;
+  bu: string;
+  reason: string;
+  status: ChangeStatus;
+  rawStatus: string;
+  effectiveDate: string;
+  effectiveTime: string;
+  /** 关联关系影响检查结论 */
+  relationCheck: string;
+  relationMsg: string;
+  /** 影响面清单（逐条人可读） */
+  impacts: string[];
+  approvalTaskNo: string;
+  submittedAt: string;
+  approvedByName: string;
+  approvedTime: string;
+  /** 主档当前版本号 */
+  currentVersionNo?: number;
+  /** 本次生效后的版本号（未生效为 undefined） */
+  effectiveVersionNo?: number;
+  diffs: ChangeDiffVO[];
+  trail: ApprovalTrailVO[];
+  versions: ChangeVersionVO[];
+  remark: string;
 }
 
 /** 逻辑停用数据库结果 */
@@ -618,6 +1173,137 @@ export interface DeactivateResultVO {
   businessView: Array<{ key: string; value: string }>;
   /** 后台记录示意（SQL / 字段落库） */
   dbRecords: string[];
+  /** 该 One ID 的完整版本链 */
+  versions: ChangeVersionVO[];
+}
+
+/** 可变更字段目录行（页面口径，来自 md_field 配置） */
+export interface ChangeFieldVO {
+  /** 字段编码 */
+  fieldCode: string;
+  /** 字段名称 */
+  fieldName: string;
+  /** 数据类型 */
+  dataType: string;
+  /** 值集编码（ENUM 使用） */
+  valueSetCode?: string;
+  /** 是否必填（Y / N） */
+  isRequired: string;
+  /** 是否关键字段（Y：变更需更高级别审批） */
+  isKeyField: string;
+  /** 是否敏感字段（Y：变更需额外留痕） */
+  isSensitive: string;
+  /** 长度上限 */
+  maxLength?: number;
+  /** 正则校验表达式 */
+  regexPattern?: string;
+  /** 物理列名 */
+  physicalColumn?: string;
+}
+
+/* ---- 后端原始行（保持与 Java VO 字段一一对应，转换在 api 层完成） ---- */
+
+/** 后端可变更字段行（CmdChangeFieldVo） */
+export interface CmdChangeFieldRow {
+  fieldCode?: string;
+  fieldName?: string;
+  dataType?: string;
+  valueSetCode?: string;
+  isRequired?: string;
+  isKeyField?: string;
+  isSensitive?: string;
+  maxLength?: number;
+  regexPattern?: string;
+  physicalColumn?: string;
+  orderNum?: number;
+}
+
+/** 后端指标卡行（CmdChangeKpiVo） */
+export interface CmdChangeKpiRow {
+  label?: string;
+  value?: number;
+  hint?: string;
+}
+
+/** 后端字段差异行（CmdChangeDiffVo） */
+export interface CmdChangeDiffRow {
+  id?: number;
+  requestId?: number;
+  requestCode?: string;
+  fieldCode?: string;
+  fieldName?: string;
+  beforeValue?: string;
+  afterValue?: string;
+  isKeyField?: string;
+  isSensitive?: string;
+  changeFlag?: string;
+  orderNum?: number;
+  remark?: string;
+}
+
+/** 后端审批轨迹行（CmdChangeTrailVo） */
+export interface CmdChangeTrailRow {
+  time?: string;
+  role?: string;
+  operator?: string;
+  action?: string;
+  node?: string;
+  result?: string;
+  opinion?: string;
+}
+
+/** 后端客户版本快照行（CmdCustomerVersionVo） */
+export interface CmdCustomerVersionRow {
+  id?: number;
+  oneId?: string;
+  versionNo?: number;
+  changeType?: string;
+  changeReason?: string;
+  changedFields?: string;
+  snapshotJson?: string;
+  beforeJson?: string;
+  dqScore?: number;
+  status?: string;
+  sourceSystem?: string;
+  changeRequestId?: number;
+  createTime?: string;
+}
+
+/** 后端变更详情（CmdChangeDetailVo） */
+export interface CmdChangeDetailRow {
+  id?: number;
+  requestCode?: string;
+  oneId?: string;
+  legalName?: string;
+  changeType?: string;
+  targetStatus?: string;
+  isKeyChange?: string;
+  buScope?: string;
+  changeReason?: string;
+  status?: string;
+  effectiveDate?: string;
+  effectiveTime?: string;
+  relationCheck?: string;
+  relationMsg?: string;
+  approvalTaskNo?: string;
+  flowInstanceId?: number;
+  remark?: string;
+  createTime?: string;
+  approvedByName?: string;
+  approvedTime?: string;
+  currentVersionNo?: number;
+  effectiveVersionNo?: number;
+  diffs?: CmdChangeDiffRow[];
+  trail?: CmdChangeTrailRow[];
+  impacts?: string[];
+  versions?: CmdCustomerVersionRow[];
+}
+
+/** 后端逻辑停用结果（CmdDeactivateResultVo） */
+export interface CmdDeactivateResultRow {
+  businessView?: Array<{ key?: string; value?: string }>;
+  dbRecords?: string[];
+  versions?: CmdCustomerVersionRow[];
 }
 
 /** ------------------------------------------------------------------
@@ -735,6 +1421,48 @@ export interface FlowTraceStepVO {
   note?: string;
 }
 
+/**
+ * 流程跟踪 · 分步骤明细字段（键值对）
+ */
+export interface FlowStepFieldVO {
+  label: string;
+  value?: string;
+  /** 语义色（success / warning / danger / info），空表示普通文本 */
+  tone?: string;
+}
+
+/**
+ * 流程跟踪 · 分步骤明细表格
+ */
+export interface FlowStepTableVO {
+  title?: string;
+  columns: string[];
+  /** 与 columns 列序一致的数据行 */
+  rows: string[][];
+}
+
+/**
+ * 流程跟踪 · 分步骤明细
+ *
+ * 与 FlowTraceStepVO 按 nodeCode 一一对应：点击泳道图某个节点后，
+ * 在步骤条下方动态展示该节点的相关内容（录入字段与附件 / OCR 识别结果 /
+ * DQ 检查项 / 匹配候选 / 审批动作 / 编码映射 / 集成下发 / 步骤日志 / 审计事件）。
+ * 节点语义留在服务端（后端决定每个节点出现哪些区块），前端只负责渲染。
+ */
+export interface FlowStepDetailVO {
+  nodeCode: string;
+  nodeName?: string;
+  phaseName?: string;
+  lane?: string;
+  status?: string;
+  /** 一句话结论（该节点发生了什么） */
+  summary?: string;
+  fields?: FlowStepFieldVO[];
+  tables?: FlowStepTableVO[];
+  /** 提示 / 口径说明 */
+  notes?: string[];
+}
+
 /** BPMN 风格流程图节点（引擎 flow_node + 实例状态） */
 export interface FlowGraphNodeVO {
   nodeCode: string;
@@ -809,7 +1537,7 @@ export interface WorkflowStepVO {
   createTime?: string;
 }
 
-/** 流程中心：单个 CMD 业务场景（V6.1 总设计业务流） */
+/** 工作流：单个 CMD 业务场景（V6.1 总设计业务流） */
 export interface FlowSceneVO {
   /** 场景编码（cmd_flow_scene.scene_code） */
   sceneCode: string;
@@ -831,8 +1559,118 @@ export interface FlowSceneVO {
   nodeCount?: number;
 }
 
+/** ------------------------------------------------------------------
+ * 3.1 工作流配置（平台管理 › Workflow › 工作流定义 › 配置）
+ *
+ * 对应 V6.1 总设计第 16 页「Workflow配置」：流程节点、路由条件、SLA、超时升级和邮件通知。
+ * 数据来源：cmd_flow_scene（场景级配置）+ cmd_flow_node_rule（节点审批人规则）。
+ * ------------------------------------------------------------------ */
+
 /**
- * 流程实例记录（流程中心「流程实例记录」列表，GET /cmd/flow/instances）
+ * 泳道节点（业务蓝图，只读）
+ *
+ * locked=true 表示平台固定项（业务入口 / 系统自动节点 / 发布与审计节点），不可删除；
+ * configurable=true 表示节点办理方式可按场景配置。
+ */
+export interface FlowSceneNodeVO {
+  /** 阶段序号（1-7） */
+  phase?: number;
+  /** 阶段名称 */
+  phaseName?: string;
+  /** 泳道（角色） */
+  lane?: string;
+  /** 节点编码 */
+  nodeCode: string;
+  /** 节点名称 */
+  nodeName: string;
+  /** 节点类型（AUTO 系统自动 / MANUAL 人工 / GATEWAY 分支网关） */
+  nodeType?: string;
+  /** 节点业务说明 */
+  note?: string;
+  /** 平台固定（不可删除 / 不可停用） */
+  locked: boolean;
+  /** 可配置（人工节点由路由规则配置） */
+  configurable: boolean;
+  /** 约束说明（为什么不可修改 / 可以配置什么） */
+  constraint?: string;
+}
+
+/**
+ * 节点审批人规则（可增删、可调整）—— 场景级「可增加或减少的工作流项目」
+ *
+ * id 为空 = 新增；status='1' = 停用（即从该场景的工作流中移除该节点）。
+ */
+export interface FlowSceneRuleVO {
+  id?: number | string | null;
+  /** Warm-Flow 节点编码（bu_review / gc_review ...） */
+  nodeCode: string;
+  nodeName?: string;
+  /** 命中条件表达式（如 risk_level == "High" || cross_bu） */
+  conditionExpr?: string;
+  /** 审批人类型（ROLE / USER / DEPT_LEADER / SPEL） */
+  assigneeType?: string;
+  /** 审批人值（角色编码 / 用户 ID / 表达式） */
+  assigneeValue?: string;
+  /** 适用范围（GC / BU / CROSS_BU） */
+  scopeType?: string;
+  /** 多审批人模式（ALL 会签 / ANY 或签 / SEQUENCE 依次） */
+  multiMode?: string;
+  /** 节点 SLA（小时） */
+  slaHours?: number;
+  /** 优先级 */
+  priority?: number;
+  /** 状态（0 正常 / 1 停用） */
+  status?: string;
+  remark?: string;
+  /** 平台固定：不可停用（如 BU 初审主干） */
+  locked?: boolean;
+  constraint?: string;
+}
+
+/** 场景工作流配置（GET /cmd/flow/scene/{sceneCode}/config） */
+export interface FlowSceneConfigVO {
+  sceneCode: string;
+  sceneName: string;
+  flowCode: string;
+  flowName?: string;
+  /** 场景整体 SLA（小时） */
+  slaHours?: number;
+  /** 超时升级规则（TO_GC / NOTIFY） */
+  escalateRule?: string;
+  /** 启动条件表达式（满足才走流程，否则直接生效） */
+  startConditions?: string;
+  /** 审批表单标识 */
+  formKey?: string;
+  deployed?: boolean;
+  version?: number;
+  /** 超时动作 */
+  timeoutAction?: string;
+  /** 通知方式 */
+  notifyMode?: string;
+  /** 通知对象 */
+  notifyTargets?: string[];
+  /** 变更说明 */
+  changeNote?: string;
+  /** 泳道节点蓝图（只读） */
+  nodes: FlowSceneNodeVO[];
+  /** 可配置的节点审批人规则 */
+  rules: FlowSceneRuleVO[];
+}
+
+/** 场景工作流配置保存入参（PUT /cmd/flow/scene/{sceneCode}/config） */
+export interface FlowSceneConfigBo {
+  slaHours?: number;
+  escalateRule?: string;
+  startConditions?: string;
+  timeoutAction?: string;
+  notifyMode?: string;
+  notifyTargets?: string[];
+  changeNote?: string;
+  rules?: FlowSceneRuleVO[];
+}
+
+/**
+ * 流程实例记录（「工作流」两个列表页共用，GET /cmd/flow/instances）
  *
  * 每一次执行过的工作流都留一条记录，可查看进度并用 Graph 回看当时的泳道图。
  */
@@ -938,6 +1776,11 @@ export interface FlowTraceVO {
   /** 泳道图旁路节点（规则与参数配置，不打断主流程） */
   bypass?: { lane: string; nodeName: string; note: string };
   steps: FlowTraceStepVO[];
+  /**
+   * 分步骤明细：与 steps 按 nodeCode 一一对应。
+   * 点击泳道图某个节点后，在步骤条下方展示该节点的相关内容。
+   */
+  stepDetails?: FlowStepDetailVO[];
   /** Data context state 变量（value 为空渲染 not defined） */
   contextVars: Array<{ name: string; value?: string }>;
   actions: Array<{
@@ -1133,6 +1976,17 @@ export interface CmdApprovalDetailRow {
 /** 后端流程跟踪（对应 CmdFlowTraceVo，字段均为可选） */
 export type CmdFlowTraceRow = Partial<FlowTraceVO> & {
   steps?: Array<Partial<FlowTraceStepVO>>;
+  stepDetails?: Array<{
+    nodeCode?: string;
+    nodeName?: string;
+    phaseName?: string;
+    lane?: string;
+    status?: string;
+    summary?: string;
+    fields?: Array<{ label?: string; value?: string; tone?: string }>;
+    tables?: Array<{ title?: string; columns?: string[]; rows?: string[][] }>;
+    notes?: string[];
+  }>;
   contextVars?: Array<{ name?: string; value?: string }>;
   actions?: Array<{
     actionType?: string;
@@ -1247,16 +2101,6 @@ export interface CoverageItemVO {
   topic: string;
   status: '已覆盖' | '已增强' | '部分';
   evidence: string;
-}
-
-/** 工作流配置 */
-export interface WorkflowConfigVO {
-  flowName: string;
-  steps: string[];
-  routeCondition: string;
-  sla: string;
-  timeoutAction: string;
-  notification: string;
 }
 
 /** ------------------------------------------------------------------
