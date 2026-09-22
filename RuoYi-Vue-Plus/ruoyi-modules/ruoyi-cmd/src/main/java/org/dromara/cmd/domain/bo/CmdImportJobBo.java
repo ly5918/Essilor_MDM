@@ -31,6 +31,13 @@ public class CmdImportJobBo implements Serializable {
     /** 任务状态 */
     private String jobStatus;
 
+    /**
+     * 多状态过滤（与侧栏「批量治理」角标同口径：待复核 / 进行中 / 部分成功）
+     * <p>
+     * 页面「仅看待处置」勾选后传该参数，保证角标数字 = 列表条数（测试报告 BUG-5）。
+     */
+    private java.util.List<String> jobStatusList;
+
     /** 关键字（任务编号 / 文件名 模糊匹配） */
     private String keyword;
 

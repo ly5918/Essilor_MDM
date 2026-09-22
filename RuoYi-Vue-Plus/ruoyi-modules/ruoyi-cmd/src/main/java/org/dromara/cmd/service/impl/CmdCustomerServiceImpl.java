@@ -82,6 +82,13 @@ public class CmdCustomerServiceImpl implements ICmdCustomerService {
     /** 新建客户申请的业务场景（cmd_flow_scene.scene_code，同时决定泳道图模板与流程定义） */
     private static final String SCENE_CUSTOMER_CREATE = CmdConstants.SCENE_CUSTOMER_CREATE;
 
+    /**
+     * Duplicate Check 中不参与比对的主档状态：
+     * merged（已并入他档，源记录仅留痕）/ rejected（已拒绝作废）/ draft（草稿，未提交申请）。
+     */
+    private static final List<String> MATCH_EXCLUDED_STATUS = List.of(
+        CmdConstants.CUST_STATUS_MERGED, CmdConstants.CUST_STATUS_REJECTED, CmdConstants.CUST_STATUS_DRAFT);
+
     /** 首次提交后的业务节点名（含 BU 关键字，引擎启动后据此定位到 BU_REVIEW 节点） */
     private static final String NODE_NAME_BU_REVIEW = "BU Scope 初审";
 
@@ -456,6 +463,16 @@ public class CmdCustomerServiceImpl implements ICmdCustomerService {
             customer.setEffectiveFrom(LocalDateTime.now());
         }
         customerMapper.insert(customer);
+        // 落库即算一次质量分与等级：保证任何入口（手工 / OCR / 批量导入生成）的主档都有 dq_grade，
+        // 避免客户详情「来源与质量」页签出现「DQ=100 但质量等级 —」的自相矛盾展示（测试报告 BUG-17）。
+        BigDecimal initScore = calcDqScore(customer);
+        CmdCustomer scorePatch = new CmdCustomer();
+        scorePatch.setId(customer.getId());
+        scorePatch.setDqScore(initScore);
+        scorePatch.setDqGrade(gradeOf(initScore));
+        customerMapper.updateById(scorePatch);
+        customer.setDqScore(initScore);
+        customer.setDqGrade(gradeOf(initScore));
         // 首版本快照：beforeJson 为空
         appendVersion(customer, null, "CREATE", bo.getRemark());
         return customer;
@@ -703,29 +720,30 @@ public class CmdCustomerServiceImpl implements ICmdCustomerService {
     }
 
     /**
-     * Duplicate Check：与存量 active 主档比对（总设计「匹配分流」网关的 POC 确定性实现）。
-     * <p>信用代码（主依据）同值 → 返回候选（EXACT）；否则客户名称（辅助线索）同值 → 返回候选（SUSPECTED）；
-     * 均未命中返回 null（NEW）。已合并（merged） / 草稿 / 待审中的主档不参与比对。
-     *
-     * @param customer 新申请客户
-     * @return 命中的存量主档候选，未命中返回 null
-     */
-    /**
-     * Duplicate Check：与存量 active 主档比对（总设计「匹配分流」网关的 POC 确定性实现）。
-     * <p>信用代码（主依据）同值 → 返回候选（EXACT）；否则客户名称（辅助线索）规范化相等或高相似度
-     * → 返回候选（SUSPECTED）。已合并 / 草稿 / 待审中的主档不参与比对。
-     * 名称匹配采用「去法律后缀 + 去括号内容」规范化，并辅以 bigram Dice 相似度，
-     * 以解决「上海清视眼镜有限公司」与「上海清视眼镜」因名称不完全一致而漏判跨 BU 同名重复的问题（BUG-02）。
+     * Duplicate Check：与存量主档比对（总设计「匹配分流」网关的 POC 确定性实现）。
+     * <p>比对口径（对齐总设计「信用代码与经营地址为主要匹配依据」）：
+     * <ul>
+     *   <li>主依据：统一社会信用代码精确同值 → 命中候选，结论 EXACT（精准重复）；
+     *       比对范围为「在库有效主档」，仅排除 merged / rejected / draft。</li>
+     *   <li>辅助线索：客户名称规范化相等或 bigram Dice 相似度 ≥ 0.85 → 命中候选，结论 SUSPECTED；
+     *       名称仅作辅助线索，故只在 active 主档中比对，避免把在审申请误判为重复源。</li>
+     * </ul>
+     * 均未命中返回 null（NEW）。名称规范化（去括号内容 + 去法律后缀）用于解决
+     * 「上海清视眼镜有限公司」与「上海清视眼镜」因名称不完全一致而漏判跨 BU 同名重复的问题（测试报告 P0-2）。
      *
      * @param customer 新申请客户
      * @return 命中的存量主档候选，未命中返回 null
      */
     private CmdCustomer matchExistingCustomer(CmdCustomer customer) {
-        // 主依据：统一社会信用代码（精确匹配，命中即 EXACT）
+        // 主依据：统一社会信用代码（精确匹配，命中即 EXACT）。
+        // 比对范围 = 在库有效主档（active / pending / returned / inactive / archived），
+        // 仅排除「已合并 merged」「已拒绝 rejected」「草稿 draft」——已并入他档或已作废的主档不应再被关联。
+        // 说明：此前只比对 active，导致「同一信用代码重复提交」在上一单尚未审批时仍被判为 NEW
+        // （测试报告 P0-2：3 个上海清视判 NEW）。总设计明确「信用代码为主要匹配依据」，故以状态排除而非只看 active。
         if (StringUtils.isNotBlank(customer.getCreditCode())) {
             List<CmdCustomer> byCredit = customerMapper.selectList(new LambdaQueryWrapper<CmdCustomer>()
                 .eq(CmdCustomer::getCreditCode, customer.getCreditCode())
-                .eq(CmdCustomer::getStatus, CmdConstants.CUST_STATUS_ACTIVE)
+                .notIn(CmdCustomer::getStatus, MATCH_EXCLUDED_STATUS)
                 .ne(customer.getId() != null, CmdCustomer::getId, customer.getId())
                 .orderByDesc(CmdCustomer::getCreateTime)
                 .last("LIMIT 1"));

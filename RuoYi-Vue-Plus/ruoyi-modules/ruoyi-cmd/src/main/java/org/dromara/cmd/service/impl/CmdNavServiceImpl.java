@@ -99,6 +99,24 @@ public class CmdNavServiceImpl implements ICmdNavService {
         long integration = nz(intRunMapper.selectCount(new LambdaQueryWrapper<IntRun>()
             .in(IntRun::getRunStatus, INT_RUN_ABNORMAL_STATUS)));
 
+        // 治理类角标只对「Data Steward（BU / GC Scope）」有意义：
+        // 治理与审批 / 批量治理是 Steward 的待办队列，Business User、Platform Admin、Auditor 都不处理审批，
+        // 若沿用同一套数字会出现「Auditor 只读角色却显示 10 条待审批」的角色越界展示（测试报告 BUG-11）。
+        boolean steward = "bu".equals(roleKey) || "gc".equals(roleKey);
+        if (!steward) {
+            approval = 0L;
+            batch = 0L;
+        }
+        // Auditor 为独立只读角色（总设计「Auditor 独立只读」）：不承载任何待办，
+        // 只保留「关注类」统计（审计失败 / 高风险事件、集成异常）。
+        boolean readOnly = "audit".equals(roleKey);
+        if (readOnly) {
+            customers = 0L;
+            hier = 0L;
+            change = 0L;
+            flowWorkitem = 0L;
+        }
+
         Map<String, Long> badges = new LinkedHashMap<>();
         // 工作台 = 待办合计（总入口，让 Steward 一眼看到手上还剩多少事；不含审计/集成等「关注类」）
         badges.put("dash", approval + customers + hier + batch + change + flowWorkitem);

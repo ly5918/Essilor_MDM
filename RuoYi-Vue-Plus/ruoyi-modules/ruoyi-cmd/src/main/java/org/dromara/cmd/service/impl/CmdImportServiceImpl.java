@@ -33,6 +33,7 @@ import org.dromara.cmd.domain.bo.CmdImportTemplateMappingBo;
 import org.dromara.cmd.domain.vo.CmdImportJobVo;
 import org.dromara.cmd.domain.vo.CmdImportResultVo;
 import org.dromara.cmd.domain.vo.CmdImportRowVo;
+import org.dromara.cmd.domain.vo.CmdImportStatsVo;
 import org.dromara.cmd.domain.vo.CmdImportTemplateMappingVo;
 import org.dromara.cmd.domain.vo.CmdImportTemplateVo;
 import org.dromara.cmd.mapper.CmdApprovalActionMapper;
@@ -223,6 +224,11 @@ public class CmdImportServiceImpl implements ICmdImportService {
         }
         if (StringUtils.isNotBlank(bo.getJobStatus())) {
             lqw.eq(CmdImportJob::getJobStatus, bo.getJobStatus());
+        }
+        // 多状态过滤（页面「仅看待处置」= 待复核 / 进行中 / 部分成功，与侧栏「批量治理」角标同口径）。
+        // 此前角标与列表各按一套条件统计，出现「角标 6、列表 0」的自相矛盾（测试报告 BUG-5）。
+        if (bo.getJobStatusList() != null && !bo.getJobStatusList().isEmpty()) {
+            lqw.in(CmdImportJob::getJobStatus, bo.getJobStatusList());
         }
         if (StringUtils.isNotBlank(bo.getKeyword())) {
             lqw.and(w -> w.like(CmdImportJob::getJobCode, bo.getKeyword())
@@ -551,6 +557,42 @@ public class CmdImportServiceImpl implements ICmdImportService {
 
         recordImportAudit(job, outcome);
         return job.getJobCode();
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public CmdImportStatsVo selectStats() {
+        List<CmdImportJob> jobs = jobMapper.selectList(Wrappers.lambdaQuery());
+        CmdImportStatsVo vo = new CmdImportStatsVo();
+        vo.setJobCount((long) jobs.size());
+        long total = 0L;
+        long exact = 0L;
+        long suspected = 0L;
+        long created = 0L;
+        long review = 0L;
+        long invalid = 0L;
+        for (CmdImportJob job : jobs) {
+            total += nz(job.getTotalCount());
+            exact += nz(job.getExactCount());
+            suspected += nz(job.getSuspectedCount());
+            created += nz(job.getNewCount());
+            review += nz(job.getReviewCount());
+            invalid += nz(job.getInvalidCount());
+        }
+        vo.setTotalRows(total);
+        vo.setExactCount(exact);
+        vo.setSuspectedCount(suspected);
+        vo.setNewCount(created);
+        vo.setReviewCount(review);
+        vo.setInvalidCount(invalid);
+        return vo;
+    }
+
+    /** 数值空值兜底（导入任务统计列允许为 NULL，且建表类型为 INT） */
+    private long nz(Number value) {
+        return value == null ? 0L : value.longValue();
     }
 
     /**

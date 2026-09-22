@@ -6,6 +6,7 @@ import org.dromara.cmd.domain.bo.CmdImportTemplateMappingBo;
 import org.dromara.cmd.domain.vo.CmdImportJobVo;
 import org.dromara.cmd.domain.vo.CmdImportResultVo;
 import org.dromara.cmd.domain.vo.CmdImportRowVo;
+import org.dromara.cmd.domain.vo.CmdImportStatsVo;
 import org.dromara.cmd.domain.vo.CmdImportTemplateMappingVo;
 import org.dromara.cmd.domain.vo.CmdImportTemplateVo;
 import org.dromara.common.core.domain.PageResult;
@@ -118,6 +119,16 @@ public interface ICmdImportService {
      */
     String uploadJob(MultipartFile file, String templateCode, String errorStrategy, String duplicateStrategy,
                      String scene, String buScope, String sourceSystem);
+
+    /**
+     * 导入中心全局统计（全量口径，与分页无关）
+     * <p>
+     * 页面顶部「批次总览」KPI 直接取此结果，避免前端对当前页任务累加造成的
+     * 「翻页数字跳变 / 首屏未加载时全为 0」。
+     *
+     * @return 全局统计
+     */
+    CmdImportStatsVo selectStats();
 
     /**
      * 分页查询导入行明细（结果分流下钻「查看 N 条」）

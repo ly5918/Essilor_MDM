@@ -8,6 +8,7 @@ import org.dromara.cmd.domain.bo.CmdImportTemplateMappingBo;
 import org.dromara.cmd.domain.vo.CmdImportJobVo;
 import org.dromara.cmd.domain.vo.CmdImportResultVo;
 import org.dromara.cmd.domain.vo.CmdImportRowVo;
+import org.dromara.cmd.domain.vo.CmdImportStatsVo;
 import org.dromara.cmd.domain.vo.CmdImportTemplateMappingVo;
 import org.dromara.cmd.domain.vo.CmdImportTemplateVo;
 import org.dromara.cmd.service.ICmdImportService;
@@ -69,6 +70,19 @@ public class CmdImportController extends BaseController {
     @GetMapping("/job/{jobCode}/result")
     public R<CmdImportResultVo> result(@PathVariable String jobCode) {
         return R.ok(importService.selectResult(jobCode));
+    }
+
+    /**
+     * 导入中心全局统计（全量口径，与分页无关）
+     * <p>
+     * 用于页面顶部「批次总览」KPI：此前 KPI 由当前页 10 条任务累加得到，翻页时数字会跳变，
+     * 且首屏未加载完成时全部显示为 0（测试报告「批量治理指标全 0」）。改为服务端全量聚合。
+     *
+     * @return 全局统计
+     */
+    @GetMapping("/stats")
+    public R<CmdImportStatsVo> stats() {
+        return R.ok(importService.selectStats());
     }
 
     /**

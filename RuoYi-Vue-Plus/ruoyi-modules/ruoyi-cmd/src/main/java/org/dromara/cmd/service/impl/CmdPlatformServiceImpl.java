@@ -112,7 +112,10 @@ public class CmdPlatformServiceImpl implements ICmdPlatformService {
     @Override
     public List<MdField> selectPublishedFields() {
         List<MdField> all = fieldMapper.selectList(
-            Wrappers.<MdField>lambdaQuery().orderByAsc(MdField::getOrderNum).orderByAsc(MdField::getId));
+            Wrappers.<MdField>lambdaQuery()
+                // 已逻辑删除的脏行（如历史测试留下的同编码副本）不参与任何业务口径
+                .eq(MdField::getDelFlag, "0")
+                .orderByAsc(MdField::getOrderNum).orderByAsc(MdField::getId));
         List<MdField> published = all.stream()
             .filter(f -> "0".equals(f.getStatus()) && StringUtils.isNotBlank(f.getFieldCode()))
             .toList();

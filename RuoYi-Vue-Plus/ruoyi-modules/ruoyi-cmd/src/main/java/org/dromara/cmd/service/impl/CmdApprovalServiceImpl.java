@@ -581,8 +581,15 @@ public class CmdApprovalServiceImpl implements ICmdApprovalService {
         // 否则任务处理完仍挂在待办队列、而已处理队列又查不到（演示时最容易困惑的点）
         String category = bo.getTaskCategory();
         boolean doneCategory = CmdConstants.APPR_CAT_DONE.equalsIgnoreCase(category);
+        // 「全部待办(ALL)」/「我已处理(DONE)」/「升级与退回(RETURNED)」都不是建表分类，
+        // 而是按 status 推导的聚合口径，因此跳过 task_category 列匹配。
+        // 其中 RETURNED 尤需注意：退回是**状态**而非分类（退回的任务 task_category 仍为 APPROVAL），
+        // 若按分类匹配会导致退回任务既不在待办队列、也不在退回队列，页面看到空列表。
+        boolean returnedCategory = CmdConstants.APPR_CAT_RETURNED.equalsIgnoreCase(category);
+        boolean statusOnlyCategory = doneCategory || returnedCategory
+            || CmdConstants.APPR_CAT_ALL.equalsIgnoreCase(category);
         LambdaQueryWrapper<CmdApprovalTask> lqw = QueryBuilder.lambda(CmdApprovalTask.class)
-            .eqIfText(CmdApprovalTask::getTaskCategory, doneCategory ? null : category)
+            .eqIfText(CmdApprovalTask::getTaskCategory, statusOnlyCategory ? null : category)
             .eqIfText(CmdApprovalTask::getBizType, bo.getBizType())
             .eqIfText(CmdApprovalTask::getBuScope, bo.getBuScope())
             .eqIfText(CmdApprovalTask::getScope, bo.getScope())
@@ -603,14 +610,29 @@ public class CmdApprovalServiceImpl implements ICmdApprovalService {
                 .or().like(CmdApprovalTask::getBizTitle, kw)
                 .or().like(CmdApprovalTask::getOneId, kw));
         }
-        // 队列状态口径：待办队列只列未处理任务；"我已处理"列终态；"升级与退回"保持退回态语义
+        // 「全部待办」不是建表分类，而是「所有还需要我处理」的聚合口径：
+        // 待处理（PENDING）+ 退回待补充（RETURNED）—— 与治理与审批页「全部待办」页签一致，
+        // 避免 Steward 打开页面看到空列表、任务却藏在「审批任务」页签里（测试报告 BUG-6）。
+        if (CmdConstants.APPR_CAT_ALL.equalsIgnoreCase(category)) {
+            lqw.in(CmdApprovalTask::getStatus,
+                CmdConstants.APPR_STATUS_PENDING,
+                CmdConstants.APPR_STATUS_RETURNED);
+            return lqw;
+        }
+        // 队列状态口径：待办队列只列未处理任务；"我已处理"列终态；"升级与退回"按退回状态取
         if (StringUtils.isNotBlank(category)) {
             if (doneCategory) {
+                // 我已处理 = 已闭环终态。刻意不含 RETURNED：退回的申请仍需 Steward 跟进，
+                // 归属「升级与退回」页签，避免同一条任务在两个队列里重复出现。
                 lqw.in(CmdApprovalTask::getStatus,
                     CmdConstants.APPR_STATUS_APPROVED,
                     CmdConstants.APPR_STATUS_REJECTED,
-                    CmdConstants.APPR_STATUS_RETURNED);
-            } else if (!CmdConstants.APPR_CAT_RETURNED.equalsIgnoreCase(category)) {
+                    CmdConstants.APPR_STATUS_CANCELLED,
+                    CmdConstants.APPR_STATUS_COMPLETED);
+            } else if (returnedCategory) {
+                // 「升级与退回」= 状态为退回待补充的任务（task_category 仍为 APPROVAL，不能按分类匹配）
+                lqw.eq(CmdApprovalTask::getStatus, CmdConstants.APPR_STATUS_RETURNED);
+            } else {
                 lqw.eq(CmdApprovalTask::getStatus, CmdConstants.APPR_STATUS_PENDING);
             }
         }
@@ -808,6 +830,13 @@ public class CmdApprovalServiceImpl implements ICmdApprovalService {
 
     /**
      * 生成可执行操作按钮（按审批 Scope 区分）
+     * <p>
+     * 主按钮文案按匹配结论精确区分（测试报告 BUG-9）：
+     * <ul>
+     *   <li>NEW（未命中存量）→「批准新建」，不再对全新客户显示「确认合并」</li>
+     *   <li>EXACT / SUSPECTED（命中候选）→「确认合并」</li>
+     *   <li>其余（变更 / 停用 / 层级 / 批量导入确认等无合并语义）→「批准」</li>
+     * </ul>
      *
      * @param task 任务
      * @return 操作按钮
@@ -851,14 +880,30 @@ public class CmdApprovalServiceImpl implements ICmdApprovalService {
         }
         // 默认分支 = 非合并、非重复关联类审批（如客户新建 NEW / 变更 / 停用 / 层级 / 批量导入确认）。
         // 无合并语义时不得使用「确认合并」字样（BUG-12）：NEW 场景明确为「批准新建」，其余为「批准」。
-        actions.add(action(CmdConstants.ACTION_APPROVE,
-            CmdConstants.MATCH_NEW.equals(task.getDuplicateState()) ? "批准新建" : "批准", "primary"));
+        actions.add(action(CmdConstants.ACTION_APPROVE, approveLabel(task), "primary"));
         actions.add(action(CmdConstants.ACTION_REJECT, "拒绝", "danger"));
         actions.add(action(CmdConstants.ACTION_RETURN, gc ? "退回BU" : "退回补充", "warning"));
         if (!gc) {
             actions.add(action(CmdConstants.ACTION_ESCALATE, "升级GC", "info"));
         }
         return actions;
+    }
+
+    /**
+     * 主审批按钮文案：严格按匹配结论区分，避免「新建」被误读为「合并」（测试报告 BUG-9）
+     *
+     * @param task 审批任务
+     * @return 按钮文案
+     */
+    private String approveLabel(CmdApprovalTask task) {
+        String match = StringUtils.blankToDefault(task.getDuplicateState(), "").toUpperCase();
+        if (CmdConstants.MATCH_NEW.equals(match)) {
+            return "批准新建";
+        }
+        if (match.contains(CmdConstants.MATCH_EXACT) || match.contains(CmdConstants.MATCH_SUSPECTED)) {
+            return "确认合并";
+        }
+        return "批准";
     }
 
     private CmdApprovalDetailVo.ActionVo action(String key, String label, String type) {

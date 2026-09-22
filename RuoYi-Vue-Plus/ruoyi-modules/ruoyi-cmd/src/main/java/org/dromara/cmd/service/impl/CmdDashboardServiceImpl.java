@@ -63,6 +63,9 @@ public class CmdDashboardServiceImpl implements ICmdDashboardService {
             .eq(CmdApprovalTask::getSlaState, CmdConstants.SLA_OVERDUE)
             .count());
 
+        // 待办节点分布：回答「申请卡在哪一步」，而不仅是「还有几条待办」（测试报告 BUG-10）
+        vo.setPendingByNode(countPendingByNode());
+
         // 治理指标
         vo.setGovSuspectCount(countGovernance(CmdConstants.GOV_TYPE_SUSPECT));
         vo.setGovReviewCount(countGovernance(CmdConstants.GOV_TYPE_REVIEW));
@@ -89,6 +92,35 @@ public class CmdDashboardServiceImpl implements ICmdDashboardService {
             .eq(StringUtils.isNotBlank(buScope), CmdCustomer::getBuScope, buScope)
             .eq(StringUtils.isNotBlank(status), CmdCustomer::getStatus, status)
             .count();
+    }
+
+    /**
+     * 统计未处理待办按「当前节点」的分布（条数倒序）
+     * <p>
+     * 节点名取 cmd_approval_task.current_node_name，为空时归入「待分配」，
+     * 保证用户在任何数据状态下都能看到一个可解释的归属（测试报告 BUG-10）。
+     *
+     * @return 节点名到条数的映射
+     */
+    private java.util.Map<String, Long> countPendingByNode() {
+        java.util.List<CmdApprovalTask> pending = taskMapper.selectList(
+            new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<CmdApprovalTask>()
+                .in(CmdApprovalTask::getStatus,
+                    CmdConstants.APPR_STATUS_PENDING,
+                    CmdConstants.APPR_STATUS_RETURNED));
+        java.util.Map<String, Long> grouped = new java.util.HashMap<>();
+        for (CmdApprovalTask task : pending) {
+            String node = StringUtils.isNotBlank(task.getCurrentNodeName()) ? task.getCurrentNodeName() : "待分配";
+            grouped.merge(node, 1L, Long::sum);
+        }
+        // 条数倒序，保证页面展示的前几项就是主要积压节点
+        return grouped.entrySet().stream()
+            .sorted((a, b) -> Long.compare(b.getValue(), a.getValue()))
+            .collect(java.util.stream.Collectors.toMap(
+                java.util.Map.Entry::getKey,
+                java.util.Map.Entry::getValue,
+                (a, b) -> a,
+                java.util.LinkedHashMap::new));
     }
 
     /**

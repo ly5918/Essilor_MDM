@@ -28,6 +28,14 @@ public class CmdDashboardVo implements Serializable {
     /** 待审批客户数（status=pending） */
     private Long customerPending;
 
+    /**
+     * 待办按「当前审批节点」分布（节点名 → 条数，按条数倒序）
+     * <p>
+     * 用于回答「我的申请现在卡在哪个节点」——此前工作台只给一个总数，
+     * Business User 看到「待审批客户 2」却不知道是卡在 BU 还是 GC（测试报告 BUG-10）。
+     */
+    private java.util.Map<String, Long> pendingByNode = new java.util.LinkedHashMap<>();
+
     /** 逻辑停用客户数（status=inactive） */
     private Long customerInactive;
 

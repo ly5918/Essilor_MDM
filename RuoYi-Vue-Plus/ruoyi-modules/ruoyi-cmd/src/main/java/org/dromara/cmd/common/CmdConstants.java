@@ -132,6 +132,14 @@ public interface CmdConstants {
     String APPR_CAT_RETURNED = "RETURNED";
     /** 我已处理 */
     String APPR_CAT_DONE = "DONE";
+    /**
+     * 全部待办（页面聚合口径，非建表分类）
+     * <p>
+     * 「全部待办」= 所有还需要当前 Steward 处理的任务（待处理 + 退回待补充），
+     * 后端收到该值时按 status 聚合，不做 task_category 列匹配，
+     * 保证 Steward 打开页面第一眼就能看到待办（测试报告 BUG-6）。
+     */
+    String APPR_CAT_ALL = "ALL";
 
     // ==================== 待办状态 cmd_approval_task.status ====================
 
