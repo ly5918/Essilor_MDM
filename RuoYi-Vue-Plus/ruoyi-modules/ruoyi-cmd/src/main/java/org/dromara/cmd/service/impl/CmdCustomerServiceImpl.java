@@ -1,6 +1,5 @@
 package org.dromara.cmd.service.impl;
 
-import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.ObjectUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -26,6 +25,8 @@ import org.dromara.cmd.mapper.CmdFlowSceneMapper;
 import org.dromara.cmd.service.ICmdAuditService;
 import org.dromara.cmd.service.ICmdCustomerService;
 import org.dromara.cmd.service.ICmdFlowEngineService;
+import org.dromara.cmd.service.ICmdGovernanceService;
+import org.dromara.cmd.service.ICmdPlatformService;
 import org.dromara.cmd.service.ICmdWorkflowStepLogService;
 import org.dromara.common.core.domain.PageResult;
 import org.dromara.common.core.exception.ServiceException;
@@ -74,6 +75,8 @@ public class CmdCustomerServiceImpl implements ICmdCustomerService {
     private final ICmdFlowEngineService flowEngineService;
     private final ICmdWorkflowStepLogService stepLogService;
     private final ICmdAuditService auditService;
+    private final ICmdGovernanceService governanceService;
+    private final ICmdPlatformService platformService;
 
     /** 新建客户申请的业务场景（cmd_flow_scene.scene_code，同时决定泳道图模板与流程定义） */
     private static final String SCENE_CUSTOMER_CREATE = CmdConstants.SCENE_CUSTOMER_CREATE;
@@ -198,8 +201,20 @@ public class CmdCustomerServiceImpl implements ICmdCustomerService {
         // 2) 自动检查（对应泳道图「技术/业务 DQ」与「Duplicate Check」两个自动阶段）：
         //    POC 阶段用确定性规则替代独立校验引擎，接入规则引擎后此处改为调用其接口，落库字段不变。
         BigDecimal dqScore = calcDqScore(customer);
+        // Duplicate Check（总设计「匹配分流」网关）：信用代码命中 active 主档 → EXACT（精准重复）；
+        // 名称命中 → SUSPECTED（疑似重复，进入人工治理，跨BU 时按 MERGE 场景处理）。
+        CmdCustomer candidate = matchExistingCustomer(customer);
         String matchState = CmdConstants.MATCH_NEW;
+        if (candidate != null) {
+            // 信用代码同值 → EXACT（精准重复）；仅名称同值 → SUSPECTED（疑似重复）
+            matchState = StringUtils.isNotBlank(customer.getCreditCode())
+                && customer.getCreditCode().equals(candidate.getCreditCode())
+                ? CmdConstants.MATCH_EXACT : CmdConstants.MATCH_SUSPECTED;
+        }
         String riskLevel = resolveRisk(dqScore);
+        boolean crossBu = candidate != null && !java.util.Objects.equals(
+            StringUtils.defaultString(customer.getBuScope()), StringUtils.defaultString(candidate.getBuScope()));
+        String candidateOneId = candidate == null ? null : candidate.getOneId();
 
         CmdCustomer checkPatch = new CmdCustomer();
         checkPatch.setId(customer.getId());
@@ -207,11 +222,12 @@ public class CmdCustomerServiceImpl implements ICmdCustomerService {
         checkPatch.setDqScore(dqScore);
         checkPatch.setDqGrade(gradeOf(dqScore));
         checkPatch.setMatchState(matchState);
-        checkPatch.setDuplicateFlag(CmdConstants.NO);
+        checkPatch.setDuplicateFlag(candidate == null ? CmdConstants.NO : CmdConstants.YES);
         customerMapper.updateById(checkPatch);
         customer.setStatus(CmdConstants.CUST_STATUS_PENDING);
         customer.setDqScore(dqScore);
         customer.setMatchState(matchState);
+        customer.setDuplicateFlag(candidate == null ? CmdConstants.NO : CmdConstants.YES);
 
         // 3) 生成统一待办（进入 Data Steward BU Scope 队列）
         Applicant applicant = resolveApplicant();
@@ -237,14 +253,21 @@ public class CmdCustomerServiceImpl implements ICmdCustomerService {
         task.setRiskLevel(riskLevel);
         task.setDqScore(dqScore);
         task.setDuplicateState(matchState);
-        task.setCrossBuFlag(CmdConstants.NO);
+        task.setCrossBuFlag(candidate == null ? CmdConstants.NO : crossBu ? CmdConstants.YES : CmdConstants.NO);
         task.setSubmitTime(now);
         task.setSlaDue(now.plusHours(slaHours));
         task.setSlaState(CmdConstants.SLA_NORMAL);
-        task.setEvidenceJson(evidenceOf(customer, dqScore, matchState));
+        task.setEvidenceJson(evidenceOf(customer, dqScore, matchState, candidate));
         task.setBizSnapshotJson(JsonUtils.toJsonString(customer));
         task.setRemark(bo.getRemark());
         approvalTaskMapper.insert(task);
+
+        // 3.1) Duplicate Check 命中 → 生成疑似重复治理任务（总设计 MERGE 场景「发现候选」）。
+        //      Exact 由系统在批准后自动关联；Suspected 需人工治理（关联已有 = 发起合并请求）。
+        if (candidate != null) {
+            governanceService.createDuplicateTask(task.getTaskNo(), customer.getOneId(), customer.getLegalName(),
+                customer.getBuScope(), crossBu, matchState, task.getEvidenceJson());
+        }
 
         // 4) 业务侧轨迹：提交申请（与引擎 flow_his_task 互补）
         CmdApprovalAction action = new CmdApprovalAction();
@@ -476,17 +499,27 @@ public class CmdCustomerServiceImpl implements ICmdCustomerService {
         stepLogService.recordStep(submit);
 
         // 系统自动检查（数据装配 / OCR / DQ / 查重）—— POC 阶段同步完成
-        recordSystemStep(oneId, taskNo, flowInstanceId, "INPUT", "数据装配", now, dqScore, matchState);
-        recordSystemStep(oneId, taskNo, flowInstanceId, "OCR", "OCR 与智能补全", now, dqScore, matchState);
-        recordSystemStep(oneId, taskNo, flowInstanceId, "DQ", "技术与业务 DQ", now, dqScore, matchState);
-        recordSystemStep(oneId, taskNo, flowInstanceId, "DUP", "Duplicate Check", now, dqScore, matchState);
+        String candidateOneId = null;
+        if (task.getEvidenceJson() != null) {
+            try {
+                Object v = JsonUtils.parseMap(task.getEvidenceJson()).get("候选One ID");
+                candidateOneId = v == null ? null : String.valueOf(v);
+            } catch (Exception ignored) {
+                // 证据快照解析失败不影响步骤日志
+            }
+        }
+        recordSystemStep(oneId, taskNo, flowInstanceId, "INPUT", "数据装配", now, dqScore, matchState, null);
+        recordSystemStep(oneId, taskNo, flowInstanceId, "OCR", "OCR 与智能补全", now, dqScore, matchState, null);
+        recordSystemStep(oneId, taskNo, flowInstanceId, "DQ", "技术与业务 DQ", now, dqScore, matchState, null);
+        recordSystemStep(oneId, taskNo, flowInstanceId, "DUP", "Duplicate Check", now, dqScore, matchState, candidateOneId);
     }
 
     /**
      * 记录一条系统自动步骤（OCR / DQ / 查重 等）
      */
     private void recordSystemStep(String oneId, String taskNo, Long flowInstanceId, String nodeCode,
-                                  String nodeName, LocalDateTime now, BigDecimal dqScore, String matchState) {
+                                  String nodeName, LocalDateTime now, BigDecimal dqScore, String matchState,
+                                  String candidateOneId) {
         CmdWorkflowStepLog step = new CmdWorkflowStepLog();
         step.setOneId(oneId);
         step.setTaskNo(taskNo);
@@ -496,7 +529,7 @@ public class CmdCustomerServiceImpl implements ICmdCustomerService {
         step.setNodeName(nodeName);
         step.setOperatorName("系统自动处理");
         step.setOperatorRole("SYS");
-        step.setOpinion(buildSystemOpinion(nodeCode, dqScore, matchState));
+        step.setOpinion(buildSystemOpinion(nodeCode, dqScore, matchState, candidateOneId));
         step.setCreateTime(now);
         stepLogService.recordStep(step);
     }
@@ -504,10 +537,12 @@ public class CmdCustomerServiceImpl implements ICmdCustomerService {
     /**
      * 系统自动步骤的展示意见
      */
-    private String buildSystemOpinion(String nodeCode, BigDecimal dqScore, String matchState) {
+    private String buildSystemOpinion(String nodeCode, BigDecimal dqScore, String matchState, String candidateOneId) {
         return switch (nodeCode) {
             case "DQ" -> "DQ 质量分=" + (dqScore == null ? "-" : dqScore) + "，自动校验通过";
-            case "DUP" -> "匹配结论=" + matchState + "，未发现强制合并项";
+            case "DUP" -> candidateOneId == null
+                ? "匹配结论=" + matchState + "，未发现存量重复"
+                : "匹配结论=" + matchState + "，命中存量主档 " + candidateOneId + "，进入人工治理";
             case "OCR" -> "营业执照识别完成，关键字段已抽取";
             default -> "系统自动完成";
         };
@@ -543,14 +578,64 @@ public class CmdCustomerServiceImpl implements ICmdCustomerService {
      * @param matchState 匹配结论
      * @return JSON 字符串
      */
-    private String evidenceOf(CmdCustomer customer, BigDecimal dqScore, String matchState) {
+    private String evidenceOf(CmdCustomer customer, BigDecimal dqScore, String matchState, CmdCustomer candidate) {
         Map<String, Object> evidence = new java.util.LinkedHashMap<>(8);
         evidence.put("自动检查", "必填 / 格式 / 值集校验");
         evidence.put("质量分", dqScore);
         evidence.put("重复检查", matchState);
+        // 申请侧字段（与候选侧成对，供审批详情「治理证据」区渲染字段级命中高亮对比）
+        evidence.put("申请名称", StringUtils.blankToDefault(customer.getLegalName(), "未提供"));
+        evidence.put("申请BU", StringUtils.blankToDefault(customer.getBuScope(), "—"));
+        evidence.put("申请来源系统", StringUtils.blankToDefault(customer.getSourceSystem(), "—"));
         evidence.put("信用代码", StringUtils.blankToDefault(customer.getCreditCode(), "未提供"));
         evidence.put("注册地址", StringUtils.blankToDefault(customer.getAddress(), "未提供"));
+        if (candidate != null) {
+            // 候选对比证据（总设计 MERGE 场景「证据准备」：信用代码 / 经营地址 / 名称 / 来源）
+            evidence.put("候选One ID", candidate.getOneId());
+            evidence.put("候选名称", candidate.getLegalName());
+            evidence.put("候选信用代码", StringUtils.blankToDefault(candidate.getCreditCode(), "未提供"));
+            evidence.put("候选经营地址", StringUtils.blankToDefault(candidate.getAddress(), "未提供"));
+            evidence.put("候选BU", StringUtils.blankToDefault(candidate.getBuScope(), "—"));
+            evidence.put("候选来源系统", StringUtils.blankToDefault(candidate.getSourceSystem(), "—"));
+            evidence.put("跨BU", java.util.Objects.equals(
+                StringUtils.defaultString(customer.getBuScope()), StringUtils.defaultString(candidate.getBuScope()))
+                ? "N" : "Y");
+        }
         return JsonUtils.toJsonString(evidence);
+    }
+
+    /**
+     * Duplicate Check：与存量 active 主档比对（总设计「匹配分流」网关的 POC 确定性实现）。
+     * <p>信用代码（主依据）同值 → 返回候选（EXACT）；否则客户名称（辅助线索）同值 → 返回候选（SUSPECTED）；
+     * 均未命中返回 null（NEW）。已合并（merged） / 草稿 / 待审中的主档不参与比对。
+     *
+     * @param customer 新申请客户
+     * @return 命中的存量主档候选，未命中返回 null
+     */
+    private CmdCustomer matchExistingCustomer(CmdCustomer customer) {
+        if (StringUtils.isNotBlank(customer.getCreditCode())) {
+            List<CmdCustomer> byCredit = customerMapper.selectList(new LambdaQueryWrapper<CmdCustomer>()
+                .eq(CmdCustomer::getCreditCode, customer.getCreditCode())
+                .eq(CmdCustomer::getStatus, CmdConstants.CUST_STATUS_ACTIVE)
+                .ne(customer.getId() != null, CmdCustomer::getId, customer.getId())
+                .orderByDesc(CmdCustomer::getCreateTime)
+                .last("LIMIT 1"));
+            if (!byCredit.isEmpty()) {
+                return byCredit.get(0);
+            }
+        }
+        if (StringUtils.isNotBlank(customer.getLegalName())) {
+            List<CmdCustomer> byName = customerMapper.selectList(new LambdaQueryWrapper<CmdCustomer>()
+                .eq(CmdCustomer::getLegalName, customer.getLegalName())
+                .eq(CmdCustomer::getStatus, CmdConstants.CUST_STATUS_ACTIVE)
+                .ne(customer.getId() != null, CmdCustomer::getId, customer.getId())
+                .orderByDesc(CmdCustomer::getCreateTime)
+                .last("LIMIT 1"));
+            if (!byName.isEmpty()) {
+                return byName.get(0);
+            }
+        }
+        return null;
     }
 
     /** 申请人（登录人 / 演示账号） */
@@ -690,14 +775,14 @@ public class CmdCustomerServiceImpl implements ICmdCustomerService {
     }
 
     /**
-     * 生成 One ID（POC 实现）
+     * 生成 One ID（按 oneid_rule + cfg_sequence 规则生成）
      * <p>
-     * 生产环境应改为读取 oneid_rule 表并按规则生成（编码模式 / 序列 / 校验位），
-     * 此处使用 UUID 片段保证 POC 阶段全局唯一且不依赖外部组件。
+     * 读取平台管理中配置的 One ID 规则（前缀 / 分隔符 / 流水长度 / 序列编码），
+     * 从 cfg_sequence 原子取号，保证全局唯一与顺序递增；规则修改后即时生效。
      *
      * @return One ID
      */
     private String generateOneId() {
-        return "GC-" + IdUtil.fastSimpleUUID().substring(0, 8).toUpperCase();
+        return platformService.generateOneId();
     }
 }

@@ -30,6 +30,11 @@
       <el-form-item label="是否必填" prop="required">
         <el-switch v-model="form.required" />
       </el-form-item>
+      <el-form-item label="目标版本" prop="versionNo">
+        <el-select v-model="form.versionNo" style="width: 100%" :disabled="!!props.field">
+          <el-option v-for="item in props.versions ?? []" :key="item.version" :label="`${item.version}（${item.status === 'Current' ? '已发布' : 'Draft'}）`" :value="item.version" />
+        </el-select>
+      </el-form-item>
       <el-form-item label="默认值" prop="defaultValue">
         <el-input v-model="form.defaultValue" placeholder="可选" />
       </el-form-item>
@@ -48,13 +53,13 @@
 import { reactive, ref } from 'vue';
 import type { FormInstance, FormRules } from 'element-plus';
 import { saveMetadataField } from '@/api/demo/cmdPoc';
-import type { MetadataFieldVO } from '@/api/demo/cmdPoc/types';
+import type { MetadataFieldVO, ModelVersionVO } from '@/api/demo/cmdPoc/types';
 import { useCmdPoc } from '../../composables/useCmdPoc';
 import { FIELD_BU_OPTIONS, FIELD_CUSTOMER_TYPE_OPTIONS, FIELD_SCOPE_OPTIONS, FIELD_TYPE_OPTIONS } from '../../constants/options';
 
 defineOptions({ name: 'CmdPocNewFieldDialog' });
 
-const props = defineProps<{ field?: MetadataFieldVO; payload?: Record<string, unknown> }>();
+const props = defineProps<{ field?: MetadataFieldVO; versions?: ModelVersionVO[]; defaultVersion?: string; payload?: Record<string, unknown> }>();
 const emit = defineEmits<{ saved: [field: MetadataFieldVO] }>();
 
 const { upsertMetadataField } = useCmdPoc();
@@ -72,6 +77,7 @@ const form = reactive<MetadataFieldVO>(
         required: false,
         bu: 'High End',
         customerType: 'Door',
+        versionNo: props.defaultVersion,
         status: 'Draft'
       }
 );

@@ -73,7 +73,10 @@ public class CmdFlowEngineServiceImpl implements ICmdFlowEngineService {
         "DEACTIVATE", "cmd_customer_deactivate",
         "HIER_RELATION", "cmd_hier_relation",
         "IMPORT_BATCH", "cmd_import_batch",
-        "MERGE", "cmd_customer_merge"
+        "MERGE", "cmd_customer_merge",
+        "DQ_RULE_CHANGE", "cmd_dq_rule_change",
+        "MATCH_RULE_CHANGE", "cmd_match_rule_change",
+        "INTEGRATION_FAIL", "cmd_integration_fail"
     );
 
     /** 引擎节点编码 */
@@ -619,8 +622,20 @@ public class CmdFlowEngineServiceImpl implements ICmdFlowEngineService {
 
     @Override
     public List<CmdFlowTraceVo.StepVo> buildSwimlane(String sceneCode) {
-        boolean isCreateScene = "CUSTOMER_CREATE".equals(sceneCode);
-        List<StepTpl> tpl = isCreateScene ? createSceneTemplate() : genericSceneTemplate();
+        List<StepTpl> tpl;
+        if ("CUSTOMER_CREATE".equals(sceneCode)) {
+            tpl = createSceneTemplate();
+        } else if ("MERGE".equals(sceneCode)) {
+            tpl = mergeSceneTemplate();
+        } else if ("DQ_RULE_CHANGE".equals(sceneCode)) {
+            tpl = dqRuleSceneTemplate();
+        } else if ("MATCH_RULE_CHANGE".equals(sceneCode)) {
+            tpl = matchRuleSceneTemplate();
+        } else if ("INTEGRATION_FAIL".equals(sceneCode)) {
+            tpl = integrationSceneTemplate();
+        } else {
+            tpl = genericSceneTemplate();
+        }
         List<CmdFlowTraceVo.StepVo> steps = new ArrayList<>();
         int order = 1;
         for (StepTpl t : tpl) {
@@ -670,6 +685,35 @@ public class CmdFlowEngineServiceImpl implements ICmdFlowEngineService {
     }
 
     /**
+     * 跨 BU 客户合并 / 迁移（总设计 MERGE 场景：7 阶段 —— 发现候选 / 证据准备 / BU 初审 / GC 决策 /
+     * 合并新建 / 结果发布 / 追踪审计）
+     */
+    private List<StepTpl> mergeSceneTemplate() {
+        List<StepTpl> list = new ArrayList<>();
+        list.add(new StepTpl(1, "发现候选", LANE_SYS, "CAND", "疑似重复发现", "AUTO",
+            "单条创建 / 批量导入命中存量主档；治理中心发现存量疑似重复（信用代码 / 名称匹配）"));
+        list.add(new StepTpl(2, "证据准备", LANE_BU_USER, "EVID", "补充业务证据", "MANUAL",
+            "确认客户身份、上传附件并说明业务背景"));
+        list.add(new StepTpl(2, "证据准备", LANE_SYS, "COMPARE", "候选对比准备", "AUTO",
+            "展示信用代码、经营地址、名称、来源与层级"));
+        list.add(new StepTpl(3, "BU 初审", LANE_BU_STEWARD, NODE_BU_REVIEW, "BU Scope 初审", "MANUAL",
+            "核验本BU来源记录；确认升级、排除或退回"));
+        list.add(new StepTpl(4, "GC 决策", LANE_GC_STEWARD, NODE_GC_REVIEW, "GC Scope 决策", "GATEWAY",
+            "跨BU确认关联已有、创建新主档或退回修复"));
+        list.add(new StepTpl(5, "合并 / 新建", LANE_SYS, "MERGE_EXEC", "执行合并 / 新建", "AUTO",
+            "更新 Golden Record；One ID 保持稳定或新生成"));
+        list.add(new StepTpl(6, "结果发布", LANE_SYS, "XREF", "建立交叉引用", "AUTO",
+            "保留 Legacy Code 与 Source Snapshot（旧 One ID → 保留 One ID 映射）"));
+        list.add(new StepTpl(6, "结果发布", LANE_ADMIN, "PUBLISH", "发布标准属性", "MANUAL",
+            "向下游发送 One ID、标准字段和状态；失败时 Retry / Resubmit"));
+        list.add(new StepTpl(7, "追踪审计", LANE_ADMIN, "TRACE", "运行追踪", "AUTO",
+            "显示 Completed / Partial / Failed 与 Retry 记录"));
+        list.add(new StepTpl(7, "追踪审计", LANE_AUDITOR, "AUDIT", "审计与合并记录", "AUTO",
+            "保存原因、操作者、审批、Before / After"));
+        return list;
+    }
+
+    /**
      * 其余场景：同一 7 阶段骨架的通用模板
      */
     private List<StepTpl> genericSceneTemplate() {
@@ -684,6 +728,101 @@ public class CmdFlowEngineServiceImpl implements ICmdFlowEngineService {
         list.add(new StepTpl(6, "审批发布", LANE_ADMIN, "PUBLISH", "发布下游", "MANUAL", "通知 API / 文件 / 批量发布；失败即 Retry / Resubmit"));
         list.add(new StepTpl(7, "追踪审计", LANE_ADMIN, "TRACE", "运行追踪", "AUTO", "任务状态与失败原因追踪"));
         list.add(new StepTpl(7, "追踪审计", LANE_AUDITOR, "AUDIT", "审计查询", "AUTO", "Before / After 证据审查"));
+        return list;
+    }
+
+    /**
+     * DQ 规则变更与历史重评估（总设计泳道场景：规则草稿 / 模拟测试 / BU 验证 / GC 验证 /
+     * 影响评估 / 发布重评估 / 追踪审计）
+     */
+    private List<StepTpl> dqRuleSceneTemplate() {
+        List<StepTpl> list = new ArrayList<>();
+        list.add(new StepTpl(1, "规则草稿", LANE_BU_STEWARD, "DRAFT", "新增 / 编辑 DQ 规则", "MANUAL",
+            "配置技术规则、业务规则、适用实体、BU、严重级别与提示（Draft 状态）"));
+        list.add(new StepTpl(2, "模拟测试", LANE_BU_STEWARD, "DATASET", "选择测试数据集", "MANUAL",
+            "选择 Customer Type、BU、Source System 和样例记录"));
+        list.add(new StepTpl(2, "模拟测试", LANE_SYS, "SIMULATE", "执行规则模拟", "AUTO",
+            "输出 Pass / Warning / Block 及字段级错误说明"));
+        list.add(new StepTpl(3, "BU 验证", LANE_BU_STEWARD, NODE_BU_REVIEW, "BU Scope 业务验证", "MANUAL",
+            "确认本 BU 业务语义、可修复性及 Blocking / Warning 设置"));
+        list.add(new StepTpl(4, "GC 验证", LANE_GC_STEWARD, NODE_GC_REVIEW, "GC Scope 一致性验证", "MANUAL",
+            "验证 GC Core、跨 BU 统一口径及重大规则影响"));
+        list.add(new StepTpl(5, "影响评估", LANE_BU_STEWARD, "IMPACT", "影响评估", "MANUAL",
+            "统计受影响 Active 客户、预计新增异常与 Score 变化"));
+        list.add(new StepTpl(5, "影响评估", LANE_SYS, "CANDIDATE", "生成候选规则版本", "AUTO",
+            "保留 Draft 与测试结果；等待正式发布"));
+        list.add(new StepTpl(6, "发布 / 重评估", LANE_ADMIN, "PUBLISH", "发布 Rule Version", "MANUAL",
+            "新任务引用新版本；旧结果不被静默覆盖"));
+        list.add(new StepTpl(6, "发布 / 重评估", LANE_SYS, "REEVAL", "创建重评估任务", "AUTO",
+            "按范围生成 Re-evaluation Job；保留旧分数和规则版本"));
+        list.add(new StepTpl(7, "追踪审计", LANE_ADMIN, "TRACE", "记录规则与任务链", "AUTO",
+            "保存版本、范围、旧分数、新分数和新增异常"));
+        list.add(new StepTpl(7, "追踪审计", LANE_AUDITOR, "AUDIT", "规则审计", "AUTO",
+            "Auditor 只读查看配置、验证、发布和重评估证据"));
+        return list;
+    }
+
+    /**
+     * 匹配规则变更（总设计泳道场景：规则调整 / 样例模拟 / BU 验证 / GC 验证 /
+     * 影响评估 / 发布重跑 / 追踪审计）
+     */
+    private List<StepTpl> matchRuleSceneTemplate() {
+        List<StepTpl> list = new ArrayList<>();
+        list.add(new StepTpl(1, "规则调整", LANE_BU_STEWARD, "ADJUST", "调整匹配字段与标准化", "MANUAL",
+            "配置信用代码、经营地址、辅助名称、字段组合和空值策略"));
+        list.add(new StepTpl(2, "样例模拟", LANE_BU_STEWARD, "THRESHOLD", "设置阈值与结果分层", "MANUAL",
+            "定义 Exact / Suspected / New 阈值与 Same-BU / Cross-BU 路由"));
+        list.add(new StepTpl(2, "样例模拟", LANE_SYS, "SIMULATE", "运行测试数据集", "AUTO",
+            "选择已知重复与非重复样本；执行标准化和匹配并输出候选与解释"));
+        list.add(new StepTpl(3, "BU 验证", LANE_BU_STEWARD, NODE_BU_REVIEW, "BU Scope 候选验证", "MANUAL",
+            "检查 Same-BU 误匹配、漏匹配和业务可解释性"));
+        list.add(new StepTpl(4, "GC 验证", LANE_GC_STEWARD, NODE_GC_REVIEW, "GC Scope 候选验证", "MANUAL",
+            "检查 Cross-BU、多候选与重大误合并风险"));
+        list.add(new StepTpl(5, "影响评估", LANE_BU_STEWARD, "IMPACT", "影响评估", "MANUAL",
+            "比较新旧 Exact / Suspected / New 分布和任务数量"));
+        list.add(new StepTpl(5, "影响评估", LANE_SYS, "KEEP_OLD", "保留原 Match Result", "AUTO",
+            "历史任务继续引用原规则版本，不静默覆盖"));
+        list.add(new StepTpl(6, "发布 / 重跑", LANE_ADMIN, "PUBLISH", "发布 Match Rule Version", "MANUAL",
+            "新任务引用新版本；可选择指定范围重新执行"));
+        list.add(new StepTpl(6, "发布 / 重跑", LANE_SYS, "RERUN", "生成新匹配任务", "AUTO",
+            "按客户、BU、批次或时间范围重新执行并生成新结果"));
+        list.add(new StepTpl(7, "追踪审计", LANE_ADMIN, "TRACE", "记录规则与任务链", "AUTO",
+            "保存规则版本、测试数据、结果分布和重新执行范围"));
+        list.add(new StepTpl(7, "追踪审计", LANE_AUDITOR, "AUDIT", "结果版本对比", "AUTO",
+            "Auditor 查看新旧结果、人工决策和证据链"));
+        return list;
+    }
+
+    /**
+     * 集成失败处理（总设计泳道场景：任务触发 / 接口执行 / 失败检测 / 告警与查看 /
+     * 技术重试 / 同步完成 / 追踪审计）
+     */
+    private List<StepTpl> integrationSceneTemplate() {
+        List<StepTpl> list = new ArrayList<>();
+        list.add(new StepTpl(1, "任务触发", LANE_SYS, "RUN", "创建集成运行任务", "AUTO",
+            "生成 Inbound / Outbound Run；记录对象、方向、模式和版本"));
+        list.add(new StepTpl(2, "接口执行", LANE_SYS, "CALL", "调用外部系统", "AUTO",
+            "通过 API / Batch / File 发送或接收数据；保存 Request 摘要"));
+        list.add(new StepTpl(3, "失败检测", LANE_SYS, "DETECT", "检测失败与错误分类", "GATEWAY",
+            "记录 HTTP / 文件 / Schema 错误、Attempt 与可重试标记"));
+        list.add(new StepTpl(4, "告警与查看", LANE_BU_USER, "BIZ_VIEW", "业务状态可见", "MANUAL",
+            "Business User 查看 Pending / Failed，不执行技术重试"));
+        list.add(new StepTpl(4, "告警与查看", LANE_BU_STEWARD, "STEWARD_VIEW", "治理影响可见", "MANUAL",
+            "Steward 查看受影响客户、审批和主档状态"));
+        list.add(new StepTpl(4, "告警与查看", LANE_ADMIN, "ADMIN_VIEW", "管理员查看任务详情", "MANUAL",
+            "查看错误、Payload 摘要、Request / Response 与已尝试次数"));
+        list.add(new StepTpl(5, "技术重试", LANE_ADMIN, "RETRY", "Retry / Resubmit", "MANUAL",
+            "按规则自动退避或人工重试；避免重复发布"));
+        list.add(new StepTpl(5, "技术重试", LANE_SYS, "ALERT", "邮件告警与状态更新", "AUTO",
+            "邮件仅作通知；更新 Failed / Retrying 状态"));
+        list.add(new StepTpl(6, "同步完成", LANE_SYS, "ACK", "外部系统确认接收", "AUTO",
+            "保存响应码、接收时间和目标系统业务回执"));
+        list.add(new StepTpl(6, "同步完成", LANE_ADMIN, "MONITOR", "完成任务与监控", "MANUAL",
+            "状态更新 Completed；展示耗时、记录数和失败原因"));
+        list.add(new StepTpl(7, "追踪审计", LANE_BU_USER, "BIZ_RESULT", "同步业务结果", "AUTO",
+            "业务角色查看已完成状态和 One ID / 属性结果"));
+        list.add(new StepTpl(7, "追踪审计", LANE_AUDITOR, "AUDIT", "集成审计", "AUTO",
+            "记录管理员重试、Attempt、错误和最终结果"));
         return list;
     }
 
@@ -752,6 +891,15 @@ public class CmdFlowEngineServiceImpl implements ICmdFlowEngineService {
         }
         if (biz.contains("批量")) {
             return "IMPORT_BATCH";
+        }
+        if (biz.contains("DQ") || biz.contains("质量")) {
+            return "DQ_RULE_CHANGE";
+        }
+        if (biz.contains("匹配")) {
+            return "MATCH_RULE_CHANGE";
+        }
+        if (biz.contains("集成")) {
+            return "INTEGRATION_FAIL";
         }
         return "CUSTOMER_CREATE";
     }

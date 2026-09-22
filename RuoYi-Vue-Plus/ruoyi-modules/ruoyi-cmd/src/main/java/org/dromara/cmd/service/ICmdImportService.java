@@ -2,6 +2,7 @@ package org.dromara.cmd.service;
 
 import jakarta.servlet.http.HttpServletResponse;
 import org.dromara.cmd.domain.bo.CmdImportJobBo;
+import org.dromara.cmd.domain.bo.CmdImportTemplateMappingBo;
 import org.dromara.cmd.domain.vo.CmdImportJobVo;
 import org.dromara.cmd.domain.vo.CmdImportResultVo;
 import org.dromara.cmd.domain.vo.CmdImportRowVo;
@@ -61,6 +62,30 @@ public interface ICmdImportService {
      * @return 字段映射列表
      */
     List<CmdImportTemplateMappingVo> selectTemplateMapping(String templateCode);
+
+    /**
+     * 保存模板字段映射（新增上传字段 / 编辑必填与转换规则）
+     * <p>
+     * 对应页面：平台管理 › 导入Template › 字段映射管理。
+     * 管线全链路由本表驱动：新增列自动进入「模板下载表头 / 上传表头预检 /
+     * 行级 DQ（is_required） / 行明细 raw_json」；主键字段（客户名称、统一社会
+     * 信用代码）是去重与存量匹配的锚点，不允许删除或取消必填。
+     *
+     * @param bo 映射保存对象（id 为空 = 新增，非空 = 更新可编辑字段）
+     * @return 处理结果说明
+     */
+    String saveMapping(CmdImportTemplateMappingBo bo);
+
+    /**
+     * 删除模板字段映射（逻辑删除）
+     * <p>
+     * 主键字段（客户名称 / 统一社会信用代码）不允许删除——批量导入的去重、
+     * 存量匹配与发布建主档都依赖这两列。
+     *
+     * @param id 映射主键
+     * @return 处理结果说明
+     */
+    String deleteMapping(Long id);
 
     /**
      * 下载导入模板

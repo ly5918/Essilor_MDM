@@ -1,6 +1,7 @@
 package org.dromara.cmd.mapper;
 
 import org.dromara.cmd.domain.IntEndpoint;
+import org.dromara.cmd.domain.vo.IntEndpointVo;
 import org.dromara.common.mybatis.core.mapper.BaseMapperPlus;
 
 /**
@@ -8,6 +9,6 @@ import org.dromara.common.mybatis.core.mapper.BaseMapperPlus;
  *
  * @author Essilor CMD POC
  */
-public interface IntEndpointMapper extends BaseMapperPlus<IntEndpoint, IntEndpoint> {
+public interface IntEndpointMapper extends BaseMapperPlus<IntEndpoint, IntEndpointVo> {
 
 }

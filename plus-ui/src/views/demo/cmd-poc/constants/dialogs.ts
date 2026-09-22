@@ -19,11 +19,11 @@ export type DialogKey =
   | 'permissions'
   | 'batchResult'
   | 'batchUpload'
-  | 'batchSource'
   | 'hierAdd'
   | 'hierAssign'
   | 'loop'
   | 'integration'
+  | 'integrationConn'
   | 'auditExport'
   | 'oneIdHistory'
   | 'changeRequest'
@@ -36,7 +36,8 @@ export type DialogKey =
   | 'reEvaluate'
   | 'ocr'
   | 'flowGraph'
-  | 'customerDetail';
+  | 'customerDetail'
+  | 'merge';
 
 export type DialogTitle = string | ((payload?: Record<string, unknown>) => string);
 export type DialogButtonText = string | ((payload?: Record<string, unknown>) => string);
@@ -62,12 +63,12 @@ const define = (key: DialogKey, title: DialogTitle, wide = false, confirmText: D
 });
 
 export const DIALOG_MAP: Record<DialogKey, DialogMeta> = {
-  fields: define('fields', '字段与值集管理', true),
+  fields: define('fields', '字段与值集管理', true, '发布模型版本'),
   newFieldForm: define('newFieldForm', '新建元数据字段', true, '保存为Draft'),
   newCustomer: define('newCustomer', '新建客户申请', true, '提交申请'),
-  dq: define('dq', 'DQ规则模拟测试', true, '开始测试'),
-  match: define('match', '匹配规则模拟测试', true, '开始测试'),
-  template: define('template', '下载模板', true),
+  dq: { ...define('dq', 'DQ规则管理', true, '开始测试'), width: 'min(1240px, 94vw)' },
+  match: { ...define('match', '匹配规则管理', true, '开始测试'), width: 'min(1240px, 94vw)' },
+  template: define('template', '导入模板管理', true),
   // 按场景打开（平台管理 → Workflow → 工作流定义 → 某一行「配置」）
   // 页签：流程节点 / 路由条件 / SLA 与升级 / 版本与发布（对齐 V6.1 第 16 页 Workflow配置）
   // 宽度取 1120px：节点路由规则表共 6 列（节点/命中条件/办理角色/会签或签/节点SLA/启用），
@@ -82,19 +83,19 @@ export const DIALOG_MAP: Record<DialogKey, DialogMeta> = {
     width: '1120px'
   },
   permissions: define('permissions', '角色与权限管理', true),
-  batchResult: define('batchResult', '批量结果分流', true),
-  batchUpload: define('batchUpload', '新建批量导入任务', true, '提交'),
   /**
-   * 上传数据明细（导入任务列表 → 行内「查看上传数据」）
+   * 批量结果分流（导入任务列表 → 行内「查看结果」）
    * <p>
-   * 只读查看器：底部只留「关闭」，不显示只会写审计日志的假「确认」按钮（与 flowTrace / flowGraph / customerDetail 同口径）。
-   * 宽度 1120px：列名由模板字段映射动态生成（每个 Excel 列一列），窄弹窗会把动态列挤成横向滚动。
+   * 已合并「上传数据明细」为默认页签（原独立 batchSource 弹窗删除）。
+   * 宽度 1120px：上传明细的列名由模板字段映射动态生成（每个 Excel 列一列），窄弹窗会把动态列挤成横向滚动。
+   * confirmable:false：查看/治理型弹窗只留「关闭」，不放假「确认」按钮（与 flowTrace / flowGraph 同口径）。
    */
-  batchSource: {
-    ...define('batchSource', payload => `上传数据明细 · ${payload?.jobId ?? ''}`, true),
+  batchResult: {
+    ...define('batchResult', payload => `导入任务详情 · ${payload?.jobId ?? ''}`, true),
     width: '1120px',
     confirmable: false
   },
+  batchUpload: define('batchUpload', '新建批量导入任务', true, '提交'),
   hierAdd: define(
     'hierAdd',
     payload => {
@@ -121,6 +122,7 @@ export const DIALOG_MAP: Record<DialogKey, DialogMeta> = {
     '确认归位'
   ),
   integration: define('integration', '集成任务详情', true, 'Retry'),
+  integrationConn: define('integrationConn', '集成端点配置', true, '保存'),
   auditExport: define('auditExport', '导出审计报告', false, '导出'),
   oneIdHistory: define('oneIdHistory', 'One ID生命周期历史', true),
   changeRequest: define('changeRequest', '发起属性变更', true, '提交变更'),
@@ -166,16 +168,21 @@ export const DIALOG_MAP: Record<DialogKey, DialogMeta> = {
    * 只读查看器，底部只留「关闭」，不显示只会写审计日志的假「确认」按钮（与 flowTrace / flowGraph 同口径）。
    * <p>
    * 内容组织：抬头 + 指标带常驻，其下**每个字段分组一个页签**
-   * （标识与名称 / 分类与归属 / 联络与地址 / 来源与数据质量 / 治理状态与生效 / 时间戳与扩展），
+   * （基本信息 / 联络与地址 / 来源与数据质量 / 治理与版本），
    * 外加「One ID 生命周期历史」页签（懒加载）——原先历史是列表操作列里的独立弹窗，
    * 现收敛到详情内，列表操作列只留「查看客户」一个入口。
-   * 宽度 1120px：7 个页签需要比 1000px 更宽的横向空间，否则页签会退化成左右箭头翻页。
+   * 宽度 min(1440px, 96vw)：9 个页签 + 3 列 descriptions，小屏时按视口收缩，避免拥挤。
    */
   customerDetail: {
     ...define('customerDetail', payload => `客户主档 · ${payload?.oneId ?? ''}`, true),
-    width: '1120px',
+    width: 'min(1440px, 96vw)',
     confirmable: false
-  }
+  },
+  /**
+   * 发起客户合并（客户详情 → 「发起合并」；总设计 MERGE 场景「发现候选 → 发起请求」入口）。
+   * 提交后创建 MERGE 审批待办（BU 初审 → GC 决策），批准自动执行合并。
+   */
+  merge: define('merge', payload => `发起客户合并 · ${payload?.oneId ?? ''}`, true, '发起合并申请')
 };
 
 export const DIALOG_KEYS = Object.keys(DIALOG_MAP) as DialogKey[];

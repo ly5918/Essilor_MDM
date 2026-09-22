@@ -27,12 +27,17 @@ public class CmdFlowInstanceVo implements Serializable {
     /** 待办任务主键 */
     private Long id;
 
-    /** 申请编号（对应参考页 Label 列） */
+    /**
+     * 事务ID（= 申请编号 task_no，AP-yyyyMMdd-####）：提交时即生成，
+     * 单条创建与批量导入（批次级）都有，是贯穿整个工作流的追踪键
+     * （泳道图 / 流程跟踪 / 实例列表都按它查询）。
+     */
     private String taskNo;
 
     /**
-     * 客户主数据标识（One ID）：贯穿全部页面与工作流的贯通 ID，
-     * 与 cmd_customer.one_id 同源，可按此 ID 反查客户主档与全部工作流记录。
+     * 客户主数据标识（One ID）：与 cmd_customer.one_id 同源，可反查客户主档。
+     * 注意：它不是工作流追踪键——单条创建批准后才生成、
+     * 批量导入批准后逐行生成，故前端列表以「事务ID」为主键、One ID 作副行展示。
      */
     private String oneId;
 

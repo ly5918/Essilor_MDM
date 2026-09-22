@@ -7,7 +7,7 @@
  * - 页面内部的查询条件、表单值由各面板自行维护。
  */
 import { computed, inject, provide, reactive, ref, type ComputedRef, type InjectionKey, type Ref } from 'vue';
-import { ElMessage } from 'element-plus';
+
 import * as cmdPocApi from '@/api/demo/cmdPoc';
 import type { CustomerVO, HierarchyNodeVO, MetadataFieldVO, OcrResultVO, PageId, RoleKey } from '@/api/demo/cmdPoc/types';
 import { DIALOG_MAP, type DialogKey } from '../constants/dialogs';
@@ -22,6 +22,8 @@ export interface HierarchyIndexItem {
   path: string;
   /** true=已挂到 A3-A2-A1 树；false=已批准但待归位 */
   mounted: boolean;
+  /** 主数据名称（客户详情「层级关联」对端节点展示用） */
+  name?: string;
 }
 
 export interface DialogState {
@@ -82,7 +84,7 @@ export interface CmdPocContext {
   /** 新增 / 更新元数据字段（本地缓存 + 提示） */
   upsertMetadataField: (field: MetadataFieldVO) => void;
   /** 发布模型版本：Draft 字段全部转为 Published */
-  publishMetadata: () => Promise<void>;
+  publishMetadata: () => Promise<string>;
   /** 按业务上下文过滤已发布字段（动态表单渲染依据） */
   publishedFields: ComputedRef<MetadataFieldVO[]>;
   /**
@@ -172,7 +174,7 @@ export function createCmdPoc(defaultRole: RoleKey): CmdPocContext {
     const index = new Map<string, HierarchyIndexItem>();
     const walk = (nodes: HierarchyNodeVO[]) => {
       nodes.forEach(node => {
-        if (node.oneId) index.set(node.oneId, { level: node.level, path: node.path, mounted: true });
+        if (node.oneId) index.set(node.oneId, { level: node.level, path: node.path, mounted: true, name: node.name });
         walk(node.children ?? []);
       });
     };
@@ -202,7 +204,8 @@ export function createCmdPoc(defaultRole: RoleKey): CmdPocContext {
   const publishMetadata = async () => {
     const message = await cmdPocApi.publishModelVersion();
     metadataFields.value = metadataFields.value.map(field => ({ ...field, status: 'Published' }));
-    ElMessage.success(message);
+    // 提示由调用方（DialogHost / 页头按钮）统一弹出，避免重复 toast
+    return message;
   };
 
   const publishedFields = computed(() => metadataFields.value.filter(field => field.status === 'Published'));

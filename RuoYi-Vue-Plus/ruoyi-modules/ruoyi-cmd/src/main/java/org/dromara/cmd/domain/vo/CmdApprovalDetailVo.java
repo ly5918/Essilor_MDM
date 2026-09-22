@@ -30,6 +30,16 @@ public class CmdApprovalDetailVo implements Serializable {
     /** 客户主数据标识（One ID）—— 全链路追溯主键 */
     private String oneId;
 
+    /**
+     * 业务主键（页面「批次号」标签）
+     * <p>
+     * 客户类申请为申请对象主键；批量导入确认为**批次号**（Import Job Code）。
+     * 批量导入是「批次级审批」，批次自身不持有 One ID —— 上级 One ID 由本批次
+     * 各 New 记录在审批通过后逐条生成（对应总设计场景二节点「批量处理结果：
+     * Exact 关联已有 One ID；New 审批后生成 One ID」）。
+     */
+    private String bizId;
+
     /** 客户名称 / 主题 */
     private String name;
 

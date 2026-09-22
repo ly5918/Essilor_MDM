@@ -43,11 +43,11 @@ import WorkflowDialog from './dialogs/WorkflowDialog.vue';
 import PermissionsDialog from './dialogs/PermissionsDialog.vue';
 import BatchResultDialog from './dialogs/BatchResultDialog.vue';
 import BatchUploadDialog from './dialogs/BatchUploadDialog.vue';
-import BatchSourceDialog from './dialogs/BatchSourceDialog.vue';
 import HierarchyAddDialog from './dialogs/HierarchyAddDialog.vue';
 import HierarchyAssignDialog from './dialogs/HierarchyAssignDialog.vue';
 import LoopCheckDialog from './dialogs/LoopCheckDialog.vue';
 import IntegrationDialog from './dialogs/IntegrationDialog.vue';
+import IntegrationConnDialog from './dialogs/IntegrationConnDialog.vue';
 import AuditExportDialog from './dialogs/AuditExportDialog.vue';
 import OneIdHistoryDialog from './dialogs/OneIdHistoryDialog.vue';
 import ChangeRequestDialog from './dialogs/ChangeRequestDialog.vue';
@@ -61,6 +61,7 @@ import ReEvaluateDialog from './dialogs/ReEvaluateDialog.vue';
 import OcrDialog from './dialogs/OcrDialog.vue';
 import FlowGraphDialog from './dialogs/FlowGraphDialog.vue';
 import CustomerDetailDialog from './dialogs/CustomerDetailDialog.vue';
+import MergeDialog from './dialogs/MergeDialog.vue';
 
 defineOptions({ name: 'CmdPocDialogHost' });
 
@@ -76,11 +77,11 @@ const COMPONENT_MAP: Record<DialogKey, Component> = {
   permissions: PermissionsDialog,
   batchResult: BatchResultDialog,
   batchUpload: BatchUploadDialog,
-  batchSource: BatchSourceDialog,
   hierAdd: HierarchyAddDialog,
   hierAssign: HierarchyAssignDialog,
   loop: LoopCheckDialog,
   integration: IntegrationDialog,
+  integrationConn: IntegrationConnDialog,
   auditExport: AuditExportDialog,
   oneIdHistory: OneIdHistoryDialog,
   changeRequest: ChangeRequestDialog,
@@ -93,12 +94,18 @@ const COMPONENT_MAP: Record<DialogKey, Component> = {
   reEvaluate: ReEvaluateDialog,
   ocr: OcrDialog,
   flowGraph: FlowGraphDialog,
-  customerDetail: CustomerDetailDialog
+  customerDetail: CustomerDetailDialog,
+  merge: MergeDialog
 };
 
 /** 弹窗内容组件约定：可选暴露 submit()，返回成功提示文案 */
 interface DialogBody {
   submit?: () => Promise<string | void>;
+  /**
+   * 可选：提交成功后是否保持弹窗打开。
+   * 模拟测试类弹窗（DQ 规则 / 匹配规则）需要在弹窗内展示模拟结果，不应提交后立即关闭。
+   */
+  keepOpenAfterSubmit?: boolean;
   /**
    * 可选：提交成功后需要自动切换到的下一个弹窗。
    * 例如全局「OCR识别结果」弹窗点「写回表单」→ 关闭本弹窗并自动打开「新建客户申请」完成预填。
@@ -142,7 +149,8 @@ const onConfirm = async () => {
     // 子组件要求提交后跳转（如 OCR 写回表单 → 新建客户申请），先取出来再切，避免被 closeDialog 清空
     const next = body?.nextDialog;
     ElMessage.success(message || `${displayTitle.value ?? '操作'}：模拟操作已完成并写入审计日志`);
-    closeDialog();
+    // 模拟测试类弹窗（keepOpenAfterSubmit）留在原地展示结果，由用户手动关闭
+    if (!body?.keepOpenAfterSubmit) closeDialog();
     if (next) openDialog(next);
   } catch (error) {
     // 业务校验失败由子组件自行提示，此处仅兜底

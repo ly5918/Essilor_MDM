@@ -9,7 +9,7 @@
         <div class="fd-toolbar-right">
           <el-input
             v-model="keyword"
-            placeholder="One ID / 申请编号 / 客户主题"
+            placeholder="事务ID / 申请编号 / 客户主题"
             clearable
             style="width: 240px"
             @keyup.enter="load"
@@ -32,7 +32,7 @@
         type="info"
         :closable="false"
         show-icon
-        title="已结束的实例（已批准 / 已拒绝 / 已取消 / 已完成）。点 One ID 查看该次执行在 V6.1 泳道图上的实际进度；点「流程跟踪」弹窗展示完整链路（Warm-Flow 实例流程图、泳道步骤条、分步骤明细、Data context state 与审批轨迹），可点步骤条上任意节点查看该节点实际发生了什么。"
+        title="已结束的实例（已批准 / 已拒绝 / 已取消 / 已完成）。点「流程跟踪」弹窗展示完整链路（Warm-Flow 实例流程图、泳道步骤条、分步骤明细、Data context state 与审批轨迹），可点步骤条上任意节点查看该节点实际发生了什么。"
       />
 
       <el-table
@@ -44,24 +44,19 @@
         class="data-table"
         highlight-current-row
       >
-        <!-- 操作列只留「流程跟踪」；泳道图改由点 One ID 打开（需求方指定入口） -->
+        <!-- 操作列只留「流程跟踪」；泳道图统一从流程跟踪弹窗内进入 -->
         <el-table-column label="操作" width="118" align="center" fixed="left">
           <template #default="{ row }">
             <el-button link type="primary" size="small" icon="View" @click.stop="onViewTrace(row)">流程跟踪</el-button>
           </template>
         </el-table-column>
-        <el-table-column label="One ID" width="155" fixed="left">
+        <!-- 事务ID = task_no（AP-…）：提交即生成，整套工作流全程用它贯穿追踪；
+             纯文本展示，泳道图统一从「流程跟踪」弹窗内进入 -->
+        <el-table-column label="事务ID" width="150" fixed="left">
           <template #default="{ row }">
-            <span
-              v-if="row.oneId"
-              class="fd-oneid"
-              title="点击查看该单的泳道图（按实际执行进度点亮节点）"
-              @click="onViewGraph(row)"
-            >{{ row.oneId }}</span>
-            <span v-else class="fd-oneid-empty">—</span>
+            <span class="fd-oneid">{{ row.taskNo }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="申请编号" prop="taskNo" width="168" />
         <el-table-column label="类型" prop="bizType" width="110" />
         <el-table-column label="描述" prop="bizTitle" min-width="190" show-overflow-tooltip />
         <el-table-column label="场景" min-width="150" show-overflow-tooltip>
@@ -149,22 +144,6 @@ const load = async () => {
 };
 
 /**
- * 泳道图（实例视图）：按**这次执行**的实际进度点亮节点。
- * 入口有两个：操作列「泳道图」按钮，以及 One ID 列（点 ID 直接看图）——
- * 后者是需求方指定的位置，保证「从贯穿 ID 出发就能看到这一单走到哪一步」。
- */
-const onViewGraph = (row: unknown) => {
-  const inst = row as FlowInstanceVO;
-  if (!inst?.taskNo) return;
-  openDialog('flowGraph', {
-    sceneCode: inst.sceneCode,
-    sceneName: inst.sceneName ?? inst.sceneCode,
-    flowCode: inst.flowCode,
-    taskNo: inst.taskNo
-  });
-};
-
-/**
  * 查看流程跟踪：打开弹窗展示该实例的完整链路。
  * detailType='done' 供 mock 分支推导「全部步骤已完成」；live 分支忽略该参数。
  */
@@ -236,16 +215,11 @@ onMounted(load);
   margin-bottom: 10px;
 }
 
-/* 贯穿 ID（One ID）：等宽字体高亮，便于跨页面人工比对 */
+/* 事务ID（taskNo）：等宽字体高亮，便于跨页面人工比对 */
 .fd-oneid {
   font-family: 'Cascadia Mono', Consolas, 'Courier New', monospace;
   font-size: 12px;
   font-weight: 600;
   color: var(--el-color-primary);
-  cursor: pointer;
-}
-
-.fd-oneid-empty {
-  color: var(--el-text-color-placeholder);
 }
 </style>

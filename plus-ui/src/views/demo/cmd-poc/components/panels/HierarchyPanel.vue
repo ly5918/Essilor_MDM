@@ -61,12 +61,9 @@
               </div>
 
               <div v-loading="searching" class="hier-results">
-                <div class="hier-results-tip">
-                  找到 {{ searchResults.length }} 个授权范围内结果
-                  <span v-if="hasFilter" class="hier-filter-on">（已按筛选条件过滤）</span>
-                </div>
+                <div class="hier-results-tip">{{ leftTip }}</div>
                 <div
-                  v-for="node in searchResults"
+                  v-for="node in leftList"
                   :key="node.id"
                   :class="['hier-result', { on: currentNode?.id === node.id }]"
                   @click="locateNode(node.id)"
@@ -75,8 +72,11 @@
                   <small>{{ node.oneId }} · {{ node.level }} · {{ node.status }}</small>
                   <small class="hier-path">{{ node.path }}</small>
                 </div>
+                <div v-if="resultTotal > searchResultLimit" class="hier-results-tip hier-cap-tip">
+                  仅显示前 {{ searchResultLimit }} 条，请输入更精确的关键字缩小范围
+                </div>
                 <el-empty
-                  v-if="!searchResults.length && !searching"
+                  v-if="!leftList.length && !searching"
                   description="没有符合条件的节点，试试放宽筛选或清空关键字"
                   :image-size="60"
                 />
@@ -114,14 +114,10 @@
                 @node-click="handleNodeClick"
               >
                 <template #default="{ data }">
-                  <!-- 「加载更多子节点」占位行：点击向后端取下一批直接子节点 -->
-                  <div
-                    v-if="data.isLoadMore"
-                    :class="['hier-load-more', { loading: loadingMore === data.id }]"
-                    @click.stop="onLoadMore(data)"
-                  >
-                    <el-icon v-if="loadingMore !== data.id"><Plus /></el-icon>
-                    <span>加载更多子节点 · 已显示 {{ data.loadMoreShown }} / {{ data.loadMoreTotal }}</span>
+                  <!-- 「展开全部子节点」占位行：全量树已一次性取回，点击纯前端展开剩余子节点 -->
+                  <div v-if="data.isLoadMore" class="hier-load-more" @click.stop="onLoadMore(data)">
+                    <el-icon><Plus /></el-icon>
+                    <span>展开全部子节点 · 还有 {{ data.loadMoreTotal - data.loadMoreShown }} 个未显示</span>
                   </div>
                   <div v-else :class="['hier-node', `level-${data.level?.toLowerCase()}`]" :data-node-id="data.id">
                     <div class="hier-node-main">
@@ -135,7 +131,9 @@
               </el-tree>
               <div class="hier-lazy-tip">
                 <el-alert type="info" :closable="false" show-icon class="poc-note">
-                  <template #title>Lazy Load：仅加载祖先路径、目标节点与第一批子节点，展开时按需加载。</template>
+                  <template #title>
+                    层级数据全量加载；每层默认展示前 {{ CHILD_PAGE_SIZE }} 个子节点，点击「展开全部子节点」一键展开剩余节点。
+                  </template>
                 </el-alert>
               </div>
             </div>
@@ -252,7 +250,6 @@ import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage, type ElTree } from 'element-plus';
 import {
   getHierarchy,
-  getHierarchyChildren,
   getHierarchyNode,
   getHierarchyRoots,
   getUnassignedNodes,
@@ -283,12 +280,19 @@ const locating = ref<'' | 'root' | 'current' | 'collapse'>('');
 const treeData = ref<HierarchyNodeVO[]>([]);
 const treeProps = { label: 'label', children: 'children' };
 
-/** 每批展示 / 加载的直接子节点数（对齐原型「加载更多子节点 · 已显示 X / Y」的每批 3 个） */
-const CHILD_PAGE_SIZE = 3;
-/** 正在加载下一批的占位行 id（用于 loading 态） */
-const loadingMore = ref('');
+/** 每个节点默认展示的直接子节点数（超出部分收进「展开全部子节点」占位行） */
+const CHILD_PAGE_SIZE = 5;
+/** 左侧结果区最多展示条数（超过提示细化关键字） */
+const searchResultLimit = 20;
 
-/** 生成「加载更多子节点」占位行 */
+/**
+ * 已点击「展开全部子节点」的父节点 id 集合。
+ * 全量层级树由后端一次性取回（getHierarchy → buildHierarchyTree），
+ * 截断只是展示层行为，展开无需再调后端分页接口。
+ */
+const showAllChildren = ref(new Set<string>());
+
+/** 生成「展开全部子节点」占位行 */
 const makeLoadMore = (parent: HierarchyNodeVO, shown: number, total: number): HierarchyNodeVO => ({
   id: `__more__${parent.id}`,
   level: '',
@@ -311,24 +315,20 @@ const makeLoadMore = (parent: HierarchyNodeVO, shown: number, total: number): Hi
 });
 
 /**
- * 懒加载截断：每个节点只展示前 CHILD_PAGE_SIZE 个子节点，
- * 超出部分（或后端还有未取回的子节点）追加「加载更多」占位行，点击时按需取数。
+ * 展示截断：每个节点默认只展示前 CHILD_PAGE_SIZE 个子节点，
+ * 超出部分追加一个「展开全部子节点」占位行；每次都从原始子节点集合重建，
+ * 保证同一父节点下最多只有一个占位行，不会出现重复或残留。
  */
 const applyLazyChildren = (nodes: HierarchyNodeVO[]) => {
   nodes.forEach(node => {
     if (node.isLoadMore) return;
     const kids = (node.children ?? []).filter(c => !c.isLoadMore);
+    applyLazyChildren(kids);
     const total = Math.max(node.childrenCount || 0, kids.length);
-    if (total > kids.length) {
-      // 后端还有未取回的子节点（如刚取回的分页行），从当前已展示数量续接
-      node.children = [...kids, makeLoadMore(node, kids.length, total)];
-      applyLazyChildren(kids);
-    } else if (kids.length > CHILD_PAGE_SIZE) {
-      node.children = [...kids.slice(0, CHILD_PAGE_SIZE), makeLoadMore(node, CHILD_PAGE_SIZE, total)];
-      applyLazyChildren(kids);
-    } else {
+    if (showAllChildren.value.has(node.id) || kids.length <= CHILD_PAGE_SIZE) {
       node.children = kids;
-      applyLazyChildren(kids);
+    } else {
+      node.children = [...kids.slice(0, CHILD_PAGE_SIZE), makeLoadMore(node, CHILD_PAGE_SIZE, total)];
     }
   });
 };
@@ -381,14 +381,31 @@ const currentFilters = computed<HierarchySearchFilters>(() => ({
   status: filters.status
 }));
 
-/** 当前是否有生效的筛选条件（用于结果区提示与「重置条件」按钮） */
-const hasFilter = computed(
+/** 当前是否有生效的搜索 / 筛选条件（决定左侧结果区是「结果模式」还是「根节点入口模式」） */
+const defaultBu = computed(() => (roleKey.value === 'gc' ? 'All Authorized BU' : 'High End'));
+const hasActiveCondition = computed(
   () =>
+    searchKeyword.value.trim() !== '' ||
     filters.hierarchyType !== '全部类型' ||
     filters.level !== '全部层级' ||
-    filters.status !== '全部状态' ||
-    searchKeyword.value.trim() !== ''
+    filters.bu !== defaultBu.value ||
+    filters.status !== 'Active'
 );
+
+/** 结果总数与截断后的展示列表（避免大结果集把左侧导航撑爆） */
+const resultTotal = computed(() => searchResults.value.length);
+const displayResults = computed(() => searchResults.value.slice(0, searchResultLimit));
+
+/** 左侧列表数据：有搜索 / 筛选条件 → 匹配结果；否则 → 根节点快速入口（不与中间树重复铺全量数据） */
+const leftList = computed(() => (hasActiveCondition.value ? displayResults.value : treeData.value));
+
+const leftTip = computed(() => {
+  if (!hasActiveCondition.value) {
+    return '输入客户名称 / One ID 搜索定位；当前展示根节点快速入口，完整结构见中间层级树';
+  }
+  const suffix = searchKeyword.value.trim() ? '' : '（已按筛选条件过滤）';
+  return `找到 ${resultTotal.value} 个授权范围内结果${suffix}`;
+});
 
 /** 恢复默认筛选并重新查询 */
 const resetFilters = () => {
@@ -557,7 +574,7 @@ const locateRoot = async () => {
 
 const handleNodeClick = (data: HierarchyNodeVO) => {
   if (data.isLoadMore) {
-    void onLoadMore(data);
+    onLoadMore(data);
     return;
   }
   loadNode(data.id);
@@ -581,50 +598,29 @@ const findNodeById = (id: string): HierarchyNodeVO | undefined => {
   return hit;
 };
 
-/** 加载下一批子节点：调后端分页接口，原地替换占位行（仍有剩余时再补一个占位行） */
-const doLoadMore = async (parent: HierarchyNodeVO, sentinel: HierarchyNodeVO) => {
-  const shown = sentinel.loadMoreShown ?? CHILD_PAGE_SIZE;
-  loadingMore.value = sentinel.id;
-  try {
-    const rows = await getHierarchyChildren(sentinel.loadMoreParentId || parent.oneId, shown, CHILD_PAGE_SIZE);
-    applyLazyChildren(rows);
-    const kids = (parent.children ?? []).filter(c => !c.isLoadMore);
-    const merged = [...kids, ...rows.filter(r => !kids.some(k => k.id === r.id))];
-    parent.children = [...merged];
-    const total = Math.max(parent.childrenCount || 0, merged.length);
-    if (merged.length < total) {
-      parent.children.push(makeLoadMore(parent, merged.length, total));
-    }
-  } catch {
-    ElMessage.error('子节点加载失败，请重试');
-  } finally {
-    loadingMore.value = '';
-  }
-};
-
-/** 模板点击入口：由占位行找到其父节点再取数 */
-const onLoadMore = async (sentinel: HierarchyNodeVO) => {
+/** 「展开全部子节点」：纯前端展开（全量树已一次性取回，无需再调后端分页） */
+const onLoadMore = (sentinel: HierarchyNodeVO) => {
   const parent = findNodeById(sentinel.loadMoreParentId ?? '');
   if (!parent) {
     ElMessage.warning('未找到父节点，请刷新后重试');
     return;
   }
-  await doLoadMore(parent, sentinel);
+  showAllChildren.value.add(parent.id);
+  applyLazyChildren(treeData.value);
 };
 
-/** 定位前确保目标节点及其祖先已实际加载：逐层点「加载更多」直到目标出现在树中 */
-const ensureLoaded = async (node: HierarchyNodeVO) => {
-  const chain = [...(node.ancestorIds ?? []), node.id];
-  for (let i = 0; i < chain.length - 1; i++) {
-    const parent = findNodeById(chain[i]);
-    if (!parent) break;
-    let guard = 0;
-    while (!(parent.children ?? []).some(c => c.id === chain[i + 1]) && guard < 100) {
-      const sentinel = (parent.children ?? []).find(c => c.isLoadMore);
-      if (!sentinel) break;
-      await doLoadMore(parent, sentinel);
-      guard += 1;
+/** 定位前确保目标节点可见：解除祖先链上的展示截断（纯前端操作，瞬时完成） */
+const ensureLoaded = (node: HierarchyNodeVO) => {
+  let changed = false;
+  (node.ancestorIds ?? []).forEach(pid => {
+    const parent = findNodeById(pid);
+    if (parent && (parent.children ?? []).some(c => c.isLoadMore)) {
+      showAllChildren.value.add(parent.id);
+      changed = true;
     }
+  });
+  if (changed) {
+    applyLazyChildren(treeData.value);
   }
 };
 
@@ -771,6 +767,15 @@ onMounted(loadAll);
 
 .hier-filter-on {
   color: var(--btn-primary);
+}
+
+/* 结果集截断提示（左侧导航最多展示 searchResultLimit 条） */
+.hier-cap-tip {
+  color: var(--btn-warning, #b8860b);
+  padding: 6px 8px;
+  border: 1px dashed var(--g-divider);
+  border-radius: 6px;
+  background: #fffdf6;
 }
 
 .hier-filter-reset {

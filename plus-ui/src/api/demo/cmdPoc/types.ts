@@ -157,17 +157,30 @@ export interface CmdCustomerRow {
 }
 
 /** DQ规则后端行（对应 dq_rule 表） */
+/** DQ 规则后端行（对应 dq_rule 表，规则模拟测试弹窗直接消费） */
 export interface DqRuleRow {
   id?: number;
   ruleCode?: string;
   ruleName?: string;
+  /** 规则类型 TECHNICAL / BUSINESS */
+  ruleType?: string;
+  /** 质量维度 COMPLETENESS / VALIDITY / CONSISTENCY / UNIQUENESS / TIMELINESS */
   dimension?: string;
-  role?: string;
-  threshold?: string;
-  result?: string;
-  enabled?: boolean;
-  version?: string;
-  description?: string;
+  modelCode?: string;
+  /** 主校验字段（field_code） */
+  fieldCode?: string;
+  /** 校验类型 NOT_NULL / REGEX / LENGTH / RANGE / UNIQUE / CROSS_FIELD */
+  checkType?: string;
+  /** 校验表达式 */
+  expression?: string;
+  /** 严重级别 ERROR（阻断）/ WARNING / INFO */
+  severity?: string;
+  scoreWeight?: number | string;
+  errorMessage?: string;
+  versionNo?: string;
+  /** 状态 0草稿 1已发布 2已停用 */
+  status?: string;
+  remark?: string;
 }
 
 /** 匹配规则后端行（对应 match_rule 表） */
@@ -175,13 +188,24 @@ export interface MatchRuleRow {
   id?: number;
   ruleCode?: string;
   ruleName?: string;
-  dimension?: string;
-  role?: string;
-  threshold?: string;
-  result?: string;
-  enabled?: boolean;
-  version?: string;
-  description?: string;
+  modelCode?: string;
+  /** 应用场景 CREATE / IMPORT / BATCH / MERGE */
+  scene?: string;
+  /** 算法 WEIGHTED / EXACT / FUZZY / ML */
+  algorithm?: string;
+  normalizeRule?: string;
+  /** Exact Match 阈值 */
+  exactThreshold?: number | string;
+  /** Suspected 阈值 */
+  suspectThreshold?: number | string;
+  /** 超阈值自动合并 Y/N */
+  autoMergeFlag?: string;
+  /** 参与跨 BU 匹配 Y/N */
+  crossBuFlag?: string;
+  versionNo?: string;
+  /** 状态 0草稿 1已发布 2已停用 */
+  status?: string;
+  remark?: string;
 }
 
 /** 角色编码（对应原型顶部「模拟角色」下拉的 5 类技术角色） */
@@ -407,12 +431,29 @@ export interface MetadataFieldVO {
   customerType: string;
   /** 默认值 */
   defaultValue?: string;
+  /** 所属模型版本号（如 v1.0） */
+  versionNo?: string;
   /** 发布状态：Draft / Published */
   status: 'Draft' | 'Published';
 }
 
 export interface MetadataFieldForm extends Omit<MetadataFieldVO, 'status'> {
   status?: MetadataFieldVO['status'];
+}
+
+/** 值集维护表单（平台管理 · 字段与值集 → 值集编辑） */
+export interface ValueSetForm {
+  id?: number;
+  /** 值集编码 */
+  code: string;
+  /** 值集名称 */
+  name: string;
+  /** 值集类型（Enum / Reference ...） */
+  type: string;
+  /** 取值范围（逗号分隔） */
+  values: string;
+  /** 状态：Published / Draft */
+  status: 'Published' | 'Draft';
 }
 
 /** 模型版本 */
@@ -441,11 +482,58 @@ export interface DqRuleVO {
   enabled: boolean;
 }
 
-/** 规则模拟测试结果 */
+/** DQ 规则模拟请求：测试数据集筛选 + 可选单规则 */
+export interface DqSimulateForm {
+  customerType?: string;
+  bu?: string;
+  sourceSystem?: string;
+  sampleSize?: number;
+  ruleId?: number;
+}
+
+/** 单条规则在测试数据集上的模拟结果 */
+export interface DqRuleSimulateVO {
+  id?: number;
+  ruleCode: string;
+  ruleName: string;
+  dimension: string;
+  dimensionName: string;
+  fieldCode?: string;
+  checkType?: string;
+  severity?: string;
+  scoreWeight?: number | string;
+  status?: string;
+  total: number;
+  pass: number;
+  warn: number;
+  block: number;
+  skip: number;
+  passRate: string;
+  note?: string;
+  samples: DqSampleErrorVO[];
+}
+
+/** 字段级错误样例 */
+export interface DqSampleErrorVO {
+  oneId: string;
+  legalName: string;
+  message: string;
+}
+
+/** 影响评估摘要（对齐总设计「统计受影响 Active 客户、预计新增异常与 Score 变化」） */
+export interface DqImpactSummaryVO {
+  affectedCustomers: number;
+  blockHits: number;
+  warningHits: number;
+  avgScoreDelta: string;
+}
+
+/** DQ 规则模拟测试整体结果 */
 export interface DqSimulateResultVO {
-  rule: string;
-  result: DqResult;
-  message?: string;
+  datasetSize: number;
+  ruleCount: number;
+  rules: DqRuleSimulateVO[];
+  impact: DqImpactSummaryVO;
 }
 
 /** 分数卡维度 */
@@ -485,16 +573,93 @@ export interface ReEvaluateForm {
 /** ------------------------------------------------------------------
  * 4. 匹配规则 / 重复治理
  * ------------------------------------------------------------------ */
-export interface MatchRuleVO {
-  /** 匹配维度 */
-  dimension: string;
-  /** 作用：主依据 / 辅助线索 */
-  role: string;
-  /** 结果：Exact / 88% / Similar */
-  result: string;
-  /** 权重或阈值 */
-  threshold?: string;
-  enabled: boolean;
+/** 匹配规则模拟请求：样例记录（oneId 回读主档 或 手工输入）+ 可选指定规则 */
+export interface MatchSimulateForm {
+  oneId?: string;
+  legalName?: string;
+  creditCode?: string;
+  address?: string;
+  bu?: string;
+  ruleId?: number;
+}
+
+/** 匹配规则摘要（模拟结果中回显所用规则与阈值） */
+export interface MatchRuleBriefVO {
+  ruleCode: string;
+  ruleName: string;
+  scene?: string;
+  algorithm?: string;
+  exactThreshold?: string;
+  suspectThreshold?: string;
+  crossBuFlag?: string;
+  autoMergeFlag?: string;
+}
+
+/** 样例记录回显 */
+export interface MatchSampleVO {
+  oneId?: string;
+  legalName?: string;
+  creditCode?: string;
+  address?: string;
+  buScope?: string;
+}
+
+/** 逐字段匹配贡献（字段 / 权重 / 相似度 / 说明） */
+export interface MatchFieldScoreVO {
+  field: string;
+  label: string;
+  weight: number;
+  score: number;
+  detail: string;
+}
+
+/** 匹配候选：候选 One ID + 综合相似度 + Exact / Suspected / Below 分类 */
+export interface MatchCandidateVO {
+  oneId: string;
+  legalName: string;
+  creditCode?: string;
+  buScope?: string;
+  status?: string;
+  score: number;
+  result: 'EXACT' | 'SUSPECTED' | 'BELOW';
+  fields: MatchFieldScoreVO[];
+}
+
+/** 结果分布（对齐总设计「比较新旧 Exact / Suspected / New 分布」） */
+export interface MatchDistributionVO {
+  exact: number;
+  suspected: number;
+  below: number;
+}
+
+/** 匹配规则样例模拟整体结果 */
+export interface MatchSimulateResultVO {
+  rule: MatchRuleBriefVO;
+  sample: MatchSampleVO;
+  scanned: number;
+  distribution: MatchDistributionVO;
+  candidates: MatchCandidateVO[];
+}
+
+/** 逐字段匹配状态：一致 / 不一致 / 空缺 */
+export type DuplicateFieldStatus = 'MATCH' | 'DIFF' | 'EMPTY';
+
+/** 分组逐字段对比行（借鉴 DCR Matching Review 的字段级命中高亮） */
+export interface DuplicateFieldMatch {
+  /** 字段名 */
+  label: string;
+  /** 新申请值 */
+  incoming: string;
+  /** 现有主档值 */
+  existing: string;
+  /** 匹配状态 */
+  status: DuplicateFieldStatus;
+}
+
+/** 对比分组：基本属性 / 证照信息 / 层级与业务 */
+export interface DuplicateCandidateGroup {
+  name: string;
+  fields: DuplicateFieldMatch[];
 }
 
 /** 疑似重复候选对比 */
@@ -509,6 +674,12 @@ export interface DuplicateCandidateVO {
   incoming: Record<string, string>;
   /** 现有主档（右侧） */
   existing: Record<string, string>;
+  /** 现有主档 One ID（关联已有动作的目标） */
+  existingOneId?: string;
+  /** 分组逐字段对比；缺省时回退为左右两栏平铺对比 */
+  groups?: DuplicateCandidateGroup[];
+  /** 接受「关联已有」时的后果提示，如：申请将转为对已有客户的更新 */
+  acceptHint?: string;
 }
 
 /** ------------------------------------------------------------------
@@ -629,6 +800,8 @@ export interface CmdTemplateMappingRow {
   columnName?: string;
   fieldCode?: string;
   fieldName?: string;
+  dataType?: string;
+  defaultValue?: string;
   convertRule?: string;
   errorStrategy?: string;
   isRequired?: string;
@@ -686,10 +859,38 @@ export interface ImportUploadForm {
 
 /** 模板字段映射 */
 export interface TemplateMappingVO {
+  /** 映射主键（新增/编辑/删除要用） */
+  id?: number | string;
+  /** 模板编码 */
+  templateCode?: string;
+  /** 源列（上传文件表头名） */
   sourceColumn: string;
+  /** 目标字段编码 */
   targetField: string;
+  /** 目标字段名称 */
+  fieldName?: string;
+  /** 数据类型（Text / Number / Date） */
+  dataType?: string;
+  /** 是否必填（Y/N） */
+  isRequired?: string;
+  /** 默认值 */
+  defaultValue?: string;
   transform: string;
   errorStrategy: string;
+}
+
+/** 导入模板字段映射保存表单（平台管理 › 导入Template；id 非空 = 编辑） */
+export interface TemplateMappingSaveForm {
+  id?: number | string;
+  templateCode: string;
+  columnName: string;
+  fieldCode?: string;
+  fieldName?: string;
+  dataType?: string;
+  isRequired?: string;
+  defaultValue?: string;
+  convertRule?: string;
+  remark?: string;
 }
 
 /** ------------------------------------------------------------------
@@ -1130,6 +1331,10 @@ export interface ChangeVersionVO {
   status: string;
   sourceSystem: string;
   dqScore?: number;
+  /** 变更前快照（JSON 字符串，属性级 Before/After 展示用） */
+  beforeJson?: string | null;
+  /** 本版本快照（变更后，JSON 字符串） */
+  snapshotJson?: string | null;
   /** 是否由本次申请触发（用于详情弹窗高亮） */
   requestCode?: string;
   createTime: string;
@@ -1375,6 +1580,8 @@ export interface ApprovalTaskDetailVO {
   id: string;
   /** 客户主数据标识（One ID）—— 全链路追溯主键 */
   oneId?: string;
+  /** 业务主键：批量导入确认为批次号（Import Job Code），批次级审批不含 One ID */
+  bizId?: string;
   name: string;
   scene: string;
   submitter: string;
@@ -1677,11 +1884,16 @@ export interface FlowSceneConfigBo {
 export interface FlowInstanceVO {
   /** 待办任务主键 */
   id: number | string;
-  /** 申请编号（Label 列） */
+  /**
+   * 事务ID（= 申请编号 task_no，AP-yyyyMMdd-####）：提交时即生成，
+   * 单条创建与批量导入（批次级）都有，是贯穿整个工作流的追踪键
+   * （泳道图 / 流程跟踪 / 实例列表都按它查询）。
+   */
   taskNo: string;
   /**
-   * 客户主数据标识（One ID）：贯穿全部页面与工作流的贯通 ID，
-   * 可按此 ID 反查客户主档、审批待办与全部工作流记录。
+   * 客户主数据标识（One ID）：客户主档的贯通 ID。
+   * 注意：它不是工作流追踪键——单条创建批准后才生成、
+   * 批量导入批准后逐行生成，故列表中以「事务ID」为主键、One ID 作副行展示。
    */
   oneId?: string;
   /** 业务标题（Description 列） */
@@ -1845,14 +2057,21 @@ export interface CmdRoleRow {
 
 /** 后端 One ID 规则行（对应 oneid_rule） */
 export interface CmdOneIdRuleRow {
+  id?: number;
   ruleCode?: string;
   ruleName?: string;
   pattern?: string;
   prefix?: string;
+  separator?: string;
   serialLength?: number;
+  seqCode?: string;
   genStrategy?: string;
+  stablePolicy?: string;
+  reusePolicy?: string;
   scopeType?: string;
   status?: string;
+  isDefault?: string;
+  remark?: string;
 }
 
 /** 后端 Legacy 映射行（对应 cmd_legacy_mapping） */
@@ -1862,7 +2081,11 @@ export interface CmdLegacyMappingRow {
   sourceCode?: string;
   sourceName?: string;
   buScope?: string;
+  /** 映射类型：LEGACY 来源登记 / MERGE 合并交叉引用 */
+  mappingType?: string;
   status?: string;
+  effectiveFrom?: string;
+  remark?: string;
 }
 
 /** 后端权限矩阵行（对应 PermissionMatrixVo） */
@@ -1902,6 +2125,27 @@ export interface CmdIntegrationRunRow {
 }
 
 /**
+ * 后端集成端点行（对应 IntEndpointVo，status：0 正常 / 1 停用）
+ */
+export interface CmdIntegrationEndpointRow {
+  id?: number;
+  endpointCode?: string;
+  endpointName?: string;
+  direction?: string;
+  protocol?: string;
+  targetSystem?: string;
+  endpointUrl?: string;
+  authType?: string;
+  bizType?: string;
+  messageFormat?: string;
+  maxRetry?: number;
+  timeoutMs?: number;
+  status?: string;
+  remark?: string;
+  createTime?: string;
+}
+
+/**
  * 后端审计事件行（对应 AuditEventVo，result：SUCCESS / TEST / FAILED）
  */
 export interface CmdAuditEventRow {
@@ -1915,6 +2159,7 @@ export interface CmdAuditEventRow {
   operatorName?: string;
   operatorRole?: string;
   eventTime?: string;
+  changedFields?: string;
   result?: string;
   riskLevel?: string;
   remark?: string;
@@ -1961,6 +2206,8 @@ export interface CmdApprovalDetailRow {
   taskId?: string;
   /** 客户主数据标识（One ID） */
   oneId?: string;
+  /** 业务主键（批量导入确认为批次号） */
+  bizId?: string;
   name?: string;
   scene?: string;
   submitter?: string;
@@ -2002,12 +2249,20 @@ export type CmdFlowTraceRow = Partial<FlowTraceVO> & {
  * 9. One ID
  * ------------------------------------------------------------------ */
 export interface OneIdRuleVO {
+  id?: number;
+  ruleCode?: string;
   ruleName: string;
   status: 'Published' | 'Draft';
   object: string;
   serialLength: string;
   prefix: string;
   separator: string;
+  pattern?: string;
+  genStrategy?: string;
+  stablePolicy?: string;
+  reusePolicy?: string;
+  seqCode?: string;
+  remark?: string;
 }
 
 /** One ID 生成与状态策略 */
@@ -2021,6 +2276,46 @@ export interface OneIdEventVO {
   date: string;
   stage: string;
   description: string;
+  /** 操作者姓名（审计事件） */
+  operator?: string;
+  /** 本次变更涉及的字段编码（逗号分隔，合并 / 变更事件有值） */
+  changedFields?: string | null;
+}
+
+/** 客户合并记录（对应 cmd_merge_record，总设计「审计与合并记录」） */
+export interface MergeRecordVO {
+  mergeCode: string;
+  /** 保留方 One ID（Golden Record） */
+  survivorOneId: string;
+  /** 被合并方 One ID */
+  mergedOneId: string;
+  mergeType: string;
+  mergeStrategy: string;
+  /** 字段级合并决策：源记录补进了目标哪些字段（JSON 字符串） */
+  fieldJson?: string | null;
+  reason: string;
+  /** EFFECTIVE 生效 / ROLLED_BACK 已回滚 */
+  status: string;
+  /** 是否可回滚（Y / N） */
+  canRollback: string;
+  /** 关联审批单号（备注里） */
+  remark?: string | null;
+  createTime: string;
+}
+
+/** 后端合并记录行（对应 cmd_merge_record） */
+export interface CmdMergeRecordRow {
+  mergeCode?: string;
+  survivorOneId?: string;
+  mergedOneId?: string;
+  mergeType?: string;
+  mergeStrategy?: string;
+  fieldJson?: string;
+  reason?: string;
+  status?: string;
+  canRollback?: string;
+  remark?: string;
+  createTime?: string;
 }
 
 /** Legacy Code ↔ One ID 交叉引用 */
@@ -2028,8 +2323,14 @@ export interface LegacyMappingVO {
   oneId: string;
   sourceSystem: string;
   legacyCode: string;
+  /** 来源系统里的客户名称 */
+  sourceName?: string;
+  /** LEGACY 来源登记 / MERGE 合并交叉引用 */
+  mappingType?: string;
   bu: string;
   status: CustomerStatus;
+  effectiveFrom?: string;
+  remark?: string | null;
 }
 
 /** ------------------------------------------------------------------
@@ -2046,11 +2347,57 @@ export interface IntegrationRunVO {
   record?: string;
 }
 
-export interface IntegrationConnForm {
-  system: string;
+/** 集成端点展示对象（端点配置 Tab 列表行） */
+export interface IntegrationEndpointVO {
+  id: number;
+  /** 端点编码 */
+  code: string;
+  /** 端点名称 */
+  name: string;
+  direction: 'Inbound' | 'Outbound';
   protocol: string;
-  period: string;
+  /** 目标系统 */
+  system: string;
   url: string;
+  authType: string;
+  bizType: string;
+  messageFormat: string;
+  maxRetry: number;
+  timeoutMs: number;
+  status: 'Active' | 'Inactive';
+  /** 同步周期 */
+  period: string;
+  createTime?: string;
+}
+
+/** 集成端点配置表单（新增 / 编辑弹窗） */
+export interface IntegrationConnForm {
+  /** 主键（编辑时传，新增为空） */
+  id?: number;
+  /** 目标系统 */
+  system: string;
+  /** 端点名称 */
+  name: string;
+  /** 协议 */
+  protocol: string;
+  /** 方向 */
+  direction: string;
+  /** 同步周期 */
+  period: string;
+  /** 端点地址 */
+  url: string;
+  /** 认证方式 */
+  authType: string;
+  /** 业务类型 */
+  bizType: string;
+  /** 报文格式 */
+  messageFormat: string;
+  /** 最大重试次数 */
+  maxRetry: number;
+  /** 超时时间（毫秒） */
+  timeoutMs: number;
+  /** 状态（0 正常 / 1 停用） */
+  status: string;
 }
 
 /** ------------------------------------------------------------------

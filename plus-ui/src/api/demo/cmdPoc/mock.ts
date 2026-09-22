@@ -36,7 +36,8 @@ import type {
   ImportTemplateVO,
   IntegrationRunVO,
   LegacyMappingVO,
-  MatchRuleVO,
+  MatchRuleRow,
+  MatchSimulateResultVO,
   MetadataFieldVO,
   ModelVersionVO,
   NotificationVO,
@@ -163,72 +164,83 @@ export const mockDqScorecard: DqScorecardVO = {
   ]
 };
 
-export const mockDqSimulate: DqSimulateResultVO[] = [
-  { rule: '格式规则', result: 'Pass' },
-  { rule: 'GC Core完整性', result: 'Pass' },
-  { rule: 'Payer必填', result: 'Block', message: 'Payer 缺失，阻止提交' }
-];
+export const mockDqSimulate: DqSimulateResultVO = {
+  datasetSize: 3,
+  ruleCount: 2,
+  rules: [
+    {
+      ruleCode: 'DQ_C_001',
+      ruleName: '客户名称必填',
+      dimension: 'COMPLETENESS',
+      dimensionName: '完整性',
+      fieldCode: 'legal_name',
+      checkType: 'NOT_NULL',
+      severity: 'ERROR',
+      status: '1',
+      total: 3,
+      pass: 3,
+      warn: 0,
+      block: 0,
+      skip: 0,
+      passRate: '100%',
+      samples: []
+    },
+    {
+      ruleCode: 'DQ_V_001',
+      ruleName: '信用代码格式校验',
+      dimension: 'VALIDITY',
+      dimensionName: '有效性',
+      fieldCode: 'credit_code',
+      checkType: 'REGEX',
+      severity: 'ERROR',
+      status: '1',
+      total: 3,
+      pass: 2,
+      warn: 0,
+      block: 1,
+      skip: 0,
+      passRate: '66.7%',
+      samples: [{ oneId: 'GC-000128', legalName: '上海清视眼镜有限公司', message: '统一社会信用代码为空' }]
+    }
+  ],
+  impact: { affectedCustomers: 1, blockHits: 1, warningHits: 0, avgScoreDelta: '-15 分' }
+};
 
 /** DQ 规则清单（对应页面「数据质量 → 规则配置」，行契约与后端 DqRuleRow 一致） */
 export const mockDqRules: DqRuleRow[] = [
-  {
-    id: 1,
-    ruleCode: 'req_legal_name',
-    ruleName: '客户法定名称必填',
-    dimension: '完整性',
-    role: 'GC Core',
-    threshold: '100%',
-    result: 'Pass',
-    enabled: true
-  },
-  {
-    id: 2,
-    ruleCode: 'fmt_credit_code',
-    ruleName: '统一社会信用代码格式校验',
-    dimension: '有效性',
-    role: 'GC Core',
-    threshold: '18位',
-    result: 'Pass',
-    enabled: true
-  },
-  {
-    id: 3,
-    ruleCode: 'enum_country',
-    ruleName: '国家/地区值集校验',
-    dimension: '有效性',
-    role: 'GC Core',
-    threshold: 'COUNTRY',
-    result: 'Warning',
-    enabled: true
-  },
-  {
-    id: 4,
-    ruleCode: 'payer_required',
-    ruleName: 'Payer Required',
-    dimension: '完整性',
-    role: 'BU',
-    threshold: '必填',
-    result: 'Block',
-    enabled: true
-  },
-  {
-    id: 5,
-    ruleCode: 'address_standard',
-    ruleName: 'Address Standardization',
-    dimension: '一致性',
-    role: 'GC Core',
-    threshold: '标准化',
-    result: 'Warning',
-    enabled: false
-  }
+  { id: 1, ruleCode: 'DQ_C_001', ruleName: '客户名称必填', dimension: 'COMPLETENESS', fieldCode: 'legal_name', checkType: 'NOT_NULL', severity: 'ERROR', scoreWeight: 10, status: '1' },
+  { id: 2, ruleCode: 'DQ_V_001', ruleName: '信用代码格式校验', dimension: 'VALIDITY', fieldCode: 'credit_code', checkType: 'REGEX', severity: 'ERROR', scoreWeight: 15, status: '1' },
+  { id: 3, ruleCode: 'DQ_V_002', ruleName: '邮箱格式校验', dimension: 'VALIDITY', fieldCode: 'contact_email', checkType: 'REGEX', severity: 'WARNING', scoreWeight: 5, status: '1' }
 ];
 
 /** ---------------------------------- 匹配规则 ---------------------------------- */
-export const mockMatchRules: MatchRuleVO[] = [
-  { dimension: '统一社会信用代码', role: '主依据', result: 'Exact', threshold: '100%', enabled: true },
-  { dimension: '经营地址', role: '主依据', result: '88%', threshold: '85%', enabled: true },
-  { dimension: '名称', role: '辅助线索', result: 'Similar', threshold: '80%', enabled: true }
+export const mockMatchRules: MatchRuleRow[] = [
+  { id: 1, ruleCode: 'MR_CUSTOMER_V1', ruleName: '客户匹配规则-标准版', scene: 'CREATE', algorithm: 'WEIGHTED', exactThreshold: 95, suspectThreshold: 70, autoMergeFlag: 'N', crossBuFlag: 'Y', status: '1' },
+  { id: 2, ruleCode: 'MR_IMPORT_V1', ruleName: '客户匹配规则-批量导入', scene: 'IMPORT', algorithm: 'WEIGHTED', exactThreshold: 92, suspectThreshold: 65, autoMergeFlag: 'N', crossBuFlag: 'Y', status: '1' }
 ];
+
+export const mockMatchSimulate: MatchSimulateResultVO = {
+  rule: { ruleCode: 'MR_CUSTOMER_V1', ruleName: '客户匹配规则-标准版', algorithm: 'WEIGHTED', exactThreshold: '95.00', suspectThreshold: '70.00' },
+  sample: { legalName: '上海清视眼镜有限公司', creditCode: '91310000XXXXXXXXXX', address: '上海市静安区南京西路1688号', buScope: 'High End' },
+  scanned: 3,
+  distribution: { exact: 1, suspected: 1, below: 1 },
+  candidates: [
+    {
+      oneId: 'GC-000128',
+      legalName: '上海清视眼镜有限公司',
+      creditCode: '91310000XXXXXXXXXX',
+      buScope: 'High End',
+      score: 100,
+      result: 'EXACT',
+      fields: [
+        { field: 'credit_code', label: '统一社会信用代码', weight: 40, score: 100, detail: '全等匹配' },
+        { field: 'legal_name', label: '客户名称', weight: 30, score: 100, detail: '标准化后一致' },
+        { field: 'address', label: '经营地址', weight: 20, score: 100, detail: '相似度 100%' },
+        { field: 'bu_scope', label: 'BU 归属', weight: 10, score: 100, detail: '同 BU' }
+      ]
+    }
+  ]
+};
 
 export const mockDuplicateCandidate: DuplicateCandidateVO = {
   score: 88,
@@ -243,7 +255,37 @@ export const mockDuplicateCandidate: DuplicateCandidateVO = {
     'One ID': 'GC-000128',
     信用代码: '91310000XXXXXXXXXX',
     地址: '南京西路XX号'
-  }
+  },
+  existingOneId: 'GC-000128',
+  acceptHint: '确认关联后，本申请将转为对已有客户 GC-000128（上海清视眼镜有限公司）的属性更新，不再新建 One ID；原申请中的差异字段将进入变更流程。',
+  groups: [
+    {
+      name: '基本属性',
+      fields: [
+        { label: '客户名称', incoming: '上海清视眼镜有限公司', existing: '上海清视眼镜有限公司', status: 'MATCH' },
+        { label: '统一社会信用代码', incoming: '91310000XXXXXXXXXX', existing: '91310000XXXXXXXXXX', status: 'MATCH' },
+        { label: '经营地址', incoming: '上海市静安区南京西路1688号', existing: '上海市静安区南京西路88号', status: 'DIFF' },
+        { label: '省 / 市', incoming: '上海市 / 上海市', existing: '上海市 / 上海市', status: 'MATCH' },
+        { label: '客户类型', incoming: '眼镜零售门店', existing: '眼镜零售门店', status: 'MATCH' }
+      ]
+    },
+    {
+      name: '证照信息',
+      fields: [
+        { label: '营业执照有效期', incoming: '2020-03-12 至 2040-03-11', existing: '2016-11-02 至 2036-11-01', status: 'DIFF' },
+        { label: '经营范围', incoming: '眼镜销售；第三类医疗器械经营', existing: '眼镜销售；第二类医疗器械经营', status: 'DIFF' },
+        { label: '客户曾用名', incoming: '', existing: '清视眼镜商行', status: 'EMPTY' }
+      ]
+    },
+    {
+      name: '层级与业务',
+      fields: [
+        { label: '上级客户', incoming: '（待归位）', existing: 'Essilor 中国零售连锁', status: 'EMPTY' },
+        { label: '所属 BU', incoming: 'High End', existing: 'Mainstream', status: 'DIFF' },
+        { label: '产品线', incoming: '隐形眼镜', existing: '隐形眼镜', status: 'MATCH' }
+      ]
+    }
+  ]
 };
 
 /** ---------------------------------- 批量导入 ---------------------------------- */

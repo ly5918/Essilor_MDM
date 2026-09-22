@@ -29,6 +29,7 @@ import org.dromara.cmd.domain.CmdImportRow;
 import org.dromara.cmd.domain.CmdImportTemplate;
 import org.dromara.cmd.domain.CmdImportTemplateMapping;
 import org.dromara.cmd.domain.bo.CmdImportJobBo;
+import org.dromara.cmd.domain.bo.CmdImportTemplateMappingBo;
 import org.dromara.cmd.domain.vo.CmdImportJobVo;
 import org.dromara.cmd.domain.vo.CmdImportResultVo;
 import org.dromara.cmd.domain.vo.CmdImportRowVo;
@@ -60,6 +61,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -80,7 +82,8 @@ import java.util.Map;
  * <p>
  * 关键设计（对齐总设计 V6.1 场景二泳道图）：
  * <ol>
- *   <li>文件级预检：模板存在 + 上传表头必须包含模板全部列 + 至少一行数据，失败整批退回（不建任务）</li>
+ *   <li>文件级预检：模板存在 + 上传表头必须包含模板全部必填列 + 至少一行数据，失败整批退回（不建任务）；
+ *       选填列缺失不阻断（按默认值 / 空值放行），保证模板新增选填字段后存量文件仍可导入</li>
  *   <li>行级 DQ：必填列（cmd_import_template_mapping.is_required）缺失、信用代码格式错误 → Invalid（退回修复）</li>
  *   <li>批次内去重：同批次信用代码 / 客户名称重复 → Suspected（进入治理）</li>
  *   <li>存量匹配：信用代码命中 active 主档 → Exact（关联已有 One ID）；
@@ -165,6 +168,9 @@ public class CmdImportServiceImpl implements ICmdImportService {
 
     /** 批量导入确认流场景（cmd_flow_scene.scene_code） */
     private static final String SCENE_IMPORT_BATCH = CmdConstants.SCENE_IMPORT_BATCH;
+
+    /** 合并场景编码（总设计 MERGE：跨 BU 客户合并 / 迁移） */
+    private static final String SCENE_MERGE = CmdConstants.SCENE_MERGE;
 
     /** 首次提交的处理角色（Data Steward BU Scope） */
     private static final String ROLE_BU_STEWARD = "BU_STEWARD";
@@ -324,6 +330,129 @@ public class CmdImportServiceImpl implements ICmdImportService {
      * {@inheritDoc}
      */
     @Override
+    @Transactional(rollbackFor = Exception.class)
+    public String saveMapping(CmdImportTemplateMappingBo bo) {
+        if (bo == null || bo.getId() == null) {
+            return insertMapping(bo);
+        }
+        return updateMapping(bo);
+    }
+
+    /**
+     * 新增上传字段：管线全链路由 cmd_import_template_mapping 驱动，
+     * 新列自动进入模板下载表头、上传表头预检、行级 DQ（is_required）与行明细 JSON。
+     */
+    private String insertMapping(CmdImportTemplateMappingBo bo) {
+        if (bo == null || StringUtils.isBlank(bo.getTemplateCode())
+            || StringUtils.isBlank(bo.getColumnName()) || StringUtils.isBlank(bo.getFieldCode())) {
+            throw new ServiceException("模板编码、源列与目标字段编码不能为空");
+        }
+        CmdImportTemplate template = getTemplate(bo.getTemplateCode().trim());
+        List<CmdImportTemplateMapping> existing = selectMappings(template.getTemplateCode());
+        String newColumn = bo.getColumnName().trim();
+        String newField = bo.getFieldCode().trim();
+        for (CmdImportTemplateMapping m : existing) {
+            if (newField.equalsIgnoreCase(m.getFieldCode())) {
+                throw new ServiceException("目标字段编码 [{}] 在模板中已存在", newField);
+            }
+            if (newColumn.equalsIgnoreCase(StringUtils.blankToDefault(m.getColumnName(), m.getFieldCode()))) {
+                throw new ServiceException("源列 [{}] 在模板中已存在", newColumn);
+            }
+        }
+        int next = existing.stream()
+            .map(CmdImportTemplateMapping::getColumnIndex)
+            .filter(java.util.Objects::nonNull)
+            .max(Integer::compareTo)
+            .orElse(0) + 1;
+
+        CmdImportTemplateMapping entity = new CmdImportTemplateMapping();
+        entity.setTemplateId(template.getId());
+        entity.setTemplateCode(template.getTemplateCode());
+        entity.setColumnIndex(next);
+        entity.setOrderNum(next);
+        entity.setStatus("0");
+        entity.setIsRequired(CmdConstants.YES.equals(bo.getIsRequired()) ? CmdConstants.YES : "N");
+        entity.setColumnName(newColumn);
+        entity.setFieldCode(newField);
+        entity.setFieldName(bo.getFieldName());
+        entity.setDataType(StringUtils.blankToDefault(bo.getDataType(), "Text"));
+        entity.setDefaultValue(bo.getDefaultValue());
+        entity.setConvertRule(bo.getConvertRule());
+        entity.setRemark(bo.getRemark());
+        mappingMapper.insert(entity);
+        return "已新增上传字段「" + newColumn + "」，模板下载 / 表头预检 / 行级 DQ 将自动包含该列";
+    }
+
+    /**
+     * 更新字段映射：仅开放展示与校验相关字段；主键字段（客户名称 / 统一社会信用代码）
+     * 是批次内去重与存量匹配的锚点，不允许取消必填或改名。
+     */
+    private String updateMapping(CmdImportTemplateMappingBo bo) {
+        CmdImportTemplateMapping entity = mappingMapper.selectById(bo.getId());
+        if (entity == null) {
+            throw new ServiceException("字段映射不存在：{}", bo.getId());
+        }
+        boolean core = isCoreField(entity.getFieldCode());
+        if (core && !CmdConstants.YES.equals(bo.getIsRequired())) {
+            throw new ServiceException("主键字段 [{}] 是去重与存量匹配的锚点，必须保持必填", entity.getFieldCode());
+        }
+        if (StringUtils.isNotBlank(bo.getColumnName())) {
+            String newColumn = bo.getColumnName().trim();
+            List<CmdImportTemplateMapping> others = selectMappings(entity.getTemplateCode());
+            for (CmdImportTemplateMapping m : others) {
+                if (m.getId() != null && !m.getId().equals(entity.getId())
+                    && newColumn.equalsIgnoreCase(StringUtils.blankToDefault(m.getColumnName(), m.getFieldCode()))) {
+                    throw new ServiceException("源列 [{}] 与其他字段重复", newColumn);
+                }
+            }
+            entity.setColumnName(newColumn);
+        }
+        entity.setFieldName(bo.getFieldName());
+        if (!core) {
+            entity.setIsRequired(CmdConstants.YES.equals(bo.getIsRequired()) ? CmdConstants.YES : "N");
+            if (StringUtils.isNotBlank(bo.getDataType())) {
+                entity.setDataType(bo.getDataType());
+            }
+        }
+        entity.setDefaultValue(bo.getDefaultValue());
+        entity.setConvertRule(bo.getConvertRule());
+        entity.setRemark(bo.getRemark());
+        mappingMapper.updateById(entity);
+        return "字段「" + StringUtils.blankToDefault(entity.getColumnName(), entity.getFieldCode()) + "」已更新";
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public String deleteMapping(Long id) {
+        CmdImportTemplateMapping entity = mappingMapper.selectById(id);
+        if (entity == null) {
+            throw new ServiceException("字段映射不存在：{}", id);
+        }
+        if (isCoreField(entity.getFieldCode())) {
+            throw new ServiceException("主键字段 [{}] 是去重 / 存量匹配 / 发布建主档的锚点，不允许删除",
+                entity.getFieldCode());
+        }
+        mappingMapper.deleteById(id);
+        return "字段「" + StringUtils.blankToDefault(entity.getColumnName(), entity.getFieldCode()) + "」已移除";
+    }
+
+    /**
+     * 是否管线主键字段（客户名称 / 统一社会信用代码）
+     *
+     * @param fieldCode 字段编码
+     * @return true = 主键字段
+     */
+    private boolean isCoreField(String fieldCode) {
+        return FIELD_LEGAL_NAME.equals(fieldCode) || FIELD_CREDIT_CODE.equals(fieldCode);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
     public void downloadTemplate(String templateCode, HttpServletResponse response) {
         CmdImportTemplate template = getTemplate(templateCode);
         List<CmdImportTemplateMapping> mappings = selectMappings(template.getTemplateCode());
@@ -468,6 +597,17 @@ public class CmdImportServiceImpl implements ICmdImportService {
                 if (StringUtils.isBlank(target)) {
                     throw new ServiceException("请填写要关联的 One ID");
                 }
+                // 跨BU 命中 → 不直接关联，按总设计 MERGE 场景发起「跨BU客户合并」审批
+                //（BU 初审 → GC 决策 → 批准后由治理服务执行关联 / 合并）
+                CmdCustomer targetCustomer = selectActiveCustomer(target);
+                if (targetCustomer != null && job.getBuScope() != null
+                    && !job.getBuScope().equals(targetCustomer.getBuScope())) {
+                    // 行保持 Suspected，仅标记治理中说明，批准合并后由 execMergeTask 回写为 Exact
+                    patch.setHandling("跨BU合并审批中（" + target + "）");
+                    rowMapper.updateById(patch);
+                    recalcJobCounts(job);
+                    return launchRowMerge(job, row, targetCustomer);
+                }
                 patch.setResultType(RESULT_EXACT);
                 patch.setRowStatus(ROW_STATUS_SUCCESS);
                 patch.setOneId(target);
@@ -507,6 +647,81 @@ public class CmdImportServiceImpl implements ICmdImportService {
         recalcJobCounts(job);
         recordGovernanceAudit(job, row, type, message);
         return message;
+    }
+
+    /** 查询 active 主档（按 One ID，取最新一条） */
+    private CmdCustomer selectActiveCustomer(String oneId) {
+        List<CmdCustomer> list = customerMapper.selectList(Wrappers.<CmdCustomer>lambdaQuery()
+            .eq(CmdCustomer::getOneId, oneId)
+            .eq(CmdCustomer::getStatus, CmdConstants.CUST_STATUS_ACTIVE)
+            .orderByDesc(CmdCustomer::getCreateTime)
+            .last("LIMIT 1"));
+        return list.isEmpty() ? null : list.get(0);
+    }
+
+    /**
+     * 批量导入行跨BU命中 → 发起「跨BU客户合并」审批（总设计 MERGE 场景）
+     * <p>创建 sceneCode=MERGE 的审批待办（bizSnapshotJson 携带 mode=ROW_LINK / rowId / targetOneId），
+     * BU 初审 →（跨BU升级）GC 决策 → 批准后由治理服务 execMergeTask 把行回写为 Exact 并关联目标 One ID。
+     *
+     * @param job            导入任务
+     * @param row            Suspected 行
+     * @param targetCustomer 命中的跨BU存量主档
+     * @return 结果文案
+     */
+    private String launchRowMerge(CmdImportJob job, CmdImportRow row, CmdCustomer targetCustomer) {
+        LocalDateTime now = LocalDateTime.now();
+        Map<String, Object> snapshot = new LinkedHashMap<>(4);
+        snapshot.put("mode", "ROW_LINK");
+        snapshot.put("rowId", row.getId());
+        snapshot.put("targetOneId", targetCustomer.getOneId());
+        Map<String, Object> evidence = new LinkedHashMap<>(8);
+        evidence.put("合并模式", "批量导入行 → 跨BU存量主档（关联已有 One ID，需 GC 决策）");
+        evidence.put("发起原因", "导入行与 " + targetCustomer.getBuScope() + " 主档疑似重复（跨BU），升级合并审批");
+        evidence.put("导入行", row.getJobCode() + " 第 " + row.getRowNo() + " 行 · " + row.getLegalName());
+        evidence.put("目标记录", targetCustomer.getOneId() + " · " + targetCustomer.getLegalName()
+            + " · " + targetCustomer.getBuScope());
+
+        CmdApprovalTask task = new CmdApprovalTask();
+        task.setTaskNo(generateTaskNo());
+        task.setTaskCategory(CmdConstants.APPR_CAT_APPROVAL);
+        task.setBizType(CmdConstants.BIZ_TYPE_MERGE);
+        task.setBizId(String.valueOf(row.getId()));
+        task.setBizTitle("跨BU合并：" + row.getLegalName() + " → " + targetCustomer.getLegalName());
+        task.setSceneCode(SCENE_MERGE);
+        task.setApplicantId(LoginHelper.getUserId());
+        task.setApplicantName(resolveApplicant().name());
+        task.setBuScope(job.getBuScope());
+        task.setScope(CmdConstants.SCOPE_BU);
+        task.setCurrentNodeCode("BU_REVIEW");
+        task.setCurrentNodeName(NODE_NAME_BU_REVIEW);
+        task.setAssigneeName(NAME_BU_STEWARD);
+        task.setAssigneeRole(ROLE_BU_STEWARD);
+        task.setStatus(CmdConstants.APPR_STATUS_PENDING);
+        task.setRiskLevel("High");
+        task.setDuplicateState(RESULT_SUSPECTED);
+        task.setCrossBuFlag(CmdConstants.YES);
+        task.setSubmitTime(now);
+        task.setSlaDue(now.plusHours(resolveSlaHours()));
+        task.setSlaState(CmdConstants.SLA_NORMAL);
+        task.setEvidenceJson(JsonUtils.toJsonString(evidence));
+        task.setBizSnapshotJson(JsonUtils.toJsonString(snapshot));
+        task.setRemark("导入行跨BU疑似重复，BU 发起合并审批");
+        approvalTaskMapper.insert(task);
+
+        AuditEvent audit = new AuditEvent();
+        audit.setEventType("MERGE");
+        audit.setEventName("导入行跨BU疑似重复，发起合并审批：" + row.getLegalName() + " → " + targetCustomer.getLegalName());
+        audit.setBizType(SCENE_MERGE);
+        audit.setBizId(task.getTaskNo());
+        audit.setOneId(targetCustomer.getOneId());
+        audit.setOperatorId(LoginHelper.getUserId());
+        audit.setOperatorName(resolveApplicant().name());
+        audit.setEventTime(now);
+        audit.setResult("SUCCESS");
+        auditService.record(audit);
+        return "跨BU命中（目标 " + targetCustomer.getBuScope() + " 主档 " + targetCustomer.getOneId()
+            + "），已发起客户合并审批 " + task.getTaskNo() + "，批准后自动关联";
     }
 
     /**
@@ -575,7 +790,11 @@ public class CmdImportServiceImpl implements ICmdImportService {
     }
 
     /**
-     * 文件级预检：上传表头必须包含模板定义的全部列
+     * 文件级预检：上传表头必须包含模板定义的全部「必填」列
+     * <p>
+     * 选填列（is_required=N）缺失不阻断整批：模板下载仍包含全部列，
+     * 选填列缺失时按默认值 / 空值放行（与错误策略「必填→Reject / 选填→Warning」同口径），
+     * 保证模板新增选填字段后存量文件仍可继续导入。
      *
      * @param collector 行采集器（含规范化表头）
      * @param mappings  模板字段映射
@@ -584,6 +803,9 @@ public class CmdImportServiceImpl implements ICmdImportService {
     private String preCheckHeader(RowCollector collector, List<CmdImportTemplateMapping> mappings) {
         List<String> missing = new ArrayList<>();
         for (CmdImportTemplateMapping mapping : mappings) {
+            if (!CmdConstants.YES.equals(mapping.getIsRequired())) {
+                continue;
+            }
             String column = StringUtils.blankToDefault(mapping.getColumnName(), mapping.getFieldCode());
             if (!collector.hasColumn(column)) {
                 missing.add(column);
@@ -832,6 +1054,8 @@ public class CmdImportServiceImpl implements ICmdImportService {
         task.setSubmitTime(now);
         task.setSlaDue(now.plusHours(resolveSlaHours()));
         task.setSlaState(CmdConstants.SLA_NORMAL);
+        // 批次级 DQ：单个 New 行尚未入主档，页面 DQ 列展示本批次行级均分（总设计「批次任务详情：数量与原因」）
+        task.setDqScore(batchAverageDq(job));
         task.setEvidenceJson(approvalEvidenceOf(job, outcome));
         approvalTaskMapper.insert(task);
 
@@ -1162,7 +1386,8 @@ public class CmdImportServiceImpl implements ICmdImportService {
      * @return JSON 字符串
      */
     private String approvalEvidenceOf(CmdImportJob job, Outcome outcome) {
-        Map<String, Object> evidence = new LinkedHashMap<>(8);
+        Map<String, Object> evidence = new LinkedHashMap<>(10);
+        evidence.put("批次号", job.getJobCode());
         evidence.put("导入文件", job.getFileName());
         evidence.put("总行数", outcome.total());
         evidence.put("Exact", outcome.exact);
@@ -1170,7 +1395,32 @@ public class CmdImportServiceImpl implements ICmdImportService {
         evidence.put("New", outcome.created);
         evidence.put("Invalid", outcome.invalid);
         evidence.put("处理方式", "Exact 关联已有 One ID；New 审批后生成 One ID；Suspected 进入治理；Invalid 退回修复");
+        evidence.put("待办", "BU Scope 初审：核对批次分流结果，批准后为 " + outcome.created + " 条 New 记录生成 One ID");
         return JsonUtils.toJsonString(evidence);
+    }
+
+    /**
+     * 批次行级 DQ 均分
+     * <p>
+     * 批量导入是批次级审批：批次自身没有 One ID 也没有单条主档，因此页面 DQ 列
+     * 展示本批次全部行的质量分均分（总设计「批次任务详情：Completed / Partial /
+     * Failed、数量、原因与待办」），避免审批列表出现整列空值。
+     *
+     * @param job 导入任务
+     * @return 均分（无有效分值时返回 null，页面回退为「-」）
+     */
+    private BigDecimal batchAverageDq(CmdImportJob job) {
+        List<CmdImportRow> rows = rowMapper.selectList(Wrappers.<CmdImportRow>lambdaQuery()
+            .eq(CmdImportRow::getJobId, job.getId()));
+        BigDecimal sum = BigDecimal.ZERO;
+        int counted = 0;
+        for (CmdImportRow row : rows) {
+            if (row.getDqScore() != null) {
+                sum = sum.add(row.getDqScore());
+                counted++;
+            }
+        }
+        return counted == 0 ? null : sum.divide(BigDecimal.valueOf(counted), 0, RoundingMode.HALF_UP);
     }
 
     /**

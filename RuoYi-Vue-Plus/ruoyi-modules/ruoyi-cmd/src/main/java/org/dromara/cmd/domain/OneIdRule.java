@@ -1,5 +1,6 @@
 package org.dromara.cmd.domain;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
@@ -33,6 +34,10 @@ public class OneIdRule extends BaseEntity {
 
     /** 前缀 */
     private String prefix;
+
+    /** 分隔符 */
+    @TableField("`separator`")
+    private String separator;
 
     /** 流水号长度 */
     private Integer serialLength;

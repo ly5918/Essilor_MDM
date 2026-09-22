@@ -13,6 +13,7 @@ import org.dromara.cmd.domain.CmdApprovalAction;
 import org.dromara.cmd.domain.CmdApprovalTask;
 import org.dromara.cmd.domain.CmdChangeRequest;
 import org.dromara.cmd.domain.CmdCustomer;
+import org.dromara.cmd.domain.CmdLegacyMapping;
 import org.dromara.cmd.domain.CmdWorkflowStepLog;
 import org.dromara.cmd.domain.bo.ApprovalActionBo;
 import org.dromara.cmd.domain.bo.CmdApprovalTaskBo;
@@ -24,15 +25,18 @@ import org.dromara.cmd.mapper.CmdApprovalActionMapper;
 import org.dromara.cmd.mapper.CmdApprovalTaskMapper;
 import org.dromara.cmd.mapper.CmdChangeRequestMapper;
 import org.dromara.cmd.mapper.CmdCustomerMapper;
+import org.dromara.cmd.mapper.CmdLegacyMappingMapper;
 import org.dromara.cmd.service.ICmdApprovalService;
 import org.dromara.cmd.service.ICmdAuditService;
 import org.dromara.cmd.service.ICmdFlowEngineService;
+import org.dromara.cmd.service.ICmdGovernanceService;
 import org.dromara.cmd.service.ICmdHierarchyService;
 import org.dromara.cmd.service.ICmdImportService;
 import org.dromara.cmd.service.ICmdWorkflowStepLogService;
 import org.dromara.common.core.domain.PageResult;
 import org.dromara.common.core.exception.ServiceException;
 import org.dromara.common.core.utils.StringUtils;
+import org.dromara.common.json.utils.JsonUtils;
 import org.dromara.common.mybatis.core.page.PageQuery;
 import org.dromara.common.mybatis.core.query.QueryBuilder;
 import org.dromara.common.satoken.utils.LoginHelper;
@@ -76,11 +80,13 @@ public class CmdApprovalServiceImpl implements ICmdApprovalService {
     private final ICmdAuditService auditService;
     private final ICmdHierarchyService hierarchyService;
     private final ICmdImportService importService;
-
+    private final ICmdGovernanceService governanceService;
+    private final CmdLegacyMappingMapper legacyMappingMapper;
     /** 「通过类」动作：落到 Warm-Flow 引擎推进节点（升级 → GC 决策，批准 → 结束） */
     private static final Set<String> ADVANCE_ACTIONS = Set.of(
         CmdConstants.ACTION_APPROVE, CmdConstants.ACTION_ESCALATE,
-        CmdConstants.ACTION_MERGE, CmdConstants.ACTION_CREATE_NEW, CmdConstants.ACTION_LINK);
+        CmdConstants.ACTION_MERGE, CmdConstants.ACTION_CREATE_NEW, CmdConstants.ACTION_LINK,
+        CmdConstants.ACTION_EXCLUDE);
 
     /** 允许的决策动作白名单：不在其中的动作直接拒绝，避免写入无效步骤 / 误推进流程 */
     private static final Set<String> ALLOWED_ACTIONS = Set.of(
@@ -231,6 +237,30 @@ public class CmdApprovalServiceImpl implements ICmdApprovalService {
             syncChangeRequestStatus(task.getBizId(), task.getOneId(), actionType, effectiveToNode);
         } else if (CmdConstants.BIZ_TYPE_IMPORT.equalsIgnoreCase(task.getBizType())) {
             importService.onApproval(task.getBizId(), actionType, operatorName);
+        } else if (CmdConstants.BIZ_TYPE_MERGE.equalsIgnoreCase(task.getBizType())) {
+            // 跨BU客户合并（总设计 MERGE 场景）：批准走到 END 才执行合并（Golden Record / 行级关联 / 交叉引用）；
+            // 拒绝 / 退回不执行业务动作，仅记录审计结论。
+            if (CmdConstants.ACTION_APPROVE.equals(actionType) && "END".equals(effectiveToNode)) {
+                governanceService.execMergeTask(after);
+            }
+            auditMergeDecision(task, actionType, operatorName);
+        } else if (isDuplicateLinkApproval(task)) {
+            // 单条创建命中存量主档（EXACT / SUSPECTED，总设计场景一 + MERGE 场景）：
+            // 「确认合并 / 确认关联已有」→ 新申请合并指向存量 One ID（One ID 保持稳定）；
+            // 「排除重复 / 创建新主档」→ 判定非同一客户，按普通新建生效（生成新 One ID）。
+            boolean reachedEnd = "END".equals(effectiveToNode);
+            boolean linkDecision = CmdConstants.ACTION_APPROVE.equals(actionType)
+                || CmdConstants.ACTION_MERGE.equals(actionType);
+            boolean createDecision = CmdConstants.ACTION_EXCLUDE.equals(actionType)
+                || CmdConstants.ACTION_CREATE_NEW.equals(actionType);
+            if (reachedEnd && linkDecision) {
+                linkNewCustomerToExisting(task, operatorId, operatorName);
+            } else if (reachedEnd && createDecision) {
+                syncCustomerStatus(task.getOneId(), CmdConstants.ACTION_APPROVE, "END",
+                    effectiveFlowStatus, operatorId, operatorName);
+            } else if (!linkDecision && !createDecision) {
+                syncCustomerStatus(task.getOneId(), actionType, effectiveToNode, effectiveFlowStatus, operatorId, operatorName);
+            }
         } else {
             syncCustomerStatus(task.getOneId(), actionType, effectiveToNode, effectiveFlowStatus, operatorId, operatorName);
         }
@@ -291,6 +321,81 @@ public class CmdApprovalServiceImpl implements ICmdApprovalService {
      * @param toNode      流转后的节点（END 表示流程终止）
      * @param flowStatus  流程实例状态
      */
+    /**
+     * 是否「单条创建命中存量主档」的审批任务（EXACT / SUSPECTED，批准即关联已有 One ID）
+     *
+     * @param task 审批任务
+     * @return true = 走关联已有 One ID 的合并回写
+     */
+    private boolean isDuplicateLinkApproval(CmdApprovalTask task) {
+        return (CmdConstants.MATCH_EXACT.equals(task.getDuplicateState())
+            || CmdConstants.MATCH_SUSPECTED.equals(task.getDuplicateState()))
+            && task.getEvidenceJson() != null && task.getEvidenceJson().contains("候选One ID");
+    }
+
+    /**
+     * 单条创建批准后关联已有 One ID（总设计场景一：发现跨BU疑似重复并关联已有 One ID）：
+     * 新申请主档 status=merged、merged_to_one_id=存量 One ID（One ID 保持稳定），
+     * 并建立 Legacy 交叉引用（新申请的 One ID → 存量 One ID），保留 Source Snapshot 于审计。
+     *
+     * @param task         创建审批任务
+     * @param operatorId   操作人
+     * @param operatorName 操作人姓名
+     */
+    private void linkNewCustomerToExisting(CmdApprovalTask task, Long operatorId, String operatorName) {
+        String candidateOneId = null;
+        try {
+            Object v = JsonUtils.parseMap(task.getEvidenceJson()).get("候选One ID");
+            candidateOneId = v == null ? null : String.valueOf(v);
+        } catch (Exception ignored) {
+            // 证据快照解析失败按普通创建处理
+        }
+        if (StringUtils.isBlank(candidateOneId) || customerMapper.selectCount(
+            new LambdaQueryWrapper<CmdCustomer>().eq(CmdCustomer::getOneId, candidateOneId)) == 0) {
+            // 候选缺失（如候选已被合并 / 删除）→ 回退为普通创建生效
+            syncCustomerStatus(task.getOneId(), CmdConstants.ACTION_APPROVE, "END", task.getFlowStatus(), operatorId, operatorName);
+            return;
+        }
+        // 1) 新申请主档合并指向存量 One ID
+        CmdCustomer patch = new CmdCustomer();
+        patch.setStatus(CmdConstants.CUST_STATUS_MERGED);
+        patch.setMergedToOneId(candidateOneId);
+        patch.setDuplicateFlag(CmdConstants.NO);
+        patch.setApprovedBy(operatorId);
+        patch.setApprovedTime(LocalDateTime.now());
+        customerMapper.update(patch, new LambdaQueryWrapper<CmdCustomer>().eq(CmdCustomer::getOneId, task.getOneId()));
+
+        // 2) Legacy 交叉引用：新申请 One ID → 存量 One ID（下游按旧编码仍可路由）
+        CmdLegacyMapping mapping = new CmdLegacyMapping();
+        mapping.setOneId(candidateOneId);
+        mapping.setSourceSystem("CMD");
+        mapping.setSourceCode(task.getOneId());
+        mapping.setSourceName(task.getBizTitle());
+        mapping.setBuScope(task.getBuScope());
+        mapping.setMappingType("MERGE");
+        mapping.setStatus("0");
+        mapping.setEffectiveFrom(LocalDateTime.now());
+        mapping.setRemark("单条创建命中存量主档，合并指向 " + candidateOneId + "（申请 " + task.getTaskNo() + "）");
+        legacyMappingMapper.insert(mapping);
+
+        // 3) 审计留痕（Before / After）
+        AuditEvent audit = new AuditEvent();
+        audit.setEventType("MERGE");
+        audit.setEventName("创建申请命中存量主档，已关联 One ID " + candidateOneId + "：" + task.getBizTitle());
+        audit.setBizType(task.getSceneCode());
+        audit.setBizId(task.getTaskNo());
+        audit.setOneId(task.getOneId());
+        audit.setOperatorId(operatorId);
+        audit.setOperatorName(operatorName);
+        audit.setOperatorRole(StringUtils.defaultString(task.getAssigneeRole(), ""));
+        audit.setEventTime(LocalDateTime.now());
+        audit.setResult("SUCCESS");
+        audit.setAfterJson(JsonUtils.toJsonString(java.util.Map.of("mergedToOneId", candidateOneId, "status", "merged")));
+        auditService.record(audit);
+        log.info("[CMD][MERGE] 创建申请已关联存量 One ID：taskNo={} new={} target={}",
+            task.getTaskNo(), task.getOneId(), candidateOneId);
+    }
+
     private void syncCustomerStatus(String oneId, String actionType, String toNode,
                                     String flowStatus, Long operatorId, String operatorName) {
         String custStatus;
@@ -311,7 +416,6 @@ public class CmdApprovalServiceImpl implements ICmdApprovalService {
         }
         customerMapper.update(patch, new LambdaQueryWrapper<CmdCustomer>().eq(CmdCustomer::getOneId, oneId));
         log.info("[CMD][CUSTOMER] 主档状态已回写：oneId={} action={} -> status={}", oneId, actionType, custStatus);
-
         // 6.1) 主数据 ↔ 客户层级联动：客户正式生效（成为 Golden Record）即自动登记「待归位」层级节点，
         //      使其立刻出现在「客户层级 → 待归位主数据」中，等待 Data Steward 归位到 A3-A2-A1 树。
         //      登记失败不能影响审批结果，因此单独兜底（registerNode 未开启独立事务，不会污染外层事务）。
@@ -325,6 +429,31 @@ public class CmdApprovalServiceImpl implements ICmdApprovalService {
                 log.warn("[CMD][HIER] 自动登记层级节点失败（不影响审批结果）：oneId={} err={}", oneId, e.getMessage());
             }
         }
+    }
+
+    /**
+     * 合并审批决策审计留痕（批准由 execMergeTask 记录执行审计，此处记录拒绝 / 退回等结论）
+     *
+     * @param task        MERGE 审批任务
+     * @param actionType  审批动作
+     * @param operatorName 操作人
+     */
+    private void auditMergeDecision(CmdApprovalTask task, String actionType, String operatorName) {
+        if (CmdConstants.ACTION_APPROVE.equals(actionType)) {
+            return; // 批准的执行审计在 execMergeTask / 行级治理审计中落库
+        }
+        AuditEvent audit = new AuditEvent();
+        audit.setEventType("MERGE");
+        audit.setEventName(resolveActionName(actionType) + "（合并审批）：" + task.getBizTitle());
+        audit.setBizType(CmdConstants.SCENE_MERGE);
+        audit.setBizId(task.getTaskNo());
+        audit.setOneId(task.getOneId());
+        audit.setOperatorId(task.getApplicantId());
+        audit.setOperatorName(operatorName);
+        audit.setOperatorRole(StringUtils.defaultString(task.getAssigneeRole(), ""));
+        audit.setEventTime(LocalDateTime.now());
+        audit.setResult("SUCCESS");
+        auditService.record(audit);
     }
 
     /**
@@ -498,8 +627,10 @@ public class CmdApprovalServiceImpl implements ICmdApprovalService {
     private String resolveAfterState(String actionType, String beforeState) {
         return switch (actionType) {
             case CmdConstants.ACTION_APPROVE, CmdConstants.ACTION_CREATE_NEW,
-                 CmdConstants.ACTION_MERGE, CmdConstants.ACTION_LINK -> CmdConstants.APPR_STATUS_APPROVED;
-            case CmdConstants.ACTION_REJECT, CmdConstants.ACTION_EXCLUDE -> CmdConstants.APPR_STATUS_REJECTED;
+                 CmdConstants.ACTION_MERGE, CmdConstants.ACTION_LINK,
+                 // 排除重复（总设计「排除」）：判定非同一客户，继续按新建主档生效
+                 CmdConstants.ACTION_EXCLUDE -> CmdConstants.APPR_STATUS_APPROVED;
+            case CmdConstants.ACTION_REJECT -> CmdConstants.APPR_STATUS_REJECTED;
             case CmdConstants.ACTION_RETURN -> CmdConstants.APPR_STATUS_RETURNED;
             // ESCALATE 只是把任务从 BU 初审推进到 GC 决策，仍处于待处理状态
             case CmdConstants.ACTION_ESCALATE -> CmdConstants.APPR_STATUS_PENDING;
@@ -577,6 +708,7 @@ public class CmdApprovalServiceImpl implements ICmdApprovalService {
         vo.setId(task.getId());
         vo.setTaskId(task.getTaskNo());
         vo.setOneId(task.getOneId());
+        vo.setBizId(task.getBizId());
         vo.setName(task.getBizTitle());
         vo.setScene(task.getBizType());
         vo.setSubmitter(StringUtils.blankToDefault(task.getApplicantName(), "-"));
@@ -656,8 +788,14 @@ public class CmdApprovalServiceImpl implements ICmdApprovalService {
         if (task.getDqScore() != null && task.getDqScore().doubleValue() < 60) {
             decisions.add("DQ 低于 60：建议退回补充材料");
         }
-        if (StringUtils.isNotBlank(task.getDuplicateState()) && !"NONE".equalsIgnoreCase(task.getDuplicateState())) {
-            decisions.add("存在疑似重复：需人工比对后决定合并或新建");
+        // 匹配结论决定批准后的落库动作（总设计四类分流：Exact 关联已有 One ID；New 审批后生成 One ID）
+        String match = StringUtils.blankToDefault(task.getDuplicateState(), "").toUpperCase();
+        if (match.contains(CmdConstants.MATCH_SUSPECTED)) {
+            decisions.add("疑似重复：需人工比对后决定关联已有或新建");
+        } else if (match.contains(CmdConstants.MATCH_EXACT)) {
+            decisions.add("已命中存量：批准后关联已有 One ID");
+        } else if (match.contains(CmdConstants.MATCH_NEW)) {
+            decisions.add("未命中存量：批准后生成新 One ID");
         }
         if ("Y".equals(task.getCrossBuFlag())) {
             decisions.add("跨 BU 申请：需 GC Scope 参与决策");
@@ -681,7 +819,38 @@ public class CmdApprovalServiceImpl implements ICmdApprovalService {
             return actions;
         }
         boolean gc = "GC".equalsIgnoreCase(task.getScope());
-        actions.add(action(CmdConstants.ACTION_APPROVE, gc ? "确认合并 / 批准" : "批准", "primary"));
+        // 跨BU客户合并（MERGE 场景）：批准即「确认合并」——执行 Golden Record 合并 / 行级关联
+        boolean merge = CmdConstants.BIZ_TYPE_MERGE.equalsIgnoreCase(task.getBizType());
+        // 单条创建命中存量主档（EXACT / SUSPECTED，总设计场景一 + MERGE 场景）：
+        // 不提供普通「批准 / 拒绝」——重复结论必须做出合并决策（关联已有）或排除 / 新建 / 升级
+        boolean dupCreate = isDuplicateLinkApproval(task);
+        if (merge) {
+            actions.add(action(CmdConstants.ACTION_APPROVE, "确认合并", "primary"));
+            actions.add(action(CmdConstants.ACTION_REJECT, "拒绝合并", "danger"));
+            actions.add(action(CmdConstants.ACTION_RETURN, "退回BU", "warning"));
+            return actions;
+        }
+        if (dupCreate) {
+            if (gc) {
+                // GC Scope 决策（总设计 MERGE 场景节点：跨BU确认关联已有、创建新主档或退回修复）
+                actions.add(action(CmdConstants.ACTION_MERGE, "确认关联已有", "primary"));
+                actions.add(action(CmdConstants.ACTION_CREATE_NEW, "创建新主档", "success"));
+                actions.add(action(CmdConstants.ACTION_RETURN, "退回BU修复", "warning"));
+            } else if (CmdConstants.YES.equals(task.getCrossBuFlag())) {
+                // BU Scope 初审（总设计：核验本BU来源记录；确认升级、排除或退回）——跨BU无权直接合并
+                actions.add(action(CmdConstants.ACTION_ESCALATE, "升级GC决策", "primary"));
+                actions.add(action(CmdConstants.ACTION_EXCLUDE, "排除重复", "warning"));
+                actions.add(action(CmdConstants.ACTION_RETURN, "退回补充", "info"));
+            } else {
+                // Same-BU：BU 直接决策（泳道标签 Same-BU → BU 层处理）
+                actions.add(action(CmdConstants.ACTION_MERGE, "确认合并", "primary"));
+                actions.add(action(CmdConstants.ACTION_EXCLUDE, "排除重复·继续新建", "warning"));
+                actions.add(action(CmdConstants.ACTION_RETURN, "退回补充", "info"));
+            }
+            return actions;
+        }
+        actions.add(action(CmdConstants.ACTION_APPROVE,
+            gc ? "确认合并 / 批准" : "批准", "primary"));
         actions.add(action(CmdConstants.ACTION_REJECT, "拒绝", "danger"));
         actions.add(action(CmdConstants.ACTION_RETURN, gc ? "退回BU" : "退回补充", "warning"));
         if (!gc) {

@@ -588,6 +588,9 @@
     gap: 12px;
   }
   .admin-card {
+    /* 星标锚点：* 绝对定位右上角，不与标题分占两行 */
+    position: relative;
+
     h3 {
       margin: 0 0 6px;
       font-size: 14px;
@@ -597,6 +600,15 @@
       font-size: 12px;
       color: var(--g-text2);
       min-height: 32px;
+    }
+    .capability-star {
+      position: absolute;
+      top: 10px;
+      right: 14px;
+      color: var(--btn-warning, #e6a23c);
+      font-size: 15px;
+      font-weight: 700;
+      line-height: 1;
     }
   }
   .hier-tree {
@@ -963,34 +975,61 @@
   }
   .ap-layout {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 380px;
-    gap: 12px;
+    /* 左列表自适应；右侧速览栏窄于旧版详情（只读概要，完整审批在弹窗内操作） */
+    grid-template-columns: minmax(0, 1fr) clamp(360px, 24vw, 420px);
+    gap: 16px;
     align-items: start;
   }
+  /* 列表全宽 + 点击行弹出审批详情弹窗（原 .ap-layout 双栏已移除） */
   .ap-list-title {
     font-size: 13px;
     font-weight: 700;
     color: var(--g-text);
     margin-bottom: 4px;
   }
+  /* 审批详情弹窗内的加载占位 */
+  .ap-dlg-loading {
+    min-height: 160px;
+  }
+  /* 右侧速览（只读）底部：进入审批入口 */
+  .ap-quick-foot {
+    border-top: 1px dashed var(--g-divider);
+    padding-top: 10px;
+    margin-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    .el-button {
+      width: 100%;
+    }
+  }
+  .ap-quick-hint {
+    font-size: 12px;
+    color: var(--g-text2);
+    line-height: 1.5;
+  }
+  /* 审批弹窗内申请信息三组一行铺开（提交人 / 当前节点 / SLA） */
+  .ap-dlg .ap-detail-body .h-kv {
+    grid-template-columns: repeat(3, 96px 1fr);
+  }
   .ap-detail {
     background: var(--g-card);
     border: 1px solid var(--g-divider);
     border-radius: 8px;
-    padding: 10px 12px;
+    padding: 14px 16px;
     position: sticky;
     top: 0;
   }
   .ap-detail-head {
     border-bottom: 1px solid var(--g-divider);
-    padding-bottom: 6px;
-    margin-bottom: 6px;
+    padding-bottom: 10px;
+    margin-bottom: 10px;
     b {
       font-size: 13px;
       color: var(--g-text2);
     }
     .ap-detail-name {
-      margin: 4px 0 6px;
+      margin: 4px 0 8px;
       font-size: 16px;
       font-weight: 700;
       color: var(--g-text);
@@ -998,19 +1037,45 @@
     .el-tag {
       margin-right: 6px;
     }
+    /* 元信息行：标签居左、操作按钮居右，不再挤在一行 */
+    .ap-detail-meta {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .ap-detail-tags {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0 6px;
+      flex: 1 1 auto;
+      min-width: 0;
+      .el-tag {
+        margin-right: 0;
+        margin-bottom: 4px;
+      }
+    }
+    .ap-detail-ops {
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      white-space: nowrap;
+    }
   }
   .ap-detail-body {
     h4 {
-      font-size: 12px;
+      font-size: 13px;
       font-weight: 700;
       color: var(--g-text);
-      margin: 8px 0 4px;
+      margin: 14px 0 6px;
     }
     .h-kv {
       display: grid;
-      grid-template-columns: 88px 1fr;
-      gap: 6px 12px;
-      font-size: 12px;
+      grid-template-columns: 96px 1fr;
+      gap: 8px 14px;
+      font-size: 13px;
       > div:nth-child(odd) {
         color: var(--g-text2);
       }
@@ -1021,14 +1086,15 @@
     .ap-check {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 6px;
+      gap: 8px;
       div {
         background: var(--g-content);
         border: 1px solid var(--g-divider);
         border-radius: 8px;
-        padding: 6px 8px;
-        font-size: 12px;
+        padding: 8px 10px;
+        font-size: 13px;
         color: var(--g-text);
+        line-height: 1.5;
       }
     }
     .ap-decisions {
@@ -1045,16 +1111,111 @@
       background: #f7fafc;
       border: 1px solid var(--g-divider);
       border-radius: 8px;
-      padding: 6px 8px;
+      padding: 8px 10px;
       font-size: 12px;
       color: var(--g-text);
-      line-height: 1.45;
+      line-height: 1.55;
     }
+
+    /* 治理证据：JSON 快照逐条渲染为「标签 / 值」 */
+    .ap-ev-row {
+      display: grid;
+      grid-template-columns: 92px 1fr;
+      gap: 6px;
+      padding: 3px 0;
+
+      & + .ap-ev-row {
+        border-top: 1px dashed var(--g-divider);
+      }
+    }
+
+    .ap-ev-key {
+      color: var(--g-text2);
+    }
+
+    .ap-ev-val {
+      color: var(--g-text);
+      word-break: break-all;
+    }
+
+    /* 候选字段级对比（借鉴 DCR Matching Review：绿=一致 / 红=不一致 / 灰=空缺） */
+    .ap-cand {
+      border: 1px solid var(--g-divider);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 12px;
+      margin-bottom: 8px;
+    }
+
+    .ap-cand-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
+
+    .ap-cand-hint {
+      color: var(--g-text2);
+    }
+
+    .ap-cmp-head,
+    .ap-cmp-row {
+      display: grid;
+      grid-template-columns: 110px 1fr 1fr 56px;
+      gap: 8px;
+      align-items: center;
+      padding: 4px 0;
+    }
+
+    .ap-cmp-head {
+      color: var(--g-text2);
+      border-bottom: 1px solid var(--g-divider);
+      padding-bottom: 6px;
+    }
+
+    .ap-cmp-row + .ap-cmp-row {
+      border-top: 1px dashed var(--g-divider);
+    }
+
+    .ap-cmp-label {
+      color: var(--g-text);
+      font-weight: 600;
+    }
+
+    .ap-cmp-val {
+      padding: 3px 8px;
+      border-radius: 4px;
+      word-break: break-all;
+      line-height: 1.4;
+
+      &.is-match {
+        background: #f0f9eb;
+        color: #529b2e;
+      }
+
+      &.is-diff {
+        background: #fef0f0;
+        color: #f56c6c;
+      }
+
+      &.is-empty {
+        background: #f4f4f5;
+        color: #909399;
+      }
+    }
+
+    .ap-cmp-flag {
+      text-align: center;
+    }
+
     .ap-actions {
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
-      margin-top: 8px;
+      margin-top: 14px;
+      padding-top: 10px;
+      border-top: 1px dashed var(--g-divider);
     }
   }
 }
@@ -1072,9 +1233,6 @@
     .flow-compare,
     .ap-layout {
       grid-template-columns: 1fr;
-    }
-    .cmd-poc .ap-detail {
-      position: static;
     }
   }
 }

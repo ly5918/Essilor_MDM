@@ -22,21 +22,26 @@ public class HeaderColumnWidthStyleStrategy extends AbstractHeadColumnWidthStyle
     /** 表头文字右侧留白（字符数），避免贴边 */
     private static final int PADDING = 6;
 
+    /** 单列最大宽度（字符数），POI 上限 255 */
+    private static final int MAX_WIDTH = 60;
+
     /** 中日韩字符按 2 个字符宽估算 */
     private static final int CJK_WIDTH = 2;
 
     /** 中日韩字符起始码位 */
     private static final int CJK_START = 0x2E80;
 
-    /** Fesod / POI 的列宽单位：1 个字符 = 256 */
-    private static final int UNIT = 256;
-
     /**
      * 计算某一列的列宽
+     * <p>
+     * 注意单位：基类 {@code AbstractHeadColumnWidthStyleStrategy} 内部会做 {@code width * 256}
+     * 再交给 POI 的 {@code Sheet#setColumnWidth}，因此这里必须返回**字符数**（不是 1/256 字符单位），
+     * 返回 1/256 单位会被再乘一次 256，触发
+     * {@code IllegalArgumentException: The maximum column width for an individual cell is 255 characters}。
      *
      * @param head        表头定义
      * @param columnIndex 列索引
-     * @return 列宽（1/256 字符单位）
+     * @return 列宽（字符数）
      */
     @Override
     protected Integer columnWidth(Head head, Integer columnIndex) {
@@ -47,7 +52,7 @@ public class HeaderColumnWidthStyleStrategy extends AbstractHeadColumnWidthStyle
                 longest = Math.max(longest, displayWidth(name));
             }
         }
-        return Math.max(longest + PADDING, MIN_WIDTH) * UNIT;
+        return Math.min(Math.max(longest + PADDING, MIN_WIDTH), MAX_WIDTH);
     }
 
     /**

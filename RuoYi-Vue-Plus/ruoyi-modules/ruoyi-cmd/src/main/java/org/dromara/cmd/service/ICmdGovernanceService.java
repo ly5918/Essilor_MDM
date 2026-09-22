@@ -68,4 +68,44 @@ public interface ICmdGovernanceService {
      * @return 治理任务列表
      */
     List<CmdGovernanceTaskVo> selectTaskList(CmdGovernanceTaskBo bo);
+
+    /**
+     * 创建疑似重复治理任务（总设计 MERGE 场景「发现候选」）
+     * <p>
+     * 触发源：单条创建 Duplicate Check 命中存量主档（Suspected）；
+     * 批量导入行级匹配 Suspected。Exact 由系统自动关联，不建治理任务。
+     *
+     * @param bizId       业务主键（创建审批 taskNo / 导入 jobCode+行号）
+     * @param oneId       相关 One ID（新申请方，可能尚未生效）
+     * @param subject     任务主题（客户名称）
+     * @param buScope     归属 BU
+     * @param crossBu     是否跨 BU（决定 SUSPECT / CROSS_BU 类型与 GC 路由）
+     * @param matchState  匹配结论（EXACT / SUSPECTED）
+     * @param evidenceJson 候选对比证据（含候选 One ID）
+     * @return 任务编号 GOV-yyyyMMdd-####
+     */
+    String createDuplicateTask(String bizId, String oneId, String subject, String buScope,
+                               boolean crossBu, String matchState, String evidenceJson);
+
+    /**
+     * 发起跨 BU 客户合并请求（总设计 MERGE 场景：发现候选 → 证据准备 → BU 初审 → GC 决策）
+     * <p>
+     * 创建 sceneCode=MERGE 的审批待办（cmd_approval_task）并启动 Warm-Flow 客户合并审批流，
+     * 批准后由 {@link #execMergeTask} 执行合并（Golden Record 更新 + 交叉引用 + 审计）。
+     *
+     * @param sourceOneId 合并源 One ID（被合并 / 新申请 / 导入行对应记录）
+     * @param targetOneId 合并目标 One ID（保留的 Golden Record，One ID 保持稳定）
+     * @param reason      发起原因
+     * @return 合并审批任务编号 AP-yyyyMMdd-####
+     */
+    String launchMerge(String sourceOneId, String targetOneId, String reason);
+
+    /**
+     * 执行合并审批通过后的业务结果（总设计「执行合并 / 新建 → 结果发布 → 追踪审计」）：
+     * RECORD_MERGE：存量主档合并（Golden Record 补全 + 源记录 merged_to_one_id + Legacy 交叉引用）；
+     * ROW_LINK：批量导入 Suspected 行关联已有 One ID（行级治理结果回写）。
+     *
+     * @param task MERGE 审批任务（bizSnapshotJson 携带 mode / source / target）
+     */
+    void execMergeTask(org.dromara.cmd.domain.CmdApprovalTask task);
 }

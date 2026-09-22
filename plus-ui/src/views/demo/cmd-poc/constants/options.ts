@@ -80,7 +80,9 @@ export const CUSTOMER_STATUS_MAP: Record<string, StatusMeta> = {
   inactive: { label: 'Inactive', type: 'danger' },
   draft: { label: 'Draft', type: 'info' },
   rejected: { label: 'Rejected', type: 'danger' },
-  returned: { label: 'Returned', type: 'warning' }
+  returned: { label: 'Returned', type: 'warning' },
+  // 总设计 MERGE 场景：源记录并入目标 One ID 后的终态（merged_to_one_id 指向保留的 Golden Record）
+  merged: { label: 'Merged · 已合并', type: 'warning' }
 };
 
 /** 状态兜底：未知状态不抛错，退化为 info 标签展示原值 */

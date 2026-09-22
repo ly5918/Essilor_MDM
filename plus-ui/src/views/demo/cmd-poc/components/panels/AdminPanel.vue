@@ -23,6 +23,7 @@
           shadow="hover"
           :body-style="{ padding: '16px 18px' }"
         >
+          <!-- 扩展能力星标：绝对定位到卡片右上角，与标题同一行（对齐原型） -->
           <span v-if="card.extended" class="capability-star" title="平台扩展能力，实施范围与优先级待后续确认">*</span>
           <h3>{{ card.title }}</h3>
           <p>{{ card.desc }}</p>
@@ -60,8 +61,11 @@ const adminCards: AdminCard[] = [
   { title: '字段与值集', desc: '配置、版本、测试和发布管理。', actionText: '管理', dialog: 'fields' },
   { title: 'One ID规则', desc: '编码模式、生命周期与Legacy Code映射。', actionText: '管理', page: 'oneid' },
   { title: '角色与权限', desc: '技术角色、Scope、字段与操作。', actionText: '管理', dialog: 'permissions' },
-  { title: 'DQ规则', desc: '技术规则、业务规则和版本。', actionText: '模拟测试', dialog: 'dq', extended: true },
-  { title: '匹配规则', desc: '信用代码、经营地址和辅助线索。', actionText: '模拟测试', dialog: 'match', extended: true },
+  // DQ规则/匹配规则：对齐原型为「管理」入口——弹窗内即规则清单治理
+  // （新增/删除/启停）+ 模拟测试 + 影响评估，模拟只是治理弹窗内的一环，
+  // 不再单独以「模拟测试」作为卡片动作，避免与 DQ Scorecard 并列重复
+  { title: 'DQ规则', desc: '技术规则、业务规则和版本。', actionText: '管理', dialog: 'dq', extended: true },
+  { title: '匹配规则', desc: '信用代码、经营地址和辅助线索。', actionText: '管理', dialog: 'match', extended: true },
   { title: '导入Template', desc: '按业务上下文管理模板与映射。', actionText: '管理', dialog: 'template', extended: true },
   // Workflow：点击「管理」进入工作流定义页（CMD 业务场景 ↔ Warm-Flow 流程定义映射、
   // 部署与泳道图），页内每行可再打开按场景的 Workflow配置

@@ -85,6 +85,25 @@ public class CmdGovernanceController extends BaseController {
     }
 
     /**
+     * 发起跨 BU 客户合并请求（总设计 MERGE 场景：发现候选 → BU 初审 → GC 决策 → 执行合并）
+     * <p>创建 sceneCode=MERGE 的审批待办并启动客户合并审批流；
+     * 批准后自动执行 Golden Record 更新、Legacy 交叉引用与审计。
+     *
+     * @param sourceOneId 合并源 One ID（被并入方）
+     * @param targetOneId 合并目标 One ID（保留的 Golden Record）
+     * @param reason      发起原因
+     * @return 合并审批任务编号 AP-yyyyMMdd-####
+     */
+    @Log(title = "客户合并", businessType = BusinessType.INSERT)
+    @PostMapping("/merge")
+    public R<String> launchMerge(@RequestParam String sourceOneId,
+                                 @RequestParam String targetOneId,
+                                 @RequestParam(required = false) String reason) {
+        // 注意：R.ok(String) 会命中 ok(String msg) 重载把值塞进 msg，必须用 R.data 让 taskNo 落在 data
+        return R.data(governanceService.launchMerge(sourceOneId, targetOneId, reason));
+    }
+
+    /**
      * 查询治理指标卡统计（Suspect / Review / New / Cross-BU / Total）
      *
      * @param bo 统计范围

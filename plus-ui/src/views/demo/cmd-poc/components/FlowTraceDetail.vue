@@ -44,14 +44,14 @@
           <span class="ft-progress-text">{{ trace.completedSteps }}/{{ trace.totalSteps }} · {{ trace.progressPercent }}%</span>
         </div>
 
-        <p class="ft-steps-hint">点击任意步骤，下方会跟着切换到该节点实际发生的内容（字段 / 明细表 / 口径说明）</p>
+        <p class="ft-steps-hint">点击已开始（已完成 / 进行中）的步骤，下方会跟着切换到该节点实际发生的内容（字段 / 明细表 / 口径说明）；未开始的节点点击无反应</p>
         <div class="ft-steps">
           <template v-for="(step, i) in trace.steps" :key="step.nodeCode">
             <div
               class="ft-step"
               :class="[`is-${step.status.toLowerCase()}`, { 'is-active': step.nodeCode === activeNode }]"
-              :title="`查看「${step.nodeName}」明细`"
-              @click="activeNode = step.nodeCode"
+              :title="step.status === 'PENDING' ? `「${step.nodeName}」尚未开始，暂无明细` : `查看「${step.nodeName}」明细`"
+              @click="onStepClick(step)"
             >
               <div class="ft-node">
                 <!-- 恒占位、只切可见性：否则只有选中那一步多一行，步骤条高矮不齐 -->
@@ -222,6 +222,12 @@ const onViewSwimlane = () => {
  * 打开时下方就已经是最相关的那一步，而不是空白或最早的「创建申请」。
  */
 const activeNode = ref('');
+
+/** 步骤点击：只有已开始（已完成 / 进行中 / 已终止）的节点有明细可看，未开始（PENDING）点击不切换 */
+const onStepClick = (step: FlowTraceStepVO) => {
+  if (step.status === 'PENDING') return;
+  activeNode.value = step.nodeCode;
+};
 
 const activeStep = computed<FlowTraceStepVO | undefined>(() =>
   (trace.value?.steps ?? []).find(s => s.nodeCode === activeNode.value)
@@ -455,6 +461,15 @@ watch(() => [props.taskNo, props.detailType], load, { flush: 'post' });
 
   &:hover .ft-node {
     border-color: var(--el-color-primary-light-3);
+  }
+
+  /* 未开始的节点不可点：普通光标、hover 无高亮 */
+  &.is-pending {
+    cursor: default;
+
+    &:hover .ft-node {
+      border-color: var(--el-border-color-lighter);
+    }
   }
 
   .ft-node {

@@ -4,6 +4,7 @@ import cn.dev33.satoken.annotation.SaCheckLogin;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.dromara.cmd.domain.bo.CmdImportJobBo;
+import org.dromara.cmd.domain.bo.CmdImportTemplateMappingBo;
 import org.dromara.cmd.domain.vo.CmdImportJobVo;
 import org.dromara.cmd.domain.vo.CmdImportResultVo;
 import org.dromara.cmd.domain.vo.CmdImportRowVo;
@@ -17,6 +18,7 @@ import org.dromara.common.log.enums.BusinessType;
 import org.dromara.common.mybatis.core.page.PageQuery;
 import org.dromara.common.web.core.BaseController;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -128,6 +130,33 @@ public class CmdImportController extends BaseController {
     @GetMapping("/template/mapping")
     public R<List<CmdImportTemplateMappingVo>> templateMapping(@RequestParam(required = false) String templateCode) {
         return R.ok(importService.selectTemplateMapping(templateCode));
+    }
+
+    /**
+     * 保存模板字段映射（平台管理 › 导入Template：新增上传字段 / 编辑必填与转换规则）
+     * <p>
+     * 管线全链路由 cmd_import_template_mapping 驱动：新增列自动进入模板下载表头、
+     * 上传表头预检、行级 DQ 与行明细 JSON，无需改代码即可扩展上传字段。
+     *
+     * @param bo 映射保存对象（id 为空 = 新增）
+     * @return 处理结果说明
+     */
+    @Log(title = "导入模板", businessType = BusinessType.UPDATE)
+    @PostMapping("/template/mapping")
+    public R<String> saveTemplateMapping(@RequestBody CmdImportTemplateMappingBo bo) {
+        return R.ok("字段映射已保存", importService.saveMapping(bo));
+    }
+
+    /**
+     * 删除模板字段映射（逻辑删除；客户名称 / 信用代码两个主键字段不允许删除）
+     *
+     * @param id 映射主键
+     * @return 处理结果说明
+     */
+    @Log(title = "导入模板", businessType = BusinessType.DELETE)
+    @DeleteMapping("/template/mapping/{id}")
+    public R<String> deleteTemplateMapping(@PathVariable Long id) {
+        return R.ok("字段映射已删除", importService.deleteMapping(id));
     }
 
     /**

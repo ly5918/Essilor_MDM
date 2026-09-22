@@ -116,6 +116,11 @@ public interface CmdConstants {
     String BIZ_TYPE_CHANGE = "CHANGE";
     /** 业务类型：批量导入（审批任务联动批量导入确认流 IMPORT_BATCH） */
     String BIZ_TYPE_IMPORT = "IMPORT";
+    /** 业务类型：跨 BU 客户合并（审批任务联动客户合并审批流 MERGE，总设计 MERGE 场景） */
+    String BIZ_TYPE_MERGE = "MERGE";
+
+    /** 客户主档状态：已合并（merged_to_one_id 指向保留的 Golden Record） */
+    String CUST_STATUS_MERGED = "merged";
 
     // ==================== 统一待办分类 cmd_approval_task.task_category ====================
 

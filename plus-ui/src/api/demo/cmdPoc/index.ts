@@ -50,6 +50,8 @@ import type {
   CmdHierarchyUnassignedRow,
   CmdHierarchyValidateRow,
   CmdIntegrationRunRow,
+  CmdIntegrationEndpointRow,
+  IntegrationEndpointVO,
   CmdImportJobRow,
   CmdImportResultRow,
   CmdImportTemplateRow,
@@ -93,6 +95,7 @@ import type {
   IntegrationConnForm,
   IntegrationRunVO,
   CmdLegacyMappingRow,
+  CmdMergeRecordRow,
   CmdMdFieldRow,
   CmdOneIdPolicyRow,
   CmdOneIdRuleRow,
@@ -101,11 +104,16 @@ import type {
   CmdValueSetRow,
   CmdVersionRow,
   LegacyMappingVO,
+  MergeRecordVO,
   MatchRuleRow,
-  MatchRuleVO,
+  MatchRuleBriefVO,
+  MatchSimulateForm,
+  MatchSimulateResultVO,
+  DqSimulateForm,
   MetadataFieldForm,
   MetadataFieldVO,
   ModelVersionVO,
+  ValueSetForm,
   NotificationVO,
   OcrResultVO,
   OcrRecognizeVO,
@@ -117,6 +125,7 @@ import type {
   ReEvaluateForm,
   ReEvaluateImpactVO,
   RolePermissionVO,
+  TemplateMappingSaveForm,
   TemplateMappingVO,
   TodoVO,
   FlowSceneConfigBo,
@@ -496,6 +505,8 @@ export const listMetadataFields = async (): Promise<MetadataFieldVO[]> => {
       // 早期实现把它当 customerType 过滤条件，导致动态字段被过滤为空。
       // 字段按模型维度适用于全部客户类型，故统一取 All（与原型「根据业务上下文加载字段」一致）。
       customerType: 'All',
+      // 字段所属模型版本号（新增字段时按目标版本落库，便于版本演进）
+      versionNo: row.versionNo,
       // 说明：后端 MdField.status 的语义是「0 正常 / 1 停用」（RuoYi 惯例），不是 Draft/Published。
       // 早期实现按 status==='1' ? Published : Draft 映射，而种子数据全部为 '0'（正常），
       // 结果所有字段被判成 Draft，动态客户字段区渲染为 0 个（表单空白）。
@@ -519,6 +530,7 @@ export const saveMetadataField = async (data: MetadataFieldForm): Promise<string
         isRequired: data.required ? 'Y' : 'N',
         ownerBu: data.bu,
         modelCode: data.customerType,
+        versionNo: data.versionNo,
         // 与 listMetadataFields 的读取映射保持同向：Published → '0'（正常/启用）、Draft → '1'（停用）
         status: data.status === 'Published' ? '0' : '1'
       }
@@ -550,13 +562,44 @@ export const listValueSets = async (): Promise<typeof mock.mockValueSets> => {
   }));
 };
 
-export const publishModelVersion = async (): Promise<string> => {
-  if (!useLive('metadata')) return delay('配置版本v1.5已发布；Business User表单将按元数据自动刷新');
-  return unwrap(request({ url: '/cmd/metadata/version/publish', method: 'put' }));
+/** 保存 / 编辑值集（平台管理：值集维护） */
+export const saveValueSet = async (data: ValueSetForm): Promise<string> => {
+  if (!useLive('metadata')) return delay(`值集 ${data.code} 已保存`);
+  await unwrap(
+    request({
+      url: '/cmd/metadata/valueset',
+      method: 'post',
+      data: {
+        id: data.id,
+        setCode: data.code,
+        setName: data.name,
+        setType: data.type,
+        remark: data.values,
+        status: data.status === 'Published' ? '0' : '1'
+      }
+    })
+  );
+  return `值集 ${data.code} 已保存`;
+};
+
+/** 基于当前已发布版本，克隆出一条新的 Draft 版本 */
+export const createModelVersion = async (): Promise<string> => {
+  if (!useLive('metadata')) {
+    const next = `v${(mock.mockModelVersions.length + 1)}.0`;
+    mock.mockModelVersions.push({ version: next, ruleCount: mock.mockModelVersions[0]?.ruleCount ?? 12, status: 'Draft' });
+    return next;
+  }
+  return unwrap(request({ url: '/cmd/metadata/version', method: 'post' }));
+};
+
+export const publishModelVersion = async (version?: string): Promise<string> => {
+  if (!useLive('metadata')) return delay(`配置版本${version ?? ''}已发布；Business User表单将按元数据自动刷新`);
+  const url = version ? `/cmd/metadata/version/publish?version=${encodeURIComponent(version)}` : '/cmd/metadata/version/publish';
+  return unwrap(request({ url, method: 'put' }));
 };
 
 /* ============================== 4. 数据质量 ============================== */
-/** DQ 规则清单：前端表格直接消费后端行契约（ruleCode / ruleName / dimension / ...） */
+/** DQ 规则清单：行契约 = dq_rule 表实体（ruleCode / ruleName / dimension / fieldCode / checkType ...） */
 export const listDqRules = async (): Promise<DqRuleRow[]> => {
   if (!useLive('dq')) return delay(mock.mockDqRules);
   const rows = await unwrap<DqRuleRow[]>(request({ url: '/cmd/dq/rule/list', method: 'get' }));
@@ -576,7 +619,8 @@ export const deleteDqRule = async (id: number): Promise<string> => {
 export const getDqScorecard = (oneId?: string): Promise<DqScorecardVO> =>
   useLive('dq') ? unwrap(request({ url: '/cmd/dq/scorecard', method: 'get', params: { oneId } })) : delay(mock.mockDqScorecard);
 
-export const simulateDq = (data: Record<string, string>): Promise<DqSimulateResultVO[]> =>
+/** DQ 规则模拟：选择测试数据集（Customer Type / BU / Source System / 样例数）对真实主档执行规则 */
+export const simulateDq = (data: DqSimulateForm): Promise<DqSimulateResultVO> =>
   useLive('dq') ? unwrap(request({ url: '/cmd/dq/simulate', method: 'post', data })) : delay(mock.mockDqSimulate);
 
 export const reEvaluateDq = (data: ReEvaluateForm): Promise<string> =>
@@ -587,19 +631,14 @@ export const getReEvaluateImpact = (): Promise<ReEvaluateImpactVO[]> =>
   useLive('dq') ? unwrap(request({ url: '/cmd/dq/reEvaluate/impact', method: 'get' })) : delay(mock.mockReEvaluateImpact);
 
 /* ============================== 5. 匹配与重复治理 ============================== */
-export const listMatchRules = async (): Promise<MatchRuleVO[]> => {
+/** 匹配规则清单：行契约 = match_rule 表实体 */
+export const listMatchRules = async (): Promise<MatchRuleRow[]> => {
   if (!useLive('match')) return delay(mock.mockMatchRules);
   const rows = await unwrap<MatchRuleRow[]>(request({ url: '/cmd/match/rule/list', method: 'get' }));
-  return (rows ?? []).map(row => ({
-    dimension: row.dimension ?? '',
-    role: row.role ?? '',
-    threshold: row.threshold ?? '',
-    result: row.result ?? '',
-    enabled: row.enabled ?? true
-  }));
+  return rows ?? [];
 };
 
-export const saveMatchRule = async (rule: MatchRuleVO): Promise<string> => {
+export const saveMatchRule = async (rule: MatchRuleRow): Promise<string> => {
   if (!useLive('match')) return delay('匹配规则已保存');
   return unwrap(request({ url: '/cmd/match/rule', method: 'post', data: rule }));
 };
@@ -609,18 +648,19 @@ export const deleteMatchRule = async (id: number): Promise<string> => {
   return unwrap(request({ url: `/cmd/match/rule/${id}`, method: 'delete' }));
 };
 
-export const simulateMatch = async (): Promise<MatchRuleVO[]> => {
-  return useLive('match') ? unwrap(request({ url: '/cmd/match/simulate', method: 'post' })) : delay(mock.mockMatchRules);
+/** 匹配规则样例模拟：样例记录对全量主档执行标准化 + 加权相似度，输出候选与 Exact / Suspected / New 分布 */
+export const simulateMatch = async (data: MatchSimulateForm): Promise<MatchSimulateResultVO> => {
+  return useLive('match') ? unwrap(request({ url: '/cmd/match/simulate', method: 'post', data })) : delay(mock.mockMatchSimulate);
 };
 
 export const getDuplicateCandidate = (): Promise<DuplicateCandidateVO> =>
-  USE_MOCK ? delay(mock.mockDuplicateCandidate) : unwrap(request({ url: '/cmd/duplication/candidate', method: 'get' }));
+  useLive('governance') ? unwrap(request({ url: '/cmd/duplication/candidate', method: 'get' })) : delay(mock.mockDuplicateCandidate);
 
 export const linkExistingOneId = (oneId: string): Promise<string> =>
-  USE_MOCK ? delay(`已关联One ID ${oneId}`) : unwrap(request({ url: '/cmd/duplication/link', method: 'put', data: { oneId } }));
+  useLive('governance') ? unwrap(request({ url: '/cmd/duplication/link', method: 'put', data: { oneId } })) : delay(`已关联One ID ${oneId}`);
 
 export const confirmNewCustomer = (): Promise<string> =>
-  USE_MOCK ? delay('已进入新客户审批') : unwrap(request({ url: '/cmd/duplication/confirmNew', method: 'put' }));
+  useLive('governance') ? unwrap(request({ url: '/cmd/duplication/confirmNew', method: 'put' })) : delay('已进入新客户审批');
 
 /* ============================== 6. 批量导入 ============================== */
 /** 后端任务状态 → 前端展示文案 */
@@ -779,11 +819,34 @@ export const listTemplateMappings = async (templateCode?: string): Promise<Templ
     request({ url: '/cmd/import/template/mapping', method: 'get', params: templateCode ? { templateCode } : {} })
   );
   return (rows ?? []).map(row => ({
+    id: row.id,
+    templateCode: row.templateCode ?? '',
     sourceColumn: row.columnName ?? '',
     targetField: row.fieldCode ?? '',
+    fieldName: row.fieldName ?? '',
+    dataType: row.dataType ?? 'Text',
+    isRequired: row.isRequired ?? 'N',
+    defaultValue: row.defaultValue ?? '',
     transform: row.convertRule ?? '',
     errorStrategy: row.errorStrategy ?? ''
   }));
+};
+
+/**
+ * 保存模板字段映射（平台管理 › 导入Template：新增上传字段 / 编辑必填与转换规则）
+ * <p>管线全链路模板驱动：新增列自动进入模板下载表头、上传表头预检、行级 DQ 与行明细 JSON。</p>
+ */
+export const saveTemplateMapping = async (form: TemplateMappingSaveForm): Promise<string> => {
+  if (!useLive('import')) {
+    return delay(form.id ? `演示模式：字段「${form.columnName}」已更新` : `演示模式：字段「${form.columnName}」已新增`);
+  }
+  return unwrap<string>(request({ url: '/cmd/import/template/mapping', method: 'post', data: form }));
+};
+
+/** 删除模板字段映射（主键字段 legal_name / credit_code 后端会拒绝） */
+export const deleteTemplateMapping = async (id: number | string): Promise<string> => {
+  if (!useLive('import')) return delay('演示模式：字段已移除');
+  return unwrap<string>(request({ url: `/cmd/import/template/mapping/${id}`, method: 'delete' }));
 };
 
 
@@ -1232,6 +1295,8 @@ function toChangeVersionVO(row: CmdCustomerVersionRow): ChangeVersionVO {
     status: row.status ?? '',
     sourceSystem: row.sourceSystem ?? '',
     dqScore: row.dqScore,
+    beforeJson: row.beforeJson ?? null,
+    snapshotJson: row.snapshotJson ?? null,
     createTime: fmtTime(row.createTime)
   };
 }
@@ -1503,14 +1568,63 @@ export const listApprovalInstances = (): Promise<ApprovalInstanceVO[]> =>
 /** 后端 SLA 状态 → 前端展示文案 */
 const SLA_TEXT: Record<string, string> = { NORMAL: '正常', DUE_SOON: '临近', OVERDUE: '超时' };
 
+/**
+ * 后端业务类型 → 页面显示名
+ *
+ * 批量导入确认在库内以业务码 IMPORT 存储（审批回写与流程联动都按业务码判定），
+ * 客户类申请则直接存中文；页面统一显示业务名，与总设计场景命名保持一致
+ * （总设计场景二：批量导入确认流 IMPORT_BATCH）。
+ */
+export const BIZ_TYPE_TEXT: Record<string, string> = {
+  IMPORT: '批量导入确认',
+  CHANGE: '客户变更',
+  MERGE: '跨BU合并'
+};
+
+/** 场景编码 → 页面显示名（「来源」列：这条待办由哪条业务流产生） */
+export const SCENE_TEXT: Record<string, string> = {
+  IMPORT_BATCH: '批量导入',
+  MERGE: '客户合并',
+  CUSTOMER_CREATE: '单条创建',
+  CUSTOMER_CHANGE: '属性变更',
+  CUSTOMER_DEACTIVATE: '逻辑停用',
+  HIERARCHY: '层级调整',
+  DQ_RULE_CHANGE: 'DQ 规则变更',
+  MATCH_RULE_CHANGE: '匹配规则变更',
+  INTEGRATION_FAIL: '集成失败处理'
+};
+
+/**
+ * 发起跨 BU 客户合并请求（总设计 MERGE 场景）
+ * <p>后端创建 sceneCode=MERGE 的审批待办（BU 初审 → GC 决策），
+ * 批准后执行 Golden Record 合并、Legacy 交叉引用与审计。
+ *
+ * @param sourceOneId 合并源 One ID（被并入方）
+ * @param targetOneId 合并目标 One ID（保留的 Golden Record）
+ * @param reason      发起原因
+ * @returns 合并审批任务编号 AP-yyyyMMdd-####
+ */
+export const launchCustomerMerge = async (sourceOneId: string, targetOneId: string, reason?: string): Promise<string> => {
+  if (!useLive('customer')) {
+    return delay(`（演示模式）已发起合并请求：${sourceOneId} → ${targetOneId}`);
+  }
+  return unwrap<string>(
+    request({
+      url: '/cmd/governance/merge',
+      method: 'post',
+      params: { sourceOneId, targetOneId, reason: reason || undefined }
+    })
+  );
+};
+
 /** 后端行 → 前端清单行 */
 function toApprovalTaskVO(row: CmdApprovalTaskRow): ApprovalTaskVO {
   return {
     taskId: row.taskNo ?? '',
     oneId: row.oneId ?? '',
     customerName: row.bizTitle ?? '',
-    taskType: row.bizType ?? '',
-    source: row.sceneCode ?? '',
+    taskType: BIZ_TYPE_TEXT[row.bizType ?? ''] ?? row.bizType ?? '',
+    source: SCENE_TEXT[row.sceneCode ?? ''] ?? row.sceneCode ?? '',
     bu: row.buScope ?? '',
     dq: row.dqScore == null ? '—' : String(row.dqScore),
     match: row.duplicateState ?? '—',
@@ -1594,6 +1708,7 @@ export const getApprovalTaskDetail = async (taskNo: string): Promise<ApprovalTas
   return {
     id: String(vo.id ?? ''),
     oneId: vo.oneId ?? '',
+    bizId: vo.bizId ?? '',
     name: vo.name ?? '',
     scene: vo.scene ?? '',
     submitter: vo.submitter ?? '',
@@ -1846,17 +1961,55 @@ export const deployFlowScene = async (sceneCode: string): Promise<number | strin
 };
 
 /* ============================== 10. One ID ============================== */
+
+/** 后端规则 → 页面 VO（补齐页面需要的全部字段） */
+function toOneIdRuleVO(row: CmdOneIdRuleRow): OneIdRuleVO {
+  return {
+    id: row.id,
+    ruleCode: row.ruleCode ?? '',
+    ruleName: row.ruleName ?? '',
+    status: row.status === '0' ? 'Published' : 'Draft',
+    object: row.scopeType === 'BU' ? 'Customer / BU' : 'Customer / A1',
+    serialLength: `${row.serialLength ?? 6} digits`,
+    prefix: row.prefix ?? '',
+    separator: row.separator ?? '-',
+    pattern: row.pattern ?? '',
+    genStrategy: row.genStrategy ?? 'ON_APPROVE',
+    stablePolicy: row.stablePolicy ?? 'NEVER_CHANGE',
+    reusePolicy: row.reusePolicy ?? 'NEVER_REUSE',
+    seqCode: row.seqCode ?? 'ONE_ID',
+    remark: row.remark ?? ''
+  };
+}
+
 export const getOneIdRule = async (): Promise<OneIdRuleVO> => {
   if (!useLive('oneid')) return delay(mock.mockOneIdRule);
   const row = await unwrap<CmdOneIdRuleRow>(request({ url: '/cmd/oneid/rule', method: 'get' }));
-  return {
-    ruleName: row.ruleName ?? '',
-    status: row.status === '0' ? 'Published' : 'Draft',
-    object: row.scopeType === 'GC' ? 'Customer / A1' : 'Customer / BU',
-    serialLength: `${row.serialLength ?? 6} digits`,
-    prefix: row.prefix ?? '',
-    separator: '-'
-  };
+  return toOneIdRuleVO(row);
+};
+
+/** 保存（更新）当前默认 One ID 规则；保存后状态变为 Draft，需再点「发布规则」才全局生效 */
+export const saveOneIdRule = async (form: OneIdRuleVO): Promise<string> => {
+  if (!useLive('oneid')) return delay('One ID规则已保存为 Draft（演示模式未落库）');
+  const serial = parseInt(form.serialLength, 10) || 6;
+  return unwrap<string>(
+    request({
+      url: '/cmd/oneid/rule',
+      method: 'put',
+      data: {
+        id: form.id,
+        ruleName: form.ruleName,
+        prefix: form.prefix,
+        separator: form.separator,
+        serialLength: serial,
+        scopeType: form.object === 'Customer / BU' ? 'BU' : 'GC',
+        genStrategy: form.genStrategy ?? 'ON_APPROVE',
+        stablePolicy: form.stablePolicy ?? 'NEVER_CHANGE',
+        reusePolicy: form.reusePolicy ?? 'NEVER_REUSE',
+        remark: form.remark
+      }
+    })
+  );
 };
 
 export const publishOneIdRule = async (): Promise<string> => {
@@ -1881,7 +2034,28 @@ export const getOneIdHistory = async (oneId: string): Promise<OneIdEventVO[]> =>
   return (rows ?? []).map(row => ({
     date: row.eventTime ?? '',
     stage: row.eventType ?? '',
-    description: row.eventName ?? ''
+    description: row.eventName ?? '',
+    operator: row.operatorName ?? '',
+    changedFields: row.changedFields ?? null
+  }));
+};
+
+/** 查询某个 One ID 的合并记录（总设计「审计与合并记录」，保留方 / 被合并方双向） */
+export const getMergeRecords = async (oneId: string): Promise<MergeRecordVO[]> => {
+  if (!useLive('oneid')) return delay([]);
+  const rows = await unwrap<CmdMergeRecordRow[]>(request({ url: `/cmd/oneid/${oneId}/mergeRecords`, method: 'get' }));
+  return (rows ?? []).map(row => ({
+    mergeCode: row.mergeCode ?? '',
+    survivorOneId: row.survivorOneId ?? '',
+    mergedOneId: row.mergedOneId ?? '',
+    mergeType: row.mergeType ?? 'MANUAL',
+    mergeStrategy: row.mergeStrategy ?? '',
+    fieldJson: row.fieldJson ?? null,
+    reason: row.reason ?? '',
+    status: row.status ?? 'EFFECTIVE',
+    canRollback: row.canRollback ?? 'Y',
+    remark: row.remark ?? null,
+    createTime: toDateTimeText(row.createTime)
   }));
 };
 
@@ -1892,8 +2066,12 @@ export const listLegacyMappings = async (): Promise<LegacyMappingVO[]> => {
     oneId: row.oneId ?? '',
     sourceSystem: row.sourceSystem ?? '',
     legacyCode: row.sourceCode ?? '',
+    sourceName: row.sourceName ?? '',
+    mappingType: row.mappingType ?? 'LEGACY',
     bu: row.buScope ?? '',
-    status: row.status === '0' ? 'active' : 'inactive'
+    status: row.status === '0' ? 'active' : 'inactive',
+    effectiveFrom: toDateText(row.effectiveFrom),
+    remark: row.remark ?? null
   }));
 };
 
@@ -1929,8 +2107,65 @@ export const retryIntegration = async (runId: string): Promise<string> => {
 
 export const saveIntegrationConn = async (data: IntegrationConnForm): Promise<string> => {
   if (!useLive('integration')) return delay('集成连接已保存，等待连通性测试');
-  const code = await unwrap<string>(request({ url: '/cmd/integration/conn', method: 'post', data }));
-  return `集成连接已保存（${code}），等待连通性测试`;
+  const code = await unwrap<string>(request({ url: '/cmd/integration/endpoint', method: 'post', data }));
+  return `集成端点已保存（${code}），等待连通性测试`;
+};
+
+/** 后端端点状态 → 前端展示 */
+const ENDPOINT_STATUS_TEXT: Record<string, IntegrationEndpointVO['status']> = {
+  '0': 'Active',
+  '1': 'Inactive'
+};
+
+/** 后端端点行 → 前端展示对象 */
+const toEndpointVO = (row: CmdIntegrationEndpointRow): IntegrationEndpointVO => ({
+  id: row.id ?? 0,
+  code: row.endpointCode ?? '',
+  name: row.endpointName ?? '',
+  direction: row.direction === 'INBOUND' ? 'Inbound' : 'Outbound',
+  protocol: row.protocol ?? '',
+  system: row.targetSystem ?? '',
+  url: row.endpointUrl ?? '',
+  authType: row.authType ?? '',
+  bizType: row.bizType ?? '',
+  messageFormat: row.messageFormat ?? '',
+  maxRetry: row.maxRetry ?? 3,
+  timeoutMs: row.timeoutMs ?? 30000,
+  status: ENDPOINT_STATUS_TEXT[row.status ?? '0'] ?? 'Active',
+  period: row.remark ?? '',
+  createTime: row.createTime
+});
+
+/** 端点配置列表（端点配置 Tab） */
+export const listIntegrationEndpoints = async (): Promise<IntegrationEndpointVO[]> => {
+  if (!useLive('integration')) return delay([]);
+  const rows = await unwrap<CmdIntegrationEndpointRow[]>(request({ url: '/cmd/integration/endpoint/list', method: 'get' }));
+  return (rows ?? []).map(toEndpointVO);
+};
+
+/** 保存端点配置（新增 / 编辑） */
+export const saveIntegrationEndpoint = async (data: IntegrationConnForm): Promise<string> => {
+  if (!useLive('integration')) return delay('集成端点已保存，等待连通性测试');
+  const code = await unwrap<string>(request({ url: '/cmd/integration/endpoint', method: 'post', data }));
+  return `集成端点已保存（${code}），等待连通性测试`;
+};
+
+/** 删除端点 */
+export const deleteIntegrationEndpoint = async (id: number): Promise<string> => {
+  if (!useLive('integration')) return delay('端点已删除');
+  return unwrap(request({ url: `/cmd/integration/endpoint/${id}`, method: 'delete' }));
+};
+
+/** 连通性测试 */
+export const testIntegrationConn = async (id: number): Promise<string> => {
+  if (!useLive('integration')) return delay('连通性测试成功：HTTP 200');
+  return unwrap(request({ url: `/cmd/integration/endpoint/${id}/test`, method: 'post' }));
+};
+
+/** 手动发布到端点 */
+export const publishIntegration = async (id: number, count?: number): Promise<string> => {
+  if (!useLive('integration')) return delay('已触发发布，请到运行监控查看结果');
+  return unwrap(request({ url: `/cmd/integration/endpoint/${id}/publish`, method: 'post', params: count ? { count } : undefined }));
 };
 
 /* ============================== 12. 审计 / 权限 / 覆盖 ============================== */

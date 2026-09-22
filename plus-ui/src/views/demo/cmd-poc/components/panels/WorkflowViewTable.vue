@@ -7,7 +7,7 @@
           <span class="wv-count">共 {{ rows.length }} 条</span>
         </div>
         <div class="wv-toolbar-right">
-          <el-input v-model="keyword" placeholder="One ID / 申请编号 / 客户主题" clearable style="width: 240px" @keyup.enter="load" @clear="load" />
+          <el-input v-model="keyword" placeholder="事务ID / 客户主题" clearable style="width: 240px" @keyup.enter="load" @clear="load" />
           <el-button type="primary" plain icon="Refresh" @click="load">刷新</el-button>
         </div>
       </div>
@@ -18,7 +18,7 @@
         type="info"
         :closable="false"
         show-icon
-        title="已激活 = Warm-Flow 实例已启动且未结束。刚提交的客户新建 / 变更 / 层级申请会立刻出现在这里；审批结束（批准 / 拒绝 / 取消）后移入「已完成的工作流」。点 One ID 看这一单走到泳道图哪一步；点「流程跟踪」弹窗查看逐步明细。"
+        title="已激活 = Warm-Flow 实例已启动且未结束。刚提交的客户新建 / 变更 / 层级申请会立刻出现在这里；审批结束（批准 / 拒绝 / 取消）后移入「已完成的工作流」。点「流程跟踪」弹窗查看逐步明细与泳道图。"
       />
 
       <!-- 已激活的工作流：运行中 / 等待人工处理（对齐 Deepblue「工作项」列结构） -->
@@ -31,21 +31,17 @@
         :height="tableHeight"
         class="data-table"
       >
-        <!-- 操作列只留「流程跟踪」；泳道图改由点 One ID 打开（与「已完成的工作流」同一形态） -->
+        <!-- 操作列只留「流程跟踪」；泳道图统一从流程跟踪弹窗内进入 -->
         <el-table-column label="操作" width="118" align="center" fixed="left">
           <template #default="{ row }">
             <el-button link type="primary" size="small" icon="View" @click="onViewTrace(row)">流程跟踪</el-button>
           </template>
         </el-table-column>
-        <el-table-column label="One ID" width="155" fixed="left">
+        <!-- 事务ID = task_no（AP-…）：提交即生成，单条创建 / 批量导入都有，整套工作流全程用它贯穿追踪；
+             纯文本展示，泳道图统一从「流程跟踪」弹窗内进入 -->
+        <el-table-column label="事务ID" width="150" fixed="left">
           <template #default="{ row }">
-            <span
-              v-if="row.oneId"
-              class="wv-oneid"
-              title="点击查看该单的泳道图（按实际执行进度点亮节点）"
-              @click="onViewGraph(row)"
-            >{{ row.oneId }}</span>
-            <span v-else class="wv-oneid-empty">—</span>
+            <span class="wv-oneid">{{ row.taskNo }}</span>
           </template>
         </el-table-column>
         <el-table-column label="类型（当前节点）" min-width="150" show-overflow-tooltip>
@@ -67,8 +63,9 @@
         <el-table-column label="建立日期" width="160" align="center">
           <template #default="{ row }">{{ formatTime(row.createTime) }}</template>
         </el-table-column>
-        <el-table-column label="注释" min-width="150" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.opinion || '—' }}</template>
+        <!-- 发起人（Deepblue 参考页 Creator 列）：原「注释」列 opinion 绝大多数为空，信息量低，替换 -->
+        <el-table-column label="发起人" prop="applicantName" width="100" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.applicantName || '—' }}</template>
         </el-table-column>
         <el-table-column label="模板流程" min-width="150" show-overflow-tooltip>
           <template #default="{ row }">{{ row.sceneName ?? row.sceneCode }}</template>
@@ -108,7 +105,7 @@ defineOptions({ name: 'CmdPocWorkflowViewTable' });
 /**
  * 「流程中心 › 已激活工作流」表格（Deepblue 列结构）。
  * 列结构对齐需求截图（Novartis Deepblue - Customer Data Management China），
- * 「One ID」列承载贯穿 ID，位置紧随「图形」之后（fixed），保证不横向滚动也能看到，
+ * 「事务ID」（task_no，AP-…）承载全程贯穿追踪，位置紧随「操作」之后（fixed），保证不横向滚动也能看到，
  * 可按该 ID 到任意页面搜索框查询。
  *
  * 注意：目前只有 workitem 视图在用（`FlowWorkitemPanel`）；
@@ -156,17 +153,6 @@ const load = async () => {
     loading.value = false;
     recalc();
   }
-};
-
-/** 泳道图（实例视图：按该次执行的实际进度点亮节点） */
-const onViewGraph = (row: unknown) => {
-  const inst = row as FlowInstanceVO;
-  openDialog('flowGraph', {
-    sceneCode: inst.sceneCode,
-    sceneName: inst.sceneName ?? inst.sceneCode,
-    flowCode: inst.flowCode,
-    taskNo: inst.taskNo
-  });
 };
 
 /**
@@ -254,16 +240,11 @@ onMounted(load);
   color: var(--el-text-color-secondary);
 }
 
-/* 贯穿 ID（One ID）：等宽字体高亮，便于跨页面人工比对 */
+/* 贯穿 ID（事务ID）：等宽字体高亮，便于跨页面人工比对（纯文本，不再点击打开泳道图） */
 .wv-oneid {
   font-family: 'Cascadia Mono', Consolas, 'Courier New', monospace;
   font-size: 12px;
   font-weight: 600;
   color: var(--el-color-primary);
-  cursor: pointer;
-}
-
-.wv-oneid-empty {
-  color: var(--el-text-color-placeholder);
 }
 </style>

@@ -53,3 +53,12 @@ nbdist/
 
 application-local.yml
 application-ga.yml
+# 本地调试/联调产物（不入库）
+debug-probe.txt
+build-admin.exit
+build-admin.result
+build-*.log
+mvn-out.log
+compile.log
+backend*.log
+uploads/

@@ -8,6 +8,13 @@
     </div>
 
     <div class="right-menu flex align-center">
+      <!-- 操作手册（帮助文档）：文件在 public/help/ 下维护，更新时替换文件即可 -->
+      <el-tooltip content="操作手册" effect="dark" placement="bottom">
+        <div class="right-menu-item hover-effect" @click="openManual">
+          <el-icon><document /></el-icon>
+        </div>
+      </el-tooltip>
+
       <!-- 全屏（RuoYi 自带） -->
       <el-tooltip content="全屏" effect="dark" placement="bottom">
         <div class="right-menu-item hover-effect"><screenfull /></div>
@@ -37,6 +44,7 @@
         </div>
         <template #dropdown>
           <el-dropdown-menu>
+            <el-dropdown-item command="manual">操作手册</el-dropdown-item>
             <el-dropdown-item command="setLayout">布局设置</el-dropdown-item>
             <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
           </el-dropdown-menu>
@@ -50,7 +58,7 @@
 </template>
 
 <script setup lang="ts">
-import { CaretBottom } from '@element-plus/icons-vue';
+import { CaretBottom, Document } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
@@ -81,6 +89,12 @@ const onRoleChange = () => {
 /** 打开布局设置抽屉 */
 const openSetting = () => settingRef.value?.openSetting();
 
+/** 打开操作手册（新页签；文件位于 public/help/，更新时替换该文件即可） */
+const openManual = () => {
+  const url = `${import.meta.env.BASE_URL}help/cmd-poc-manual.html`;
+  window.open(url, '_blank');
+};
+
 /** 退出登录 */
 const logout = async () => {
   await ElMessageBox.confirm('确定注销并退出系统吗？', '提示', {
@@ -96,6 +110,7 @@ const logout = async () => {
 
 const commandMap: Record<string, () => void> = {
   setLayout: openSetting,
+  manual: openManual,
   logout
 };
 const handleCommand = (command: string) => {

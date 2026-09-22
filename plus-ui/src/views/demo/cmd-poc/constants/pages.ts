@@ -26,6 +26,6 @@ export const PAGE_META: Record<PageId, PocPageMeta> = {
   coverage: { title: 'POC覆盖检查', sub: '12个正式Demo Topic与当前交互原型' },
   audit: { title: '审计中心', sub: '变更、审批、合并、权限与管理员操作' },
   flowDefinition: { title: '工作流定义', sub: 'CMD 业务场景与 Warm-Flow 流程定义映射、部署、按场景配置与泳道图查看' },
-  flowWorkitem: { title: '已激活工作流', sub: '运行中、未结束的实例（One ID 贯穿查询），点 One ID 看泳道图' },
+  flowWorkitem: { title: '已激活工作流', sub: '运行中、未结束的实例（事务ID 贯穿查询），点「流程跟踪」看该单的逐步明细与泳道图' },
   flowDone: { title: '已完成的工作流', sub: '已结束的实例（已批准 / 已拒绝 / 已取消 / 已完成），点「流程跟踪」弹窗看该次执行的完整链路，弹窗内可再看泳道图' }
 };

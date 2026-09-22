@@ -16,7 +16,7 @@
     <!-- 导入任务列表（下载模板 / 新建导入任务按钮在页标题区，与原型一致） -->
     <el-card class="page-card" shadow="never" :body-style="{ padding: '0' }">
       <template #header><span class="card-title">导入任务列表</span></template>
-      <!-- 只保留主要列，列宽合计 ≤ 内容区宽度，避免出现横向滚动条 -->
+      <!-- 全列展示（业务上下文/总行数/待办/提交人/提交时间独立成列） -->
       <el-table
         ref="tableRef"
         v-loading="loading"
@@ -26,27 +26,14 @@
         class="data-table"
       >
         <el-table-column label="Job ID" prop="jobId" width="125" />
-        <el-table-column label="文件" min-width="240" show-overflow-tooltip>
+        <el-table-column label="文件" prop="fileName" min-width="180" show-overflow-tooltip />
+        <el-table-column label="业务上下文" width="130">
           <template #default="{ row }">
-            <div class="file-cell">
-              <span class="file-name">{{ row.fileName }}</span>
-              <span class="file-meta">
-                {{ [row.scene, row.buScope].filter(Boolean).join(' · ') || '—' }} · 共 {{ row.totalRows ?? 0 }} 行
-              </span>
-            </div>
+            <span>{{ [row.scene, row.buScope].filter(Boolean).join(' · ') || '—' }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="结果分流" align="center" min-width="300">
-          <template #default="{ row }">
-            <span class="route-chips">
-              <el-tag type="success" size="small" effect="plain">Exact {{ row.exactCount ?? 0 }}</el-tag>
-              <el-tag type="warning" size="small" effect="plain">Suspected {{ row.suspectedCount ?? 0 }}</el-tag>
-              <el-tag color="#2f73ad" size="small" effect="dark">New {{ row.newCount ?? 0 }}</el-tag>
-              <el-tag type="danger" size="small" effect="plain">Invalid {{ row.invalidCount ?? 0 }}</el-tag>
-            </span>
-          </template>
-        </el-table-column>
-        <el-table-column label="状态" width="120" align="center">
+        <el-table-column label="总行数" prop="totalRows" width="75" align="center" />
+        <el-table-column label="状态" width="130" align="center">
           <template #default="{ row }">
             <el-tooltip :content="statusTip(row)" placement="top">
               <el-tag :type="IMPORT_STATUS_MAP[row.status]?.type ?? 'info'" size="small">
@@ -55,11 +42,25 @@
             </el-tooltip>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="190" align="center">
+        <el-table-column label="待办" width="185" align="center">
+          <template #default="{ row }">
+            <span v-if="pendingOf(row).length" class="todo-chips">
+              <span v-for="t in pendingOf(row)" :key="t" class="todo-chip">{{ t }}</span>
+            </span>
+            <span v-else class="todo-none">—</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="提交人" width="105" align="center">
+          <template #default="{ row }">{{ row.submittedBy || '—' }}</template>
+        </el-table-column>
+        <el-table-column label="提交时间" width="145">
+          <template #default="{ row }">{{ formatTime(row.submittedAt) }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="100" align="center" fixed="right">
           <template #default="{ row }">
             <span class="op-btns">
-              <el-button link type="primary" @click="openDialog('batchResult', { jobId: row.jobId })">查看结果</el-button>
-              <el-button link type="primary" @click="openSource(row)">查看上传数据</el-button>
+              <!-- 上传数据明细已并入「查看结果」弹窗（默认页签），操作列不再单列入口 -->
+              <el-button link type="primary" @click="openResult(row)">查看结果</el-button>
             </span>
           </template>
         </el-table-column>
@@ -148,24 +149,27 @@ const statusTip = (row: ImportJobVO | Record<string, unknown>): string => {
 };
 
 /** 待办（设计「批次任务详情」：数量、原因与待办）——疑似待治理 / New 待审批 */
-const pendingOf = (row: ImportJobVO): string[] => {
+const pendingOf = (row: ImportJobVO | Record<string, unknown>): string[] => {
+  const item = row as ImportJobVO;
   const items: string[] = [];
-  if ((row.suspectedCount ?? 0) > 0) {
-    items.push(`治理 Suspected ${row.suspectedCount} 条`);
+  if ((item.suspectedCount ?? 0) > 0) {
+    items.push(`治理 Suspected ${item.suspectedCount} 条`);
   }
-  if ((row.newCount ?? 0) > 0 && row.status === 'Waiting for Review') {
-    items.push(`审批 New ${row.newCount} 条`);
+  if ((item.newCount ?? 0) > 0 && item.status === 'Waiting for Review') {
+    items.push(`审批 New ${item.newCount} 条`);
   }
   return items;
 };
 
+const formatTime = (value?: string) => (value ? String(value).replace('T', ' ').slice(0, 16) : '—');
+
 /**
- * 查看上传数据：打开「上传数据明细」弹窗，展示这份文件里逐行的原始内容
- * （泳道图入口已移除——它与平台管理 › 工作流定义 › 批量导入确认 是同一个场景视图）
+ * 查看结果：打开「批量结果分流」弹窗，默认页签=上传数据明细（原独立弹窗已合并），
+ * 分流统计与治理在第二页签。泳道图入口已移除（与工作流定义同场景视图）。
  */
-const openSource = (row: ImportJobVO | Record<string, unknown>) => {
+const openResult = (row: ImportJobVO | Record<string, unknown>) => {
   const item = row as ImportJobVO;
-  openDialog('batchSource', {
+  openDialog('batchResult', {
     jobId: item.jobId,
     fileName: item.fileName,
     templateCode: item.templateCode,
@@ -181,13 +185,6 @@ const openSource = (row: ImportJobVO | Record<string, unknown>) => {
   margin: 0;
   font-size: 13px;
   color: var(--g-text2);
-}
-
-.route-chips {
-  display: inline-flex;
-  gap: 4px;
-  flex-wrap: nowrap;
-  justify-content: center;
 }
 
 /* 操作列两个链接按钮保持一行（全局 .el-button.is-link 有 width/min-width 约束，会挤压折行） */
@@ -230,19 +227,26 @@ const openSource = (row: ImportJobVO | Record<string, unknown>) => {
   }
 }
 
-/* 文件列：主信息 + 业务上下文/行数副标题（把原先独立的「业务上下文」「总行数」两列并进来，腾出宽度） */
-.file-cell {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.25;
+/* 待办列：小徽章（治理 Suspected / 审批 New） */
+.todo-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: center;
 }
 
-.file-name {
-  color: var(--g-text);
-}
-
-.file-meta {
+.todo-chip {
+  display: inline-block;
   font-size: 12px;
+  color: #b8791a;
+  background: #fdf5e6;
+  border: 1px solid #f0dcb4;
+  border-radius: 10px;
+  padding: 1px 8px;
+  white-space: nowrap;
+}
+
+.todo-none {
   color: var(--g-text2);
 }
 </style>

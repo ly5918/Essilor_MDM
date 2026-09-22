@@ -37,3 +37,15 @@ components.d.ts
 # 临时文件
 _tmp_*
 ~$*
+# 本地调试/联调产物（不入库）
+probe.txt
+det*.json
+tscheck.exit
+txn-*.png
+tpl*.xlsx
+tpl*.png
+tpl.json
+lint.exit
+
+# Excel 模板调试件
+tpl_*.xlsx

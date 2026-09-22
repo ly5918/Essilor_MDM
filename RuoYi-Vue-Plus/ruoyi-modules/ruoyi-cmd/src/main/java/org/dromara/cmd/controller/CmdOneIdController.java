@@ -4,6 +4,7 @@ import cn.dev33.satoken.annotation.SaCheckLogin;
 import lombok.RequiredArgsConstructor;
 import org.dromara.cmd.domain.AuditEvent;
 import org.dromara.cmd.domain.CmdLegacyMapping;
+import org.dromara.cmd.domain.CmdMergeRecord;
 import org.dromara.cmd.domain.OneIdRule;
 import org.dromara.cmd.domain.vo.OneIdPolicyVo;
 import org.dromara.cmd.service.ICmdPlatformService;
@@ -15,6 +16,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -45,6 +47,18 @@ public class CmdOneIdController extends BaseController {
     @GetMapping("/rule")
     public R<OneIdRule> rule() {
         return R.ok(platformService.selectOneIdRule());
+    }
+
+    /**
+     * 保存（更新）当前默认 One ID 规则
+     *
+     * @param rule 规则修改内容
+     * @return 提示文案
+     */
+    @Log(title = "One ID 规则", businessType = BusinessType.UPDATE)
+    @PutMapping("/rule")
+    public R<String> save(@RequestBody OneIdRule rule) {
+        return R.ok(platformService.saveOneIdRule(rule));
     }
 
     /**
@@ -99,5 +113,16 @@ public class CmdOneIdController extends BaseController {
     @GetMapping("/{oneId}/history")
     public R<List<AuditEvent>> history(@PathVariable String oneId) {
         return R.ok(platformService.selectOneIdHistory(oneId));
+    }
+
+    /**
+     * 查询某个 One ID 的合并记录（总设计「审计与合并记录」：双向——保留方或被合并方）
+     *
+     * @param oneId One ID
+     * @return 合并记录列表
+     */
+    @GetMapping("/{oneId}/mergeRecords")
+    public R<List<CmdMergeRecord>> mergeRecords(@PathVariable String oneId) {
+        return R.ok(platformService.selectMergeRecords(oneId));
     }
 }

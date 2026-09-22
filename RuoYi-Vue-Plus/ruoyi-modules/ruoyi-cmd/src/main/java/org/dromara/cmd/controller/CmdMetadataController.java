@@ -93,4 +93,27 @@ public class CmdMetadataController extends BaseController {
     public R<List<MdValueSet>> valueSetList() {
         return R.ok(platformService.selectValueSetList());
     }
+
+    /**
+     * 新增或修改值集（平台管理：字段与值集 → 值集维护）
+     *
+     * @param valueSet 值集信息
+     * @return 值集编码
+     */
+    @Log(title = "平台管理", businessType = BusinessType.INSERT)
+    @PostMapping("/valueset")
+    public R<String> saveValueSet(@Validated @RequestBody MdValueSet valueSet) {
+        return R.ok("值集已保存", platformService.saveValueSet(valueSet));
+    }
+
+    /**
+     * 基于当前已发布版本，克隆出一条新的 Draft 版本（平台管理：模型版本 → 新建版本）
+     *
+     * @return 新版本号
+     */
+    @Log(title = "平台管理", businessType = BusinessType.INSERT)
+    @PostMapping("/version")
+    public R<String> createVersion() {
+        return R.ok("已创建新版本", platformService.createVersion());
+    }
 }

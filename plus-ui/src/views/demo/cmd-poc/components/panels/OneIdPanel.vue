@@ -6,12 +6,15 @@
         <div class="card-head">
           <span class="card-title">操作区</span>
           <div class="card-toolbar-right">
-            <el-button v-if="!readOnly" plain icon="CopyDocument" @click="onCopy">复制为新版本</el-button>
-            <el-button v-if="!readOnly" type="primary" plain icon="Promotion" @click="onPublish">发布规则</el-button>
+            <el-button v-if="!readOnly" plain icon="CopyDocument" :loading="copying" @click="onCopy">复制为新版本</el-button>
+            <el-button v-if="!readOnly" type="primary" plain icon="Promotion" :loading="publishing" @click="onPublish">发布规则</el-button>
+            <el-button v-if="!readOnly" type="success" plain icon="Check" :loading="saving" @click="onSave">保存规则</el-button>
           </div>
         </div>
       </template>
-      <p class="text-tip">配置 One ID 编码模式、生成策略与 Legacy Code 映射。</p>
+      <p class="text-tip">
+        配置 One ID 编码模式、生成策略与 Legacy Code 映射。保存后规则变为 Draft，必须点击「发布规则」才会全局生效。
+      </p>
     </el-card>
 
     <div class="two-col">
@@ -21,7 +24,7 @@
         <el-form :model="rule" label-width="96px" :disabled="readOnly">
           <el-form-item label="规则名称"><el-input v-model="rule.ruleName" /></el-form-item>
           <el-form-item label="状态">
-            <el-select v-model="rule.status" style="width: 100%">
+            <el-select v-model="rule.status" style="width: 100%" disabled>
               <el-option label="Published" value="Published" />
               <el-option label="Draft" value="Draft" />
             </el-select>
@@ -38,6 +41,9 @@
           </el-form-item>
           <el-form-item label="前缀"><el-input v-model="rule.prefix" /></el-form-item>
           <el-form-item label="分隔符"><el-input v-model="rule.separator" /></el-form-item>
+          <el-form-item v-if="rule.pattern" label="编码模式">
+            <el-input :model-value="rule.pattern" disabled />
+          </el-form-item>
         </el-form>
 
         <!-- 编码预览 -->
@@ -91,7 +97,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { ElMessage } from 'element-plus';
-import { copyOneIdRule, getOneIdRule, listLegacyMappings, listOneIdPolicies, publishOneIdRule } from '@/api/demo/cmdPoc';
+import { copyOneIdRule, getOneIdRule, listLegacyMappings, listOneIdPolicies, publishOneIdRule, saveOneIdRule } from '@/api/demo/cmdPoc';
 import type { LegacyMappingVO, OneIdPolicyVO, OneIdRuleVO } from '@/api/demo/cmdPoc/types';
 import { useCmdPoc } from '../../composables/useCmdPoc';
 import { customerStatusMeta } from '../../constants/options';
@@ -106,16 +112,57 @@ const SERIAL_OPTIONS = ['6 digits', '8 digits'];
 const rule = ref<OneIdRuleVO>({ ruleName: '', status: 'Published', object: 'Customer / A1', serialLength: '6 digits', prefix: 'GC', separator: '-' });
 const policies = ref<OneIdPolicyVO[]>([]);
 const mappings = ref<LegacyMappingVO[]>([]);
+const saving = ref(false);
+const publishing = ref(false);
+const copying = ref(false);
 
 const serialLength = computed(() => parseInt(rule.value.serialLength, 10) || 6);
 const sampleSerial = computed(() => '128'.padStart(serialLength.value, '0'));
 const preview = computed(() => `${rule.value.prefix}${rule.value.separator}${sampleSerial.value}`);
 
-const onCopy = async () => ElMessage.success(await copyOneIdRule());
-const onPublish = async () => ElMessage.success(await publishOneIdRule());
+const loadRule = async () => {
+  rule.value = await getOneIdRule();
+};
+
+const onSave = async () => {
+  if (!rule.value.ruleName.trim()) {
+    ElMessage.warning('规则名称不能为空');
+    return;
+  }
+  saving.value = true;
+  try {
+    const msg = await saveOneIdRule(rule.value);
+    ElMessage.success(msg);
+    await loadRule();
+  } finally {
+    saving.value = false;
+  }
+};
+
+const onCopy = async () => {
+  copying.value = true;
+  try {
+    const msg = await copyOneIdRule();
+    ElMessage.success(msg);
+    await loadRule();
+  } finally {
+    copying.value = false;
+  }
+};
+
+const onPublish = async () => {
+  publishing.value = true;
+  try {
+    const msg = await publishOneIdRule();
+    ElMessage.success(msg);
+    await loadRule();
+  } finally {
+    publishing.value = false;
+  }
+};
 
 onMounted(async () => {
-  rule.value = await getOneIdRule();
+  await loadRule();
   [policies.value, mappings.value] = await Promise.all([listOneIdPolicies(), listLegacyMappings()]);
 });
 </script>

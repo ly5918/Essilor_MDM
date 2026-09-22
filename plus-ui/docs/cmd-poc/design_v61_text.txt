@@ -1,0 +1,173 @@
+Essilor CMD POC 投标功能设计说明 EL
+Essilor CMD POC 功能设计说明
+01执行摘要02设计原则03角色与权限04功能架构05泳道流程蓝图06页面功能说明07Demo需求覆盖08演示故事线09确认与建议边界10设计依据CMD POC FUNCTIONAL DESIGN从需求到可演示产品体验的完整映射
+以单条创建、批量导入和多角色治理为主线，说明角色、页面、规则、One ID、层级、变更、集成与审计如何形成完整业务闭环。
+4类技术角色
+9张泳道流程
+12项正式Demo Topic
+1套响应式HTML
+02 · DESIGN PRINCIPLES
+总体设计原则
+Requirement-led
+以正式Demo清单和BRD核心控制点为主线。
+Role-based
+角色与Scope分离，BU / GC通过Steward Scope区分。
+Configuration-first
+元数据、规则、流程和权限均版本化配置。
+Evidence-based
+每一步均形成状态、版本、差异和审计证据。
+03 · ROLES & ACCESS
+角色与权限设计
+同一平台，不同菜单、数据范围与操作能力
+Business User
+新建客户、OCR、批量导入、错误修复、属性变更、逻辑停用与申请追踪。
+Data Steward
+BU Scope处理本BU治理；GC Scope处理跨BU重复、合并、重大层级与审批决策。
+Platform Admin
+字段和值集、DQ、匹配、One ID、模板、Workflow、权限、集成监控与Retry。
+Auditor
+独立只读查看敏感操作、Before / After、审批轨迹、管理员活动与导出记录。
+04 · FUNCTIONAL ARCHITECTURE
+功能架构
+角色体验层工作台客户管理批量导入治理任务审计中心
+治理能力层MetadataDQ EngineMatch EngineWorkflowOne ID
+数据与集成层Source SnapshotGolden RecordCross ReferenceIntegrationAudit Log
+05 · SWIMLANE BLUEPRINT
+完整业务泳道场景
+前两个为核心主线场景，其后为其他多角色治理场景；点击卡片查看完整泳道图
+统一泳道表达横向7个业务阶段，纵向6条角色泳道；业务主流程使用实线，配置旁路使用虚线，审计作为最终证据链。
+06 · PAGE-BY-PAGE DESIGN
+页面功能与需求映射
+逐页说明业务目的、原型实现与需求依据
+01 · 角色工作台 所有角色
+业务目的支撑角色工作台的角色化业务操作与治理闭环。
+HTML原型实现角色指标、Scope、待办、快捷入口
+对应需求点RFP RBAC / Admin Dashboard / Steward Workbench
+02 · 客户管理 Business User / Steward / Auditor
+业务目的支撑客户管理的角色化业务操作与治理闭环。
+HTML原型实现One ID、客户名称、BU、状态、查询、主档详情与只读控制
+对应需求点RFP Unified UI；BRD Uniformed UI；黄金记录管理
+03 · 新建客户与OCR Business User
+业务目的支撑新建客户与OCR的角色化业务操作与治理闭环。
+HTML原型实现业务上下文、动态字段、营业执照、OCR、置信度、提交校验
+对应需求点Demo OCR；RFP Attachment/OCR/Draft；BRD字段分层
+04 · 批量导入中心 Business User / Steward
+业务目的支撑批量导入中心的角色化业务操作与治理闭环。
+HTML原型实现Import Job、预检、行级DQ、批次去重、存量匹配、部分成功
+对应需求点Demo Duplicate & Migration / CSV；BRD存量增量；Bulk Sync
+05 · 治理任务 BU / GC Data Steward
+业务目的支撑治理任务的角色化业务操作与治理闭环。
+HTML原型实现匹配证据、候选对比、关联已有、确认新建、退回修复
+对应需求点BRD跨BU判定；Demo Duplicate Check；可疑数据处理
+06 · 审批实例 BU / GC Data Steward
+业务目的支撑审批实例的角色化业务操作与治理闭环。
+HTML原型实现High End与Mainstream差异流程、当前节点、SLA和Returned
+对应需求点Demo Approval；RFP Workflow；BRD Cloud / DMS+
+07 · 客户层级 Steward / Auditor
+业务目的支撑客户层级的角色化业务操作与治理闭环。
+HTML原型实现A3-A2-A1、Payer、关系新增、历史归属、Loop Check
+对应需求点Demo Hierarchy / Loop；RFP Hierarchy；BRD三级结构
+08 · 变更与逻辑停用 Business User / Steward / Auditor
+业务目的支撑变更与逻辑停用的角色化业务操作与治理闭环。
+HTML原型实现属性变更、Inactive / Archived、One ID稳定、Before / After
+对应需求点Demo Delete/Change；RFP No Physical Delete；BRD CRUD
+09 · 审计中心 Auditor / Admin / Steward
+业务目的支撑审计中心的角色化业务操作与治理闭环。
+HTML原型实现Who / When / What、Before / After、审批意见与审计导出
+对应需求点Demo Log；RFP Auditability / Change History
+10 · 平台管理总览 Platform Admin
+业务目的支撑平台管理总览的角色化业务操作与治理闭环。
+HTML原型实现字段、值集、DQ、匹配、One ID、Scorecard、模板、Workflow、权限
+对应需求点RFP Rule Management / Scalability
+11 · 字段与值集 Platform Admin
+业务目的支撑字段与值集的角色化业务操作与治理闭环。
+HTML原型实现新建字段、Draft、类型、适用范围、必填、发布、动态表单
+对应需求点Demo Master Data Extension；属性元数据；GC CMD Structure
+12 · DQ规则与Scorecard Platform Admin
+业务目的支撑DQ规则与Scorecard的角色化业务操作与治理闭环。
+HTML原型实现技术/业务规则、Blocking/Warning、质量维度、历史重评估Job
+对应需求点Demo Data Quality；RFP DQ / Scorecard
+13 · 匹配规则 Platform Admin
+业务目的支撑匹配规则的角色化业务操作与治理闭环。
+HTML原型实现信用代码、经营地址、辅助名称、阈值、Exact / Suspected / New
+对应需求点BRD匹配规则；Demo Duplicate Check
+14 · One ID规则 Platform Admin
+业务目的支撑One ID规则的角色化业务操作与治理闭环。
+HTML原型实现编码模式、生成策略、生命周期、历史与Legacy Code映射
+对应需求点Demo One-ID；RFP One-ID Lifecycle；BRD One ID
+15 · 导入模板 Platform Admin
+业务目的支撑导入模板的角色化业务操作与治理闭环。
+HTML原型实现模板版本、来源列、目标字段、转换和错误策略
+对应需求点Demo CSV/Excel；RFP Integration；Fields Analysis
+16 · Workflow配置 Platform Admin
+业务目的支撑Workflow配置的角色化业务操作与治理闭环。
+HTML原型实现流程节点、路由条件、SLA、超时升级和邮件通知
+对应需求点Demo Approval；RFP Workflow & Governance
+17 · 角色与权限 Platform Admin
+业务目的支撑角色与权限的角色化业务操作与治理闭环。
+HTML原型实现菜单、数据范围、字段与操作权限；Auditor只读
+对应需求点RFP RBAC / Row / Column Security；BRD RACI
+18 · 集成监控 Platform Admin
+业务目的支撑集成监控的角色化业务操作与治理闭环。
+HTML原型实现Run ID、方向、目标系统、错误、Retry / Resubmit和任务日志
+对应需求点Demo System Integration；RFP Integration / Monitoring
+19 · POC覆盖检查 Platform Admin
+业务目的支撑POC覆盖检查的角色化业务操作与治理闭环。
+HTML原型实现12个Demo Topic状态、HTML证据与POC边界
+对应需求点Presentation-DemoList；Bidding Traceability
+07 · DEMO TRACEABILITY
+12个正式Demo Topic覆盖矩阵
+覆盖状态以当前原型和泳道为准
+ | # | Demo Topic | 覆盖状态 | HTML证据 | 商务说明
+ | 1 | AAD Login | 部分覆盖 | 角色切换、菜单与Scope变化 | 真实AAD与Session可现场示意
+ | 2 | Approval Process | 已增强 | High End / Mainstream两条流程实例 | 最终节点客户确认
+ | 3 | One-ID Management | 已增强 | 编码规则、生成策略、生命周期与Legacy Mapping | 编码格式为POC示例
+ | 4 | Duplicate Check & Migration | 已覆盖 | 候选对比、合并/新建、映射保留 | 保留Source Snapshot
+ | 5 | OCR | 已覆盖 | 证照识别、置信度、人工确认 | POC可模拟服务
+ | 6 | Delete / Change | 已增强 | 变更、停用、Before/After与后台结果 | 无物理删除
+ | 7 | Data Quality | 已增强 | 规则、Scorecard、版本与历史重评估 | 权重为Proposal
+ | 8 | Hierarchy | 已覆盖 | A3-A2-A1、Payer与关系版本 | 支持历史扩展
+ | 9 | Log | 已增强 | Who/When/What、差异与审批证据 | Auditor独立只读
+ | 10 | Loop Check | 已覆盖 | 直接/间接循环阻断与冲突路径 | 完整证据
+ | 11 | System Integration | 部分覆盖 | 任务、API/File、Retry / Resubmit | 通知与Payload可深化
+ | 12 | Master Data Extension | 已覆盖 | 字段Draft、发布与动态业务表单 | 模板/API需版本化
+08 · DEMO STORYLINE
+建议现场演示故事线
+用连续故事代替逐菜单翻页
+故事一：单条创建与跨BU识别
+Business User通过手工或OCR创建，系统执行DQ与匹配，BU初审，GC决策，关联已有One ID并发布。
+故事二：批量导入与部分成功
+上传Excel / CSV，完成文件预检、行级DQ、去重和四类分流，异常进入独立治理与修复。
+故事三：变更、停用与合规
+发起关键属性变更或逻辑停用，审批后形成新版本或Inactive状态，One ID稳定并保留审计证据。
+09 · DESIGN BOUNDARIES
+客户确认内容与供应商建议
+避免将POC方案误解为最终签核设计
+已在项目材料中明确
+One ID稳定，字段变化不重新生成
+无物理删除，逻辑状态和历史必须保留
+信用代码与经营地址为主要匹配依据
+A3-A2-A1、Payer与Loop Check
+AAD、SSO、RBAC、行列级安全与审计
+API、File、Batch / Real-time与Retry
+POC建议，需后续确认
+One ID最终编码、前缀和位数
+High End / Mainstream最终审批节点
+DQ Scorecard维度、权重和重评估策略
+匹配算法、字段权重和阈值
+批量部分成功与高风险处理策略
+Workflow部署位置及后台物理模型
+10 · SOURCE BASELINE
+设计依据
+用于投标说明的文档基线
+RFP与BRD
+功能、NFR、One ID、跨BU、层级、CRUD、UI、集成、安全和审计。
+Presentation-DemoList
+12个正式Demo Topic与现场演示问题。
+功能清单与Q&A
+元数据、匹配、质量、Workflow、权限、Automation与待确认边界。
+Fields Analysis / GC CMD Structure
+Cloud、DMS+、SAP字段映射、GC字段、Partner Function与值集。
+Essilor CMD POC · Functional Design & Requirement Traceability
+泳道图完整流程连接视图×
+ 

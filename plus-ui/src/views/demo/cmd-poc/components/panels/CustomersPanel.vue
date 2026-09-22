@@ -1,20 +1,8 @@
 <template>
   <section class="page list-page">
-    <!-- 筛选条件 / 操作区 -->
-    <el-card class="page-card" shadow="never" :body-style="{ padding: '16px 20px' }">
-      <template #header>
-        <span class="card-title">筛选条件</span>
-      </template>
-
-      <el-alert class="permission-note poc-note" :type="readOnly ? 'info' : 'success'" :closable="false" show-icon>
-        <template #title>
-          <b>当前数据权限：{{ role.scope }}</b>
-          <span class="note-sep">·</span>
-          <span>{{ readOnly ? '只读查询，不显示创建、编辑、停用按钮。' : '记录、字段和操作按钮按角色与Scope动态控制。' }}</span>
-        </template>
-      </el-alert>
-
-      <div class="card-toolbar m-t-12">
+    <!-- 筛选条件 / 操作区（降噪：去掉独立卡头与整条彩色提示，提示压成一行小字） -->
+    <el-card class="page-card" shadow="never" :body-style="{ padding: '14px 20px 12px' }">
+      <div class="card-toolbar">
         <el-input
           v-model="query.keyword"
           placeholder="名称、One ID、信用代码"
@@ -33,7 +21,15 @@
         </el-select>
         <el-button type="primary" plain icon="Search" @click="onSearch">查询</el-button>
         <el-button icon="Refresh" @click="onReset">重置</el-button>
-        <span class="query-hint">条件变化后会自动查询数据库，无需重复点击</span>
+      </div>
+
+      <div class="filter-meta">
+        <i class="filter-led" :class="readOnly ? 'is-readonly' : 'is-editable'"></i>
+        <b>数据权限：{{ role.scope }}</b>
+        <span class="filter-sep">·</span>
+        <span>{{ readOnly ? '只读查询，不显示创建、编辑、停用按钮' : '记录、字段和操作按钮按角色与 Scope 动态控制' }}</span>
+        <span class="filter-sep">·</span>
+        <span>条件变化后自动查询</span>
       </div>
     </el-card>
 
@@ -41,18 +37,10 @@
     <el-card class="page-card" shadow="never" :body-style="{ padding: '0' }">
       <template #header>
         <span class="card-title">客户主档列表</span>
-        <span class="card-title-note">共 {{ total }} 条 · 当前页 {{ rows.length }} 条</span>
+        <!-- 条数已在下方分页器体现，卡头不再重复 -->
       </template>
 
-      <!-- 指标概览：后端按同一筛选条件实时统计，与下方列表口径一致 -->
-      <div class="cust-kpis">
-        <div v-for="item in kpis" :key="item.label" class="cust-kpi">
-          <b>{{ item.value }}</b>
-          <span>{{ item.label }}</span>
-        </div>
-      </div>
-
-      <!-- 列宽合计≈950px，可在 1280 宽窗口下完整放下（1280 视口内容区约 975px），因此不出现横向滚动条 -->
+      <!-- 列宽合计≈960px，可在 1280 宽窗口下完整放下（1280 视口内容区约 975px），因此不出现横向滚动条 -->
       <el-table
         ref="tableRef"
         v-loading="loading"
@@ -64,11 +52,14 @@
       >
         <el-table-column label="One ID" prop="oneId" width="108" fixed="left">
           <template #default="{ row }">
-            <el-link type="primary" :underline="false" @click="onViewDetail(row)">{{ row.oneId }}</el-link>
+            <!-- 等宽中性色 + 悬浮才变蓝：每行少一个高饱和蓝字，扫描更安静 -->
+            <el-tooltip content="查看客户主档详情" placement="top">
+              <span class="cust-oneid" @click="onViewDetail(row)">{{ row.oneId }}</span>
+            </el-tooltip>
           </template>
         </el-table-column>
 
-        <el-table-column label="客户名称" min-width="176" show-overflow-tooltip>
+        <el-table-column label="客户名称" min-width="154" show-overflow-tooltip>
           <template #default="{ row }">
             <div class="cust-name-cell">
               <span class="cust-name-cn"><DetailValue :value="row.legalName" tip="" /></span>
@@ -79,7 +70,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="层级归属" width="80" align="center">
+        <el-table-column label="层级归属" width="78" align="center">
           <template #default="{ row }">
             <el-tag
               v-if="hierarchyOf(row).mounted"
@@ -100,7 +91,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="所属 BU" min-width="92">
+        <el-table-column label="所属 BU" min-width="88">
           <template #default="{ row }">
             <DetailValue :value="row.bu" tip="" />
             <el-tooltip v-if="row.gcScopeFlag === 'Y'" content="跨 BU，全局可见" placement="top">
@@ -109,13 +100,13 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="统一社会信用代码" min-width="138">
+        <el-table-column label="统一社会信用代码" min-width="138" show-overflow-tooltip>
           <template #default="{ row }">
             <DetailValue :value="row.creditCode" mono tip="" />
           </template>
         </el-table-column>
 
-        <el-table-column label="来源" min-width="80">
+        <el-table-column label="来源" min-width="74">
           <template #default="{ row }">
             <DetailValue :value="row.sourceSystem" tip="" />
           </template>
@@ -127,12 +118,10 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="最近更新" min-width="88" align="center">
+        <el-table-column label="最近更新" min-width="150" align="center">
           <template #default="{ row }">
-            <!-- 单元格只留日期（列窄），完整时间戳放悬浮提示 -->
-            <el-tooltip :content="fmtDateTime(row.updatedAt)" :disabled="!row.updatedAt" placement="top">
-              <span class="cust-mono">{{ fmtDate(row.updatedAt) || '—' }}</span>
-            </el-tooltip>
+            <!-- 完整时间戳：日期 + 时分秒 -->
+            <span class="cust-mono">{{ fmtDateTime(row.updatedAt) || '—' }}</span>
           </template>
         </el-table-column>
 
@@ -159,9 +148,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
-import { getCustomerStats, listCustomers } from '@/api/demo/cmdPoc';
-import type { CustomerQuery, CustomerStats, CustomerVO } from '@/api/demo/cmdPoc/types';
+import { onMounted, onUnmounted, ref, watch } from 'vue';
+import { listCustomers } from '@/api/demo/cmdPoc';
+import type { CustomerQuery, CustomerVO } from '@/api/demo/cmdPoc/types';
 import DetailValue from '../DetailValue.vue';
 import { useCmdPoc } from '../../composables/useCmdPoc';
 import { useListTableHeight } from '../../composables/useListTableHeight';
@@ -192,15 +181,6 @@ const page = ref({ current: 1, size: 10 });
 const rows = ref<CustomerVO[]>([]);
 /** 当前筛选条件命中的总条数（用于分页器） */
 const total = ref(0);
-/** 指标概览（后端按同一筛选条件统计） */
-const stats = ref<CustomerStats>({
-  total: 0,
-  activeCount: 0,
-  pendingCount: 0,
-  crossBuCount: 0,
-  duplicateCount: 0,
-  avgDqScore: 0
-});
 
 /**
  * 客户 → 层级归属（客户列表「层级归属」列）
@@ -217,9 +197,8 @@ const hierarchyOf = (row: unknown) => {
 
 const levelTagType = (level: string) => (level === 'A3' ? 'primary' : level === 'A2' ? 'warning' : 'success');
 
-/** 单元格只展示日期（列宽有限），完整到分钟的时间戳交给 tooltip */
-const fmtDate = (value?: string) => (value ? value.replace('T', ' ').slice(0, 10) : '');
-const fmtDateTime = (value?: string) => (value ? value.replace('T', ' ').slice(0, 16) : '');
+/** 最近更新列展示完整时间戳：日期 + 时分秒 */
+const fmtDateTime = (value?: string) => (value ? value.replace('T', ' ').slice(0, 19) : '');
 
 /** 疑似重复行整行淡红，扫列表时最先看到风险数据 */
 const rowClass = ({ row }: { row: CustomerVO }) => (row.duplicateFlag === 'Y' ? 'cust-row-warn' : '');
@@ -233,20 +212,15 @@ const currentFilters = (): CustomerQuery => ({
 });
 
 /**
- * 查询：条件 + 分页一起提交后端，列表与指标带并行实时查库。
+ * 查询：条件 + 分页一起提交后端，每次都实时查库。
  * 不再做前端本地过滤，数据以数据库当前值为准（他人在别处改动后刷新即可看到）。
  */
 const doQuery = async () => {
   loading.value = true;
   try {
-    const filters = currentFilters();
-    const [pageResult, statsResult] = await Promise.all([
-      listCustomers({ ...filters, pageNum: page.value.current, pageSize: page.value.size }),
-      getCustomerStats(filters)
-    ]);
+    const pageResult = await listCustomers({ ...currentFilters(), pageNum: page.value.current, pageSize: page.value.size });
     rows.value = pageResult.rows;
     total.value = pageResult.total;
-    stats.value = statsResult;
     // 条件收紧把当前页挤出范围时（例如第 3 页筛完只剩 1 页），自动落到最后一个可用页
     const maxPage = Math.max(1, Math.ceil(pageResult.total / page.value.size));
     if (page.value.current > maxPage) {
@@ -289,15 +263,6 @@ watch(() => [page.value.current, page.value.size], () => scheduleQuery(0));
 /** 新建 / 审批等操作后（badgeVersion 自增）自动刷新，保证看到最新库值 */
 watch(badgeVersion, () => scheduleQuery(0));
 
-const kpis = computed(() => [
-  { label: '客户总数', value: stats.value.total },
-  { label: 'Active', value: stats.value.activeCount },
-  { label: '待处理', value: stats.value.pendingCount },
-  { label: '跨 BU 全局', value: stats.value.crossBuCount },
-  { label: '疑似重复', value: stats.value.duplicateCount },
-  { label: '平均质量分', value: stats.value.avgDqScore }
-]);
-
 /** 查询按钮：按当前条件立即查库，列表直接刷新（不再弹出结果弹窗） */
 const onSearch = () => scheduleQuery(0, true);
 
@@ -325,46 +290,39 @@ onUnmounted(() => {
 </script>
 
 <style scoped lang="scss">
-.card-title-note {
-  margin-left: 10px;
-  font-size: 12px;
-  font-weight: 400;
-  color: var(--g-text2);
-}
-
-.query-hint {
-  margin-left: 4px;
-  font-size: 12px;
-  color: var(--g-text2);
-}
-
-.cust-kpis {
+/* 权限与查询说明：压成一行 12px 小字，避免整条彩色 alert 占据一个视觉带 */
+.filter-meta {
   display: flex;
-  gap: 10px;
+  align-items: center;
   flex-wrap: wrap;
-  padding: 12px 16px 4px;
-}
-
-.cust-kpi {
-  flex: 1;
-  min-width: 110px;
-  background: var(--g-content);
-  border: 1px solid var(--g-divider);
-  border-radius: 8px;
-  padding: 8px 12px;
+  gap: 0 6px;
+  margin-top: 10px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--g-text2);
 
   b {
-    display: block;
-    font-size: 18px;
+    font-weight: 600;
     color: var(--g-text);
-    line-height: 1.3;
-    margin-bottom: 2px;
+  }
+}
+
+.filter-led {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+
+  &.is-editable {
+    background: #1f9254;
   }
 
-  span {
-    font-size: 12px;
-    color: var(--g-text2);
+  &.is-readonly {
+    background: #909399;
   }
+}
+
+.filter-sep {
+  opacity: 0.5;
 }
 
 .cust-name-cell {
@@ -389,6 +347,21 @@ onUnmounted(() => {
 .cust-name-sub {
   font-size: 12px;
   color: var(--g-text2);
+}
+
+/* One ID：中性色等宽文字，悬浮才提示可点，避免每行两个蓝色链接的视觉噪音 */
+.cust-oneid {
+  font-family: Consolas, Monaco, monospace;
+  font-size: 12px;
+  color: var(--g-text);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.15s;
+
+  &:hover {
+    color: var(--el-color-primary);
+    text-decoration: underline;
+  }
 }
 
 /* 等宽 / One ID 链接统一不折行，保证行高一致（列窄时靠省略号而不是换行） */
@@ -438,12 +411,6 @@ onUnmounted(() => {
   :deep(.el-button.is-link) {
     padding: 2px 0;
     font-size: 12.5px;
-  }
-
-  /* One ID 链接不折行，避免窄列把 ID 拆成两行 */
-  :deep(.el-link) {
-    font-size: 12.5px;
-    white-space: nowrap;
   }
 }
 

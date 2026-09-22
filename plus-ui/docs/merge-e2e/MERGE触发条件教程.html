@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>MERGE 客户合并 · 触发条件与全流程教程</title>
+<style>
+  body { font-family: "Microsoft YaHei", sans-serif; max-width: 1080px; margin: 0 auto; padding: 32px 24px; color: #1f2d3d; background: #f7f9fb; line-height: 1.75; }
+  h1 { font-size: 26px; border-bottom: 3px solid #176c9f; padding-bottom: 12px; }
+  h2 { font-size: 20px; margin-top: 40px; color: #176c9f; border-left: 5px solid #176c9f; padding-left: 12px; }
+  h3 { font-size: 16px; margin-top: 24px; }
+  .card { background: #fff; border: 1px solid #e4e9f0; border-radius: 10px; padding: 20px 24px; margin: 16px 0; box-shadow: 0 1px 3px rgba(0,0,0,.04); }
+  .tag { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; margin-right: 6px; }
+  .tag-blue { background: #e8f4fd; color: #176c9f; }
+  .tag-green { background: #e8f7ee; color: #2e7d32; }
+  .tag-orange { background: #fff3e0; color: #db7c18; }
+  .tag-red { background: #fdecec; color: #c0392b; }
+  img { max-width: 100%; border: 1px solid #dfe6ee; border-radius: 8px; margin: 10px 0; box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; background: #fff; }
+  th, td { border: 1px solid #dfe6ee; padding: 8px 12px; font-size: 14px; text-align: left; }
+  th { background: #eef4fa; }
+  code { background: #eef2f7; padding: 1px 6px; border-radius: 4px; font-size: 13px; }
+  .step { display: flex; gap: 10px; margin: 8px 0; }
+  .step-no { flex: 0 0 26px; height: 26px; background: #176c9f; color: #fff; border-radius: 50%; text-align: center; line-height: 26px; font-size: 14px; }
+</style>
+</head>
+<body>
+
+<h1>MERGE 客户合并 · 触发条件与全流程教程</h1>
+<p>本文档基于 2026-09-21 的真实端到端走查（截图均为实际运行画面），讲解系统在哪些情况下会触发 MERGE、以及合并审批如何流转与生效。</p>
+
+<h2>一、什么情况会触发 MERGE</h2>
+<div class="card">
+<table>
+  <tr><th style="width:220px">触发场景</th><th>条件</th><th>系统行为</th></tr>
+  <tr>
+    <td>① 单条创建命中疑似重复<br><span class="tag tag-blue">Duplicate Check</span></td>
+    <td>新建客户提交时，<b>客户法定名称</b>与存量主档相同（信用代码不同）；且与候选主档<b>归属 BU 不同</b>（跨BU）</td>
+    <td>新主档 <code>match_state=SUSPECTED</code>；自动生成<b>跨BU治理任务</b>（CROSS_BU / 风险 High / 72h SLA，备注「需 GC Scope 决策」）</td>
+  </tr>
+  <tr>
+    <td>② 单条创建命中精准重复</td>
+    <td><b>统一社会信用代码</b>与存量 active 主档相同（EXACT）</td>
+    <td><code>match_state=EXACT</code>；创建审批批准后自动关联到存量 One ID，不新建主档</td>
+  </tr>
+  <tr>
+    <td>③ 批量导入 Suspected 行跨BU命中</td>
+    <td>批量上传批次中某行判定为疑似重复，且命中的存量主档与批次 BU 不同</td>
+    <td>该行升级为 <b>MERGE 审批</b>（bizType=IMPORT 的行级合并模式），批准后执行行级 LINK</td>
+  </tr>
+  <tr>
+    <td>④ 手动发起合并<br><span class="tag tag-orange">治理中心</span></td>
+    <td>在客户主档详情点「发起合并」，选择要并入的目标 One ID</td>
+    <td>生成 <code>bizType=MERGE</code> 审批待办（AP-…），跨BU 时风险 High；批准到「结束」即执行合并</td>
+  </tr>
+</table>
+<p><b>同名 ≠ 同客户</b>：仅名称相同判为 SUSPECTED（人工决策）；信用代码相同判为 EXACT（系统强证据）。跨BU 疑似重复必须由 GC Scope 级别决策，这是主数据治理的核心管控点。</p>
+</div>
+
+<h2>二、场景① 实测：单条创建触发跨BU疑似重复</h2>
+<div class="card">
+<h3>操作步骤</h3>
+<div class="step"><div class="step-no">1</div><div>以 Business User 登录 → 「客户管理」→「新建客户」</div></div>
+<div class="step"><div class="step-no">2</div><div>客户法定名称填 <b>上海清视眼镜有限公司</b>（与存量 GC-000001 / GC-23F62B7A 同名），信用代码填一个新值 <code>91310000E2ETEST09</code>，BU=High End</div></div>
+<div class="step"><div class="step-no">3</div><div>点「提交申请」→ 系统落主档（pending）+ Duplicate Check + 生成审批待办</div></div>
+<img src="s1-04-dialog-filled.png" alt="新建客户表单已填写重复名称">
+<p>提交成功提示：<code>客户申请已提交：One ID GC-BDD3165D｜申请编号 AP-20260921-0010，已进入「BU Scope 初审」</code></p>
+<img src="s1-05-after-submit.png" alt="提交成功提示">
+<h3>系统内部发生了什么（数据库验证）</h3>
+<ul>
+  <li>新主档 <code>GC-BDD3165D</code>：<code>match_state=SUSPECTED</code>、status=pending</li>
+  <li>治理任务 <code>GOV-20260921-0001</code>：类型 <b>CROSS_BU</b>、风险 <b>High</b>、72h 到期、备注「跨BU疑似重复，需 GC Scope 决策」</li>
+</ul>
+</div>
+
+<h2>三、场景④ 实测：手动发起合并（两个入口）</h2>
+<div class="card">
+<p><b>入口 A（推荐）· 治理与审批详情</b>：Steward 在「治理与审批」选中 SUSPECTED 任务后，右侧详情头部有<b>「发起合并」</b>按钮，治理证据区自动列出命中详情（命中 One ID / 命中信用代码 / 跨BU标记），点击即以此客户为合并源打开合并弹窗：</p>
+<img src="s5-01-detail-with-merge-btn.png" alt="审批详情的发起合并按钮与治理证据">
+<img src="s5-02-merge-dialog-from-approval.png" alt="从审批详情直接打开合并申请">
+<p><b>入口 B · 客户详情</b>：客户主档详情弹窗头部「发起合并」按钮（下文步骤）。</p>
+<h3>入口 B 操作步骤</h3>
+<div class="step"><div class="step-no">1</div><div>「客户管理」搜索 <code>GC-23F62B7A</code>（High End 的同名重复档）→「查看客户」</div></div>
+<div class="step"><div class="step-no">2</div><div>详情弹窗头部点<b>「发起合并」</b></div></div>
+<div class="step"><div class="step-no">3</div><div>合并目标选 <code>GC-000001 上海清视眼镜有限公司（Mainstream）</code>，填写业务原因 →「发起合并申请」</div></div>
+<img src="s2-02-detail-dialog.png" alt="客户详情弹窗（头部有发起合并按钮）">
+<img src="s2-04-merge-dialog-filled.png" alt="合并申请弹窗：选目标 One ID + 填原因">
+<p>提交成功提示：<code>合并请求已发起：AP-20260921-0011（GC-23F62B7A → GC-000001）</code></p>
+<div class="card" style="background:#f0f7ff">
+<b>合并语义</b>：源记录（GC-23F62B7A）并入目标（GC-000001）。Golden Record 保持目标 One ID 稳定，源记录状态改为「已合并」并建立 Legacy 交叉引用，造福下游系统映射。
+</div>
+</div>
+
+<h2>四、审批流转：BU 初审 → 确认合并 → 自动执行</h2>
+<div class="card">
+<p>MERGE 任务在<b>治理与审批</b>列表出现（类型=MERGE，场景=客户合并，风险 High）：</p>
+<img src="s3-02-merge-detail.png" alt="审批详情：客户合并任务">
+<p>点「流程跟踪」可看 MERGE 场景专属的 <b>BPMN 泳道图</b>（10 阶段），当前节点高亮：</p>
+<img src="s3-03-flow-trace-swimlane.png" alt="MERGE 流程跟踪泳道图（进行中）">
+<p>BU Steward 点「确认合并」批准（本例业务决策在 BU 初审即完成；如需 GC 决策会在 GC Scope 决策节点继续处理）：</p>
+<img src="s3-05-after-bu-approve.png" alt="确认合并已执行">
+</div>
+
+<h2>五、合并生效与完成态</h2>
+<div class="card">
+<h3>数据库验证</h3>
+<table>
+  <tr><th>One ID</th><th>status</th><th>merged_to_one_id</th></tr>
+  <tr><td>GC-23F62B7A</td><td><span class="tag tag-red">merged</span></td><td>GC-000001</td></tr>
+  <tr><td>GC-000001</td><td><span class="tag tag-green">active</span></td><td>—（Golden Record 不变）</td></tr>
+</table>
+<h3>前端证据</h3>
+<p>客户列表状态列显示「Merged · 已合并」：</p>
+<img src="s4-02-customer-merged-status.png" alt="客户列表合并状态">
+<p>详情头部同样标记，并新增「合并记录」页签：</p>
+<img src="s4-03-merged-detail.png" alt="客户详情已合并标记">
+<p>「已完成的工作流」出现 MERGE 记录（事务ID AP-20260921-0011，已批准，进度 100%）：</p>
+<img src="s4-04-flow-done-real.png" alt="已完成工作流 MERGE 记录">
+<p>完成态泳道图 10/10 全部 complete，审批与合并记录页签可查每一步审计（执行合并 SUCCESS）：</p>
+<img src="s4-05-merge-done-swimlane.png" alt="MERGE 完成态泳道图">
+</div>
+
+<h2>六、疑似重复的审批动作（对齐总设计，2026-09-21 更新）</h2>
+<div class="card">
+<p>按总设计 V6.1，<b>疑似重复的审批任务不再提供普通「批准 / 拒绝」</b>，必须做出合并方向的决策：</p>
+<table>
+  <tr><th>节点</th><th>动作集</th><th>说明</th></tr>
+  <tr><td>BU Scope 初审（跨BU）</td><td><b>升级GC决策</b> / 排除重复 / 退回补充</td><td>BU 无权跨BU合并，只能升级、排除或退回</td></tr>
+  <tr><td>BU Scope（同名BU）</td><td>确认合并 / 排除重复·继续新建 / 退回补充</td><td>Same-BU 由 BU 直接决策</td></tr>
+  <tr><td>GC Scope 决策</td><td><b>确认关联已有</b> / 创建新主档 / 退回BU修复</td><td>跨BU最终决策权在 GC</td></tr>
+  <tr><td>MERGE 合并审批</td><td>确认合并 / 拒绝合并 / 退回BU</td><td>合并待办专用动作集</td></tr>
+</table>
+<h3>实测：BU 初审动作集（AP-20260921-0013）</h3>
+<img src="s6-01-bu-detail-actions.png" alt="BU 初审动作集">
+<p>点击「升级GC决策」后任务推进到 GC Scope 决策，BU 待办列表中消失：</p>
+<img src="s6-02-bu-escalated.png" alt="升级后 BU 待办">
+<h3>实测：GC Scope 决策动作集</h3>
+<p>GC 工作台高优先级列表直达（处理 → 全局治理决策），详情带重复证据逐字段比对：</p>
+<img src="s6-02c-after-login-gc.png" alt="GC 工作台待处理">
+<img src="s6-03-gc-detail-actions.png" alt="GC 决策动作集">
+</div>
+
+<h2>七、合并目标候选收敛（只列重复候选）</h2>
+<div class="card">
+<p>发起合并弹窗的「合并目标」下拉<b>只列出与源客户构成重复命中的存量主档</b>（同名或同信用代码），并标注命中原因；不再列出全部客户。无候选时下拉禁用并提示「未发现重复候选」。</p>
+<p>说明：「发起合并」入口仅对 <b>active</b> 主档开放——pending 客户的重复决策在审批任务里完成（升级GC / 排除 / 确认关联已有），active 存量之间的重复才走 MERGE 审批。</p>
+<img src="s7-01-merge-dialog-candidates.png" alt="合并弹窗候选">
+<img src="s7-02-candidate-dropdown.png" alt="候选下拉只有重复命中项">
+</div>
+
+<h2>六、你可以自己动手验证的路径</h2>
+<div class="card">
+<ol>
+  <li><b>触发疑似重复</b>：Business User → 新建客户，名称填「上海清视眼镜有限公司」+ 新信用代码 → 提交后到数据库看 <code>cmd_customer.match_state</code> 与 <code>cmd_governance_task</code>。</li>
+  <li><b>触发精准重复</b>：新建客户时信用代码直接填存量值 <code>91310000672670432F</code>（GC-000001）→ EXACT，批准后自动关联。</li>
+  <li><b>手动合并</b>：任一同名客户详情 →「发起合并」→ Steward 审批批准 → 观察状态与合并记录。</li>
+  <li><b>批量导入</b>：上传含同名不同码客户的 Excel → Suspected 行跨BU时在批量治理中升级合并审批。</li>
+</ol>
+</div>
+
+<p style="color:#8492a6;font-size:13px;margin-top:32px">走查脚本与截图同目录：merge-scenario1/2/3a/4/4b.mjs（playwright-core + 本机 Chrome，可重复执行）。</p>
+</body>
+</html>
