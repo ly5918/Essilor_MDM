@@ -1731,18 +1731,28 @@ export const getNavBadges = async (role: string): Promise<Record<string, number>
   return badges;
 };
 
-/** 全部待办 = 审批任务 + 治理复核 + 升级与退回（后端三个分类合并） */
+/**
+ * 全部待办：走后端 ALL 聚合口径（待处理 + 退回待补充），服务端分页。
+ *
+ * 此前在前端把 APPROVAL / GOVERNANCE / RETURNED 三个分类各取一页再 `slice(0, pageSize)`，
+ * 结果是：① 审批类任务一满页，治理复核 / 退回任务永远看不到；
+ * ② 分页 total 是三类相加、rows 却只有一页，翻页会丢数据。
+ * 现在改由后端按 status 聚合，保证「全部待办」与点进去的每个页签口径一致（测试报告 BUG-6）。
+ */
 export const listApprovalTasks = async (scope: 'bu' | 'gc', pageNum = 1, pageSize = 10): Promise<PageResult<ApprovalTaskVO>> => {
   if (!useLive('approval')) return delay({ rows: mock.mockApprovalTasks[scope], total: mock.mockApprovalTasks[scope].length });
-  const [approval, governance, returned] = await Promise.all([
-    fetchTasksByCategory(scope, 'APPROVAL', pageNum, pageSize),
-    fetchTasksByCategory(scope, 'GOVERNANCE', pageNum, pageSize),
-    fetchTasksByCategory(scope, 'RETURNED', pageNum, pageSize)
-  ]);
-  // 合并三个分类，取前 pageSize 条
-  const all = [...approval.rows, ...governance.rows, ...returned.rows];
-  const total = approval.total + governance.total + returned.total;
-  return { rows: all.slice(0, pageSize), total };
+  return fetchTasksByCategory(scope, 'ALL', pageNum, pageSize);
+};
+
+/** 按页签分类拉取待办（ALL / APPROVAL / GOVERNANCE / RETURNED / DONE），服务端分页 */
+export const listApprovalTasksByCategory = async (
+  scope: 'bu' | 'gc',
+  category: string,
+  pageNum = 1,
+  pageSize = 10
+): Promise<PageResult<ApprovalTaskVO>> => {
+  if (!useLive('approval')) return delay({ rows: mock.mockApprovalTasks[scope], total: mock.mockApprovalTasks[scope].length });
+  return fetchTasksByCategory(scope, category, pageNum, pageSize);
 };
 
 export const getApprovalReturned = async (scope: 'bu' | 'gc'): Promise<ApprovalTaskVO[]> => {

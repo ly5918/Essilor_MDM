@@ -298,11 +298,22 @@ const BU_OPTIONS = ['High End', 'Mainstream', 'Cross-BU'];
  * 「批量导入确认」是**批次级审批**：一条导入任务对应一条审批待办，
  * 批准后为批次内 New 行逐条生成 One ID（总设计场景二节点「批量处理结果」）。
  */
-const APPROVAL_TYPES = ['客户新建', '客户新建 - OCR', '层级关系', '跨BU合并', '合并审批', '批量导入确认'];
-/** 治理复核类型（Tab=治理复核） */
-const GOVERNANCE_TYPES = ['DQ异常', '疑似重复', '批量治理', '多候选One ID'];
+/**
+ * 页签 → 后端队列分类。
+ *
+ * 「全部待办」= ALL（后端按 status 聚合：待处理 + 退回待补充），
+ * 而不是前端把三类各取一页再截断——后者会让治理复核 / 退回类任务永远排不进首页（测试报告 BUG-6）。
+ */
+const TAB_CATEGORY: Record<string, string> = {
+  all: 'ALL',
+  approval: 'APPROVAL',
+  governance: 'GOVERNANCE',
+  returned: 'RETURNED',
+  done: 'DONE'
+};
 
 const kpis = ref<ApprovalKpiVO[]>([]);
+/** 当前页签的任务（服务端分页，与该页签的 total 严格一致） */
 const allTasks = ref<ApprovalTaskVO[]>([]);
 const returnedTasks = ref<ApprovalTaskVO[]>([]);
 const doneTasks = ref<ApprovalTaskVO[]>([]);
