@@ -251,11 +251,9 @@ import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import {
   BIZ_TYPE_TEXT,
-  getApprovalDone,
   getApprovalKpis,
-  getApprovalReturned,
   getApprovalTaskDetail,
-  listApprovalTasks,
+  listApprovalTasksByCategory,
   submitApprovalAction
 } from '@/api/demo/cmdPoc';
 import type { ApprovalKpiVO, ApprovalTaskDetailVO, ApprovalTaskVO, DuplicateFieldStatus, RoleKey } from '@/api/demo/cmdPoc/types';
@@ -436,21 +434,8 @@ const CMP_FLAG_TAG: Record<DuplicateFieldStatus, 'success' | 'danger' | 'info'> 
 const cmpFlagText = (status: DuplicateFieldStatus) => CMP_FLAG_TEXT[status] ?? status;
 const cmpFlagTag = (status: DuplicateFieldStatus) => CMP_FLAG_TAG[status] ?? 'info';
 
-/** 当前 Tab 的基础数据集 */
-const baseTasks = computed<ApprovalTaskVO[]>(() => {
-  switch (activeTab.value) {
-    case 'approval':
-      return allTasks.value.filter(t => APPROVAL_TYPES.includes(t.taskType));
-    case 'governance':
-      return allTasks.value.filter(t => GOVERNANCE_TYPES.includes(t.taskType));
-    case 'returned':
-      return returnedTasks.value;
-    case 'done':
-      return doneTasks.value;
-    default:
-      return allTasks.value;
-  }
-});
+/** 当前 Tab 的数据集（由服务端按分类 + 分页返回，与该页签的 total 一致） */
+const baseTasks = computed<ApprovalTaskVO[]>(() => allTasks.value);
 
 /** 在基础数据集上叠加统一筛选条件（任务类型 / BU / 风险 / 关键词） */
 const visibleTasks = computed<ApprovalTaskVO[]>(() => {
@@ -474,6 +459,8 @@ const onTabChange = () => {
   selectedRow.value = null;
   detail.value = null;
   comment.value = '';
+  // 分类在服务端切换，切页签必须重新取数，否则列表仍是上一个分类的结果（测试报告 BUG-6）
+  void loadData();
 };
 
 const applyFilter = () => {
@@ -525,20 +512,25 @@ const onAction = async (act: { key: string; label: string; type?: string }) => {
   }
 };
 
+/**
+ * 按当前页签分类从服务端取数（分页在服务端完成，避免前端合并三类导致的翻页丢数据）。
+ * KPI 仍按 Scope 全量统计，与页签列表口径独立。
+ */
 const loadData = async () => {
   loading.value = true;
   try {
-    const [k, t, r, d] = await Promise.all([
+    const [k, t] = await Promise.all([
       getApprovalKpis(scope.value),
-      listApprovalTasks(scope.value, pageNum.value, pageSize.value),
-      getApprovalReturned(scope.value),
-      getApprovalDone(scope.value)
+      listApprovalTasksByCategory(
+        scope.value,
+        TAB_CATEGORY[activeTab.value] ?? 'ALL',
+        pageNum.value,
+        pageSize.value
+      )
     ]);
     kpis.value = k;
     allTasks.value = t.rows;
     total.value = t.total;
-    returnedTasks.value = r;
-    doneTasks.value = d;
   } finally {
     loading.value = false;
     // KPI 行 / Tab 高度稳定后表格顶部才准；数据到位后重算一次固定分页位置
