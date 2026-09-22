@@ -313,8 +313,6 @@ const TAB_CATEGORY: Record<string, string> = {
 const kpis = ref<ApprovalKpiVO[]>([]);
 /** 当前页签的任务（服务端分页，与该页签的 total 严格一致） */
 const allTasks = ref<ApprovalTaskVO[]>([]);
-const returnedTasks = ref<ApprovalTaskVO[]>([]);
-const doneTasks = ref<ApprovalTaskVO[]>([]);
 const loading = ref(false);
 const activeTab = ref<(typeof TABS)[number]['key']>('all');
 const detailOpen = ref(false);
@@ -538,10 +536,14 @@ const loadData = async () => {
   }
 };
 
-/** 切换角色时重新拉取对应 Scope 数据 */
+/** 切换角色时重新拉取对应 Scope 数据（页签不变，直接按当前分类重查） */
 watch(scope, () => {
-  onTabChange();
-  loadData();
+  pageNum.value = 1;
+  selectedId.value = '';
+  selectedRow.value = null;
+  detail.value = null;
+  comment.value = '';
+  void loadData();
 });
 
 onMounted(loadData);

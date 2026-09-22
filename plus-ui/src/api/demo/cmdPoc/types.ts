@@ -105,6 +105,8 @@ export interface CmdDashboardRow {
   govNewCount?: number;
   govCrossBuCount?: number;
   hierarchyNodeCount?: number;
+  /** 待办按当前审批节点分布（节点名 → 条数，条数倒序），用于工作台说明「卡在哪一步」 */
+  pendingByNode?: Record<string, number>;
 }
 
 /**
