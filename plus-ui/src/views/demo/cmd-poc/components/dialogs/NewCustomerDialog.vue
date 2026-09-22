@@ -3,7 +3,7 @@
     <!-- 动态元数据提示条 -->
     <div class="meta-banner">
       <b>动态元数据表单</b>
-      <span>根据 {{ contextText }} 加载字段（{{ dynamicFields.length }} 个）</span>
+      <span>根据 {{ contextText }} 加载字段（{{ dynamicFields.length }} 个，其中必填 {{ requiredCount }} 个）</span>
       <el-tag type="success" size="small" effect="plain">模型版本 {{ currentVersion }}</el-tag>
       <el-button link type="primary" @click="onReload">刷新字段</el-button>
     </div>
@@ -189,6 +189,9 @@ const dynamicFields = computed(() =>
 
 const contextText = computed(() => `${form.customerType} · ${form.bu} · ${form.productLine} · ${form.sourceSystem}`);
 
+/** 当前上下文下必填字段数（提示条展示，提交时按同一口径校验） */
+const requiredCount = computed(() => dynamicFields.value.filter(field => field.required).length);
+
 /** 枚举字段选项：值集明细未落库，POC 阶段按字段编码取前端常量 */
 const enumOptions = (code: string): string[] => FIELD_ENUM_OPTIONS[code] ?? ['A', 'B', 'C'];
 
@@ -279,7 +282,20 @@ const onApplyOcr = (results: OcrResultVO[]) => {
 
 /** 提交申请：后端落主档 + 生成待办 + 启动流程实例，随后刷新客户列表 */
 const submit = async (): Promise<string> => {
-  await formRef.value?.validate();
+  // 1) 前端先按「动态必填字段」校验：缺失字段以红字标注并汇总提示，
+  //    不再让空值一路打到后端触发未捕获异常（测试报告 BUG-2）。
+  try {
+    await formRef.value?.validate();
+  } catch {
+    const missing = dynamicFields.value
+      .filter(field => field.required && !String(form.dynamicValues[field.code] ?? '').trim())
+      .map(field => field.label);
+    throw new Error(
+      missing.length
+        ? `还有 ${missing.length} 个必填字段未填写：${missing.join('、')}（表单中已红字标注）`
+        : '表单校验未通过，请检查标红的字段'
+    );
+  }
   Object.entries(CORE_FIELD_MAP).forEach(([code, key]) => {
     const value = form.dynamicValues[code];
     if (value) (form as unknown as Record<string, string>)[key as string] = value;

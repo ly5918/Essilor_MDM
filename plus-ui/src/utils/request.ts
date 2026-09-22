@@ -40,6 +40,11 @@ function normalizeErrorMessage(message?: string) {
   if (message.includes('timeout')) {
     return '系统接口请求超时';
   }
+  // 演示环境在重新打包 / 重启后端时网关会短暂返回 502 / 503，
+  // 提示成「服务正在重启」比「系统接口502异常」更易理解（测试报告 BUG-1 的可观测性兜底）
+  if (message.includes('status code 502') || message.includes('status code 503')) {
+    return '后端服务正在重启，请稍候 20~30 秒后重试';
+  }
   if (message.includes('Request failed with status code')) {
     return '系统接口' + message.slice(-3) + '异常';
   }

@@ -37,7 +37,12 @@
             <el-button plain @click="openDialog('ocr')">查看OCR识别结果</el-button>
             <el-button type="primary" plain icon="Plus" @click="openDialog('newCustomer')">新建客户</el-button>
           </div>
-          <div v-else-if="currentPage === 'batch'" class="page-title-actions">
+          <!-- 非 Business User 的客户页：不给写入口，用一行小字说明权限边界（测试报告 BUG-4） -->
+          <div v-else-if="currentPage === 'customers' && !readOnly" class="page-title-actions">
+            <span class="page-title-readonly">Steward 角色：新建客户由 Business User 发起，此处仅可查询与治理</span>
+          </div>
+          <!-- 新建导入任务是 Business User 的写操作；Steward 在批量治理页只做治理与裁决 -->
+          <div v-else-if="currentPage === 'batch' && (roleKey === 'business' || roleKey === 'bu')" class="page-title-actions">
             <el-button plain @click="openDialog('template')">下载模板</el-button>
             <el-button type="primary" plain icon="Plus" @click="openDialog('batchUpload')">新建导入任务</el-button>
           </div>

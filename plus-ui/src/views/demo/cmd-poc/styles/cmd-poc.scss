@@ -288,6 +288,13 @@
       flex-shrink: 0;
     }
 
+    /* 无写权限时的页头说明（替代被隐藏的按钮，避免页头右侧空白造成困惑） */
+    .page-title-readonly {
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--g-text2);
+    }
+
     /* 原型「申请逻辑停用」橙色按钮（plain 态） */
     .poc-btn-orange {
       --el-button-text-color: var(--btn-warning);

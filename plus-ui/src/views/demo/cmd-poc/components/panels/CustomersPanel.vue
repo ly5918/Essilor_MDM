@@ -43,7 +43,8 @@
       <!-- 列宽合计≈960px，可在 1280 宽窗口下完整放下（1280 视口内容区约 975px），因此不出现横向滚动条 -->
       <el-table
         ref="tableRef"
-        v-loading="loading"
+        v-loading="loading && rows.length > 0"
+        element-loading-text="正在加载客户主档…"
         border
         :data="rows"
         :height="tableHeight"
@@ -131,9 +132,21 @@
             <el-button link type="primary" @click="onViewDetail(row)">查看客户</el-button>
           </template>
         </el-table-column>
+
+        <!--
+          首屏加载用骨架屏占位，而不是先渲染「暂无数据 共 0 条」再跳出数据：
+          列表进页面要先查库（服务端分页 + 层级索引），此前这段空窗会被误读为「没有客户」（测试报告 BUG-7）。
+        -->
+        <template #empty>
+          <div v-if="loading" class="cust-empty-loading">
+            <el-skeleton animated :rows="4" />
+            <span class="cust-empty-tip">正在加载客户主档…</span>
+          </div>
+          <span v-else>暂无数据</span>
+        </template>
       </el-table>
 
-      <div class="cust-pager">
+      <div v-if="total > 0" class="cust-pager">
         <el-pagination
           v-model:current-page="page.current"
           v-model:page-size="page.size"
@@ -168,7 +181,7 @@ const { readOnly, role, openDialog, hierarchyIndex, loadHierarchyIndex, badgeVer
 /** 表格高度自适应：分页条固定在内容区底部，不随数据条数浮动 */
 const { tableRef, tableHeight, recalc } = useListTableHeight(70);
 
-const loading = ref(false);
+const loading = ref(true);
 const query = ref<{ keyword: string; bu: string; customerType: string; status: CustomerQuery['status'] }>({
   keyword: '',
   bu: '',
@@ -380,6 +393,25 @@ onUnmounted(() => {
   display: flex;
   justify-content: flex-end;
   padding: 12px 16px;
+}
+
+/* 首屏骨架屏：占满表格空态区域，避免「暂无数据」闪现 */
+.cust-empty-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 24px 0;
+
+  :deep(.el-skeleton) {
+    width: 100%;
+  }
+}
+
+.cust-empty-tip {
+  font-size: 12px;
+  color: var(--g-text2);
 }
 
 /**
