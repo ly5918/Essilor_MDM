@@ -1,0 +1,45 @@
+<p>依据《Essilor CMD POC 逐按钮功能测试报告》（5 角色 × 全页面 × 逐按钮，测试环境 <code>www.essilormdm.dpdns.org</code>）与《总体设计方案 V6.1》对齐，本轮对报告中的 17 项问题逐条处置。原则：<b>严格遵守总设计的泳道图与 RBAC 口径，只做最小改动，不破坏已有功能与框架</b>。框架沿用 RuoYi，前后端分别落盘——后端 <code>RuoYi-Vue-Plus/ruoyi-modules/ruoyi-cmd</code>，前端 <code>plus-ui/src/views/demo/cmd-poc</code>。</p>
+
+<div class='note warn'><span class='note-ic'>!</span><div><b>打包必读（本轮踩坑）：</b>仅执行 <code>mvnw.cmd -o -pl ruoyi-admin -am package -DskipTests</code> 时，实测会把<b>本地仓库里的旧 <code>ruoyi-cmd-6.0.0.jar</code></b> 打进 <code>BOOT-INF/lib</code>——源码已改、jar 已是新时间戳，但接口行为不变（表现为「新接口 404、<code>taskCategory=ALL</code> 恒返回 0 条、批量治理 KPI 恒为 0」，极易被误判成「没改好」）。请改用 <code>mvnw.cmd -o -pl ruoyi-admin -am install -DskipTests</code>，并在启动前核对内嵌模块字节数与端点是否同时更新。</div></div>
+
+<h3>4.1 逐条处置结果</h3>
+<div class='tbl-wrap'><table>
+<thead><tr><th style='width:74px'>编号</th><th style='width:58px'>级别</th><th>报告问题</th><th>修复内容与落盘位置</th><th style='width:150px'>验证证据</th></tr></thead>
+<tbody>
+<tr><td>P0-1</td><td>P0</td><td>新建客户跳过审批直接 Active（版本追溯页签提示自相矛盾）</td><td><b>后端</b> <code>CmdCustomerServiceImpl.submitApplication</code>：提交即写 <code>status=pending</code> + 生成 <code>cmd_approval_task</code> 待办 + 拉起 Warm-Flow；审批走到 END 节点才转 <code>active</code> 并落 v1 版本记录。前端提交后弹窗关闭并提示 One ID / 申请编号</td><td>图 3-6b；本地库 GC-000133 / GC-000134 均为 <code>pending</code></td></tr>
+<tr><td>P0-2</td><td>P0</td><td>Duplicate Check 漏判跨 BU 同名重复（3 个「上海清视」被judged为 NEW）</td><td><b>后端</b> <code>matchExistingCustomer</code>：统一社会信用代码仍为主依据（同值→EXACT）；名称改为辅助线索的<b>规范化匹配</b>——先去括号内容、再去「有限公司/有限责任公司/股份有限公司/集团/分公司」等法律后缀，再做 bigram Dice 相似度 ≥ 0.85；命中即 SUSPECTED，跨 BU 时生成跨 BU 合并治理工单</td><td>库内「上海清视眼镜有限公司」同名多码记录 <code>match_state=SUSPECTED · duplicate_flag=Y</code>；跨 BU 样本 GC-DEMOCB1（High End）与 GC-DEMOCB2（Sun &amp; Reading）同判 SUSPECTED</td></tr>
+<tr><td>P1-4</td><td>P1</td><td>提交成功弹窗不关闭、无提示</td><td><b>前端</b> <code>DialogHost.vue</code> 提交成功后 <code>ElMessage</code> 提示并关闭弹窗；<code>NewCustomerDialog.submit()</code> 返回 One ID 与申请编号文案</td><td>图 3-6b</td></tr>
+<tr><td>P1-5</td><td>P1</td><td>缺字段提交后端 500</td><td><b>后端</b> <code>submitApplication</code> 对法定名称做非空显式校验，抛 <code>ServiceException</code> 由全局异常处理返回规范业务错误；<b>前端</b> 动态必填规则就地拦截</td><td>图 3-6a</td></tr>
+<tr><td>P1-6</td><td>P1</td><td>导入「上传数据明细」页签显示 0 行 0 列（实际 6 行 6 列）</td><td><b>后端</b> <code>GET /cmd/import/job/{jobCode}/rows</code> 按 <code>jobCode</code> 反查任务 <code>id</code> 再取行明细；<b>前端</b> <code>BatchResultDialog.vue</code> 按「模板映射列 + 分流结果列」动态构建表头，行数据取原始报文</td><td>图 3-17（6 行 × 6 模板列 + 分流结果）</td></tr>
+<tr><td>P1-7</td><td>P1</td><td>审批任务列表点击行不展开右侧详情（BU + GC 均复现）</td><td><b>前端</b> <code>ApprovalPanel.vue</code>：行选择改为 <code>@current-change="onRowSelect"</code> + <code>highlight-current-row</code> + <code>row-key="taskId"</code>，右侧只读速览按选中任务加载，并区分「加载中 / 无数据」空态</td><td>图 4-2</td></tr>
+<tr><td>BUG-8</td><td>P2</td><td>动态字段仅 2 个</td><td><b>数据态（非代码缺陷）</b>：运行库「已发布模型版本」为 v1（2 字段）。在「平台管理 · 字段与值集 → 模型版本」发布 v1.5（19 字段）后，业务表单即按新版本动态渲染</td><td>图 2-10（19 字段）</td></tr>
+<tr><td>BUG-9</td><td>P2</td><td>BU Steward 误有「新建客户」按钮</td><td><b>前端</b> <code>index.vue</code>：客户管理页「新建客户」「查看OCR识别结果」的显示条件由 <code>!readOnly</code> 收紧为 <code>roleKey === 'business'</code></td><td>图 3-2a</td></tr>
+<tr><td>BUG-10</td><td>P2</td><td>待办角标与列表数据不一致</td><td>角标与列表统一为同一口径：批量治理两侧都用 <code>IMPORT_PENDING_STATUS</code>（待复核/进行中/部分成功）；审批侧「全部待办」改由后端按状态聚合（见 BUG-14）。批量治理 KPI 另修：<code>loadStats()</code> 此前<b>定义了但从未被调用</b>，且分流合计原先只对当前页 10 条累加（翻页跳变、首屏全 0）</td><td>图 4-22、图 5-2a</td></tr>
+<tr><td>BUG-11</td><td>P3</td><td>Auditor 工作台显示待办（只读角色不应有）</td><td><b>前端</b> <code>DashPanel.vue</code> 待办卡片加 <code>v-if="roleKey !== 'audit'"</code>；<b>后端</b> <code>CmdNavServiceImpl</code> 对只读角色把治理类角标归零</td><td>图 6-1</td></tr>
+<tr><td>BUG-12</td><td>P3</td><td>客户列表渲染时序（先闪「暂无数据 共 0 条」再出数据）</td><td><b>前端</b> <code>CustomersPanel.vue</code> 首屏改骨架屏占位（<code>#empty</code> 插槽）+ <code>v-loading="loading &amp;&amp; rows.length &gt; 0"</code>；审批 / 批量治理表格补 <code>:empty-text="loading ? '加载中…' : '暂无数据'"</code>，把「空数据」与「加载中」两种状态分开表达</td><td>图 4-22</td></tr>
+<tr><td>BUG-13</td><td>P3</td><td>GC「确认合并」按钮文案误导（NEW 客户被判为合并）</td><td><b>后端</b> <code>CmdApprovalServiceImpl.buildActions</code>：默认分支去掉「确认合并」字样——<code>duplicateState=NEW</code> 时主按钮为「批准新建」，其余为「批准」；合并 / 重复关联类仍走各自分支（确认合并 / 确认关联已有 / 创建新主档 / 升级GC）</td><td>图 5-2b</td></tr>
+<tr><td>BUG-14</td><td>P3</td><td>「全部待办」页签空，但「审批任务」页签有数据</td><td><b>后端</b> <code>CmdApprovalServiceImpl.buildQueryWrapper</code> 新增 <code>ALL</code> 聚合分支（状态 ∈ 待处理 / 退回待补充，不再按 <code>task_category</code> 匹配——「全部待办 / 已处理 / 退回」本就不是建表分类）；<b>前端</b> 每个页签各查各的后端分类，不再在前端按中文任务类型文本过滤（后端新增业务类型时会「静默消失」）</td><td>图 4-2、图 5-2a</td></tr>
+<tr><td>BUG-15</td><td>P3</td><td>审计中心初始 0 条、3 秒后才出现 69 条</td><td><b>前端</b> <code>AuditPanel.vue</code> 表格补 <code>:empty-text="loading ? '正在加载审计事件…' : '暂无审计事件'"</code>，加载中不再显示「0 条」</td><td>审计中心页</td></tr>
+<tr><td>BUG-16</td><td>P3</td><td>客户层级「待归位」计数延迟（0 → 17）</td><td><b>前端</b> <code>HierarchyPanel.vue</code>：加载中页签标题显示「待归位主数据 (…)」、提示条同步占位，表格 <code>empty-text</code> 在加载时为「正在加载待归位主数据…」，避免 0 被读成「没有待归位数据」</td><td>客户层级 · 待归位页签</td></tr>
+<tr><td>BUG-17</td><td>P3</td><td>「来源与质量」页签质量等级空（DQ=100 却不显示 A 级）</td><td><b>前端</b> <code>toCustomerVO</code>：<code>dqGrade</code> 为空时按 DQ 总分回退推导（A≥90 / B≥75 / C≥60 / D&lt;60，与后端 <code>gradeOf</code> 口径一致），存量未写等级的记录不再显示「—」</td><td>图 3-3b</td></tr>
+<tr><td>P0-3</td><td>P0</td><td>后端频繁 502</td><td><b>非代码问题（基础设施）</b>：DPDNS 隧道 + 演示实例自愈导致，本轮未复现。建议增加健康探针与实例预热/保活</td><td>—</td></tr>
+</tbody></table></div>
+
+<h3>4.2 本轮 E2E 复测结论</h3>
+<p>用 Playwright 单脚本闭环（同一个 Node 进程内起后端 jar + 前端 Vite → 等待就绪 → 5 角色走查 → 逐屏截图 → 关闭进程）复测，10 项检查全部通过：</p>
+<div class='tbl-wrap'><table>
+<thead><tr><th>#</th><th>复测项</th><th>结果</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><code>GET /cmd/import/stats</code> 返回全局统计</td><td>✅ jobCount=18 / totalRows=237 / Exact=104 / Suspected=47 / New=49 / Invalid=34</td></tr>
+<tr><td>2</td><td><code>GET /cmd/approval/list?scope=BU&amp;taskCategory=ALL</code></td><td>✅ rows=10 / total=12（修复前恒为 0）</td></tr>
+<tr><td>3</td><td>客户详情「来源与质量」质量等级</td><td>✅ 显示「A 级」（DQ 总分 96）</td></tr>
+<tr><td>4</td><td>BU「全部待办」页签</td><td>✅ 列表 10 行（修复前「暂无数据」）</td></tr>
+<tr><td>5</td><td>点击任务行 → 右侧详情展开</td><td>✅ 右侧出现「申请信息 / 自动检查结果 / Data Quality / Duplicate Check」</td></tr>
+<tr><td>6</td><td>批量治理 KPI 非全 0</td><td>✅ 7/7 张卡非零</td></tr>
+<tr><td>7</td><td>导入「上传数据明细」行 × 列</td><td>✅ rows=13 cols=19（含模板列与分流结果列）</td></tr>
+<tr><td>8</td><td>GC 审批详情渲染</td><td>✅ 正常（南京视界供应链管理有限公司 · GC-C36654AF）</td></tr>
+<tr><td>9</td><td>GC · NEW 场景无「确认合并」误导文案</td><td>✅ 详情页仅「流程跟踪 / 进入审批」</td></tr>
+<tr><td>10</td><td>GC 审批弹窗主按钮</td><td>✅ 「批准新建 / 拒绝 / 退回BU」</td></tr>
+</tbody></table></div>
+
+<div class='note warn'><span class='note-ic'>!</span><div>本轮被替换/新增的截图（图 3-3b、3-17、4-2、4-22、5-2a、5-2b）均在<b>重新打包并核对内嵌模块后的 <code>ruoyi-admin.jar</code></b> 上实拍；截图目录 <code>cmd-poc-e2e/screenshots_fix3/</code>，走查日志与逐项结论见同目录 <code>summary.txt</code>。完整修复清单见 <code>cmd-poc-e2e/BUG修复与调整清单.md</code>。</div></div>

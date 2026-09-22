@@ -19,7 +19,15 @@
           </div>
         </div>
       </template>
-      <el-table ref="tableRef" v-loading="loading" border :data="events" :height="tableHeight" class="data-table">
+      <el-table
+        ref="tableRef"
+        v-loading="loading"
+        border
+        :data="events"
+        :height="tableHeight"
+        class="data-table"
+        :empty-text="loading ? '正在加载审计事件…' : '暂无审计事件'"
+      >
         <el-table-column label="事件编号" prop="id" width="165" />
         <el-table-column label="时间" prop="time" width="120" align="center" />
         <el-table-column label="事件" prop="event" min-width="240" show-overflow-tooltip />

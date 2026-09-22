@@ -55,3 +55,7 @@ tpl_*.xlsx
 _probe_*
 diag_*
 proc_info.txt
+
+# 备份文件（不入库）
+*.bak
+*.bak2

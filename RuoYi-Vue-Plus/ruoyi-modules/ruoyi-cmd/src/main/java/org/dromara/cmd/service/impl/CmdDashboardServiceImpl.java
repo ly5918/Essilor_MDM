@@ -103,11 +103,12 @@ public class CmdDashboardServiceImpl implements ICmdDashboardService {
      * @return 节点名到条数的映射
      */
     private java.util.Map<String, Long> countPendingByNode() {
+        // 用「PENDING OR RETURNED」而非 in(...)：与本项目 MP 封装的 in 行为保持一致的口径，
+        // 避免拼出空条件集导致节点分布恒为空（与「全部待办」页签同一口径）。
         java.util.List<CmdApprovalTask> pending = taskMapper.selectList(
             new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<CmdApprovalTask>()
-                .in(CmdApprovalTask::getStatus,
-                    CmdConstants.APPR_STATUS_PENDING,
-                    CmdConstants.APPR_STATUS_RETURNED));
+                .and(w -> w.eq(CmdApprovalTask::getStatus, CmdConstants.APPR_STATUS_PENDING)
+                    .or().eq(CmdApprovalTask::getStatus, CmdConstants.APPR_STATUS_RETURNED)));
         java.util.Map<String, Long> grouped = new java.util.HashMap<>();
         for (CmdApprovalTask task : pending) {
             String node = StringUtils.isNotBlank(task.getCurrentNodeName()) ? task.getCurrentNodeName() : "待分配";

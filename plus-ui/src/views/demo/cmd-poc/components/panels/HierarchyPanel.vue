@@ -20,7 +20,7 @@
         <el-alert type="success" :closable="false" show-icon class="poc-note m-b-12">
           <template #title>
             <b>主数据 ↔ 客户层级：</b>
-            客户<strong>审批通过</strong>即成为主数据（「客户管理」可见），并自动登记为「<strong>待归位</strong>」节点（当前 {{ unassigned.length }} 个）；
+            客户<strong>审批通过</strong>即成为主数据（「客户管理」可见），并自动登记为「<strong>待归位</strong>」节点（当前 {{ loadingUnassigned ? '…' : unassigned.length }} 个）；
             由 Data Steward <strong>归位</strong>到 A3-A2-A1 后，才进入中间层级树（当前 {{ treeNodeCount }} 个节点）。
             两部分合起来才是主数据的完整视图。
           </template>
@@ -196,7 +196,14 @@
       </el-tab-pane>
 
       <!-- Tab 2：待归位主数据（操作任务） -->
-      <el-tab-pane name="unassigned" :label="`待归位主数据 (${unassigned.length})`">
+      <!--
+        计数占位：待归位列表要查库（客户 + 层级索引），首屏未回来时若直接渲染 "(0)"，
+        会被读成「没有待归位数据」；加载中先给省略号（测试报告 BUG-16：计数 0 → 17 的时序错觉）。
+      -->
+      <el-tab-pane
+        name="unassigned"
+        :label="loadingUnassigned ? '待归位主数据 (…)' : `待归位主数据 (${unassigned.length})`"
+      >
         <el-card class="page-card" shadow="never" :body-style="{ padding: '20px' }">
           <template #header>
             <div class="unassigned-header">
@@ -217,7 +224,13 @@
             </template>
           </el-alert>
 
-          <el-table v-loading="loadingUnassigned" :data="filteredUnassigned" border class="data-table">
+          <el-table
+            v-loading="loadingUnassigned"
+            :data="filteredUnassigned"
+            border
+            class="data-table"
+            :empty-text="loadingUnassigned ? '正在加载待归位主数据…' : ''"
+          >
             <el-table-column label="客户名称" prop="name" min-width="200" show-overflow-tooltip />
             <el-table-column label="One ID" prop="oneId" width="180" />
             <el-table-column label="BU" prop="bu" width="120" />

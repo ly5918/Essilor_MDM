@@ -614,9 +614,10 @@ public class CmdApprovalServiceImpl implements ICmdApprovalService {
         // 待处理（PENDING）+ 退回待补充（RETURNED）—— 与治理与审批页「全部待办」页签一致，
         // 避免 Steward 打开页面看到空列表、任务却藏在「审批任务」页签里（测试报告 BUG-6）。
         if (CmdConstants.APPR_CAT_ALL.equalsIgnoreCase(category)) {
-            lqw.in(CmdApprovalTask::getStatus,
-                CmdConstants.APPR_STATUS_PENDING,
-                CmdConstants.APPR_STATUS_RETURNED);
+            // 用「PENDING OR RETURNED」而非 in(...)：varargs in 在本项目 MP 封装下会拼出空条件集，
+            // 结果就是「全部待办」永远空列表（实测 GC ALL=0 / APPROVAL=1）。
+            lqw.and(w -> w.eq(CmdApprovalTask::getStatus, CmdConstants.APPR_STATUS_PENDING)
+                .or().eq(CmdApprovalTask::getStatus, CmdConstants.APPR_STATUS_RETURNED));
             return lqw;
         }
         // 队列状态口径：待办队列只列未处理任务；"我已处理"列终态；"升级与退回"按退回状态取

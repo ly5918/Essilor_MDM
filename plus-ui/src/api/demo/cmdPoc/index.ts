@@ -258,6 +258,18 @@ export const listNotifications = (): Promise<NotificationVO[]> =>
  * 保证详情弹窗每个字段都有稳定的展示值（空串走「—」占位），面板代码无需感知后端差异。
  * 字段覆盖 cmd_customer 全部业务列，详情弹窗据此完整展示，无需二次查询。
  */
+/**
+ * 质量分 → 质量等级（与后端 CmdCustomerServiceImpl.gradeOf 口径一致：A≥90 / B≥75 / C≥60 / D<60）。
+ * 演示库中存在早期未回写 dq_grade 的主档（dq_score 有值但 dq_grade 为 NULL），
+ * 前端据此兜底推导，避免「DQ=100 但质量等级显示"—"」（测试报告 BUG-17）。
+ */
+function gradeOfScore(score: number): string {
+  if (score >= 90) return 'A';
+  if (score >= 75) return 'B';
+  if (score >= 60) return 'C';
+  return 'D';
+}
+
 function toCustomerVO(row: CmdCustomerRow): CustomerVO {
   return {
     oneId: row.oneId ?? '',
@@ -284,7 +296,8 @@ function toCustomerVO(row: CmdCustomerRow): CustomerVO {
     contactEmail: row.contactEmail ?? '',
     status: (row.status ?? 'active') as CustomerVO['status'],
     dqScore: Number(row.dqScore ?? 0),
-    dqGrade: row.dqGrade ?? '',
+    // 质量等级兜底：后端未回写（NULL）时按分数推导，与 gradeOf 口径一致
+    dqGrade: row.dqGrade ?? (Number(row.dqScore ?? 0) > 0 ? gradeOfScore(Number(row.dqScore)) : ''),
     matchState: row.matchState ?? '',
     duplicateFlag: row.duplicateFlag ?? '',
     mergedToOneId: row.mergedToOneId ?? '',

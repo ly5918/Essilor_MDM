@@ -167,8 +167,10 @@ const onTogglePending = () => {
 };
 
 onMounted(async () => {
-  await loadJobs();
-  await loadPendingTotal();
+  // 三个请求并行：全局统计（KPI 四类分流）、列表、角标口径待处置数。
+  // loadStats 此前定义了却从未被调用，导致 KPI 里「导入任务 / 总行数 / Exact / Suspected / New / Invalid」
+  // 六张卡恒为 0，被测试报告记为「批量治理指标全 0」（BUG-15）。
+  await Promise.all([loadStats(), loadJobs(), loadPendingTotal()]);
 });
 
 // 上传成功 / 结果弹窗内治理动作后关闭，均触发一次重查
@@ -179,6 +181,7 @@ watch(
       pageNum.value = 1;
       void loadJobs();
       void loadPendingTotal();
+      void loadStats();
     }
   }
 );
@@ -256,10 +259,11 @@ const openResult = (row: ImportJobVO | Record<string, unknown>) => {
   white-space: nowrap;
 }
 
-/* 批次总览 KPI 卡（修复：此前类名无样式定义，退化为纯文本堆叠） */
+/* 批次总览 KPI 卡（修复：此前类名无样式定义，退化为纯文本堆叠）
+   共 7 张卡（待处置任务 + 6 项全局统计），列数必须为 7，否则第 7 张卡会掉到第二行留下空位 */
 .kpi-row {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 14px;
 }

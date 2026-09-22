@@ -4,6 +4,7 @@ import base64, html, mimetypes, os, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 WEB = os.path.join(HERE, 'web')
+SECTIONS_DIR = os.path.join(HERE, 'sections')
 OUT = r"D:\Code\2026AI\AIA_MDM\Essilor_MDM\plus-ui\docs\Essilor_CMD_POC_全功能操作手册.html"
 
 sys.path.insert(0, HERE)
@@ -28,8 +29,18 @@ def file_data(fname):
             _file_cache[fname] = (mime, base64.b64encode(f.read()).decode())
     return _file_cache[fname]
 
+_raw_cache = {}
+def raw_html(fname):
+    """注入 sections/ 下的 HTML 片段原文（用于变更记录这类含复杂表格的章节）。"""
+    if fname not in _raw_cache:
+        with open(os.path.join(SECTIONS_DIR, fname), encoding='utf-8') as f:
+            _raw_cache[fname] = f.read()
+    return _raw_cache[fname]
+
 def render_block(block, idx):
     kind = block[0]
+    if kind == 'raw':
+        return raw_html(block[1])
     if kind == 'p':
         return f"<p>{block[1]}</p>"
     if kind == 'h3':
