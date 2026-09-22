@@ -51,6 +51,7 @@
             :current-row-key="selectedId"
             row-key="taskId"
             :row-style="{ cursor: 'pointer' }"
+            :empty-text="loading ? '加载中…' : '暂无数据'"
             @current-change="onRowSelect"
           >
             <el-table-column label="任务编号" prop="taskId" width="150" />
@@ -256,7 +257,14 @@ import {
   listApprovalTasksByCategory,
   submitApprovalAction
 } from '@/api/demo/cmdPoc';
-import type { ApprovalKpiVO, ApprovalTaskDetailVO, ApprovalTaskVO, DuplicateFieldStatus, RoleKey } from '@/api/demo/cmdPoc/types';
+import type {
+  ApprovalKpiVO,
+  ApprovalTaskCategory,
+  ApprovalTaskDetailVO,
+  ApprovalTaskVO,
+  DuplicateFieldStatus,
+  RoleKey
+} from '@/api/demo/cmdPoc/types';
 import { useCmdPoc } from '../../composables/useCmdPoc';
 import { useListTableHeight } from '../../composables/useListTableHeight';
 
@@ -276,39 +284,33 @@ const RISK_MAP: Record<string, { type: 'danger' | 'warning' | 'info' }> = {
   Low: { type: 'info' }
 };
 
+/**
+ * 页签 → 后端队列分类
+ *
+ * 每个页签各查各的分类，前端不再按中文 taskType 文本做业务过滤：
+ * 之前「全部待办」取的是三类合并后再 slice(pageSize) 的结果，审批类一满页就会
+ * 把治理复核 / 退回任务截断，且新增业务类型时任务会静默消失。
+ */
 const TABS = [
-  { key: 'all', label: '全部待办' },
-  { key: 'approval', label: '审批任务' },
-  { key: 'governance', label: '治理复核' },
-  { key: 'returned', label: '升级与退回' },
-  { key: 'done', label: '我已处理' }
+  { key: 'all', label: '全部待办', category: 'ALL' },
+  { key: 'approval', label: '审批任务', category: 'APPROVAL' },
+  { key: 'governance', label: '治理复核', category: 'GOVERNANCE' },
+  { key: 'returned', label: '升级与退回', category: 'RETURNED' },
+  { key: 'done', label: '我已处理', category: 'DONE' }
 ] as const;
 
 const TASK_TYPE_OPTIONS = ['客户新建', '客户变更', '逻辑停用', '层级关系', '疑似重复', '跨BU合并', 'DQ异常', '批量治理', '批量导入确认'];
 const BU_OPTIONS = ['High End', 'Mainstream', 'Cross-BU'];
 
 /**
- * 审批任务类型（Tab=审批任务）
+ * 任务类型筛选项（页面筛选条下拉）
  *
  * 后端 bizType 实际值：客户新建 / 客户新建 - OCR（单条创建，含 OCR 来源）、
- * 层级关系、跨BU合并、批量导入确认（IMPORT）等，这里必须逐字对齐，否则 live 待办被过滤成空。
+ * 层级关系、跨BU合并、批量导入确认（IMPORT）等。
  *
  * 「批量导入确认」是**批次级审批**：一条导入任务对应一条审批待办，
  * 批准后为批次内 New 行逐条生成 One ID（总设计场景二节点「批量处理结果」）。
  */
-/**
- * 页签 → 后端队列分类。
- *
- * 「全部待办」= ALL（后端按 status 聚合：待处理 + 退回待补充），
- * 而不是前端把三类各取一页再截断——后者会让治理复核 / 退回类任务永远排不进首页（测试报告 BUG-6）。
- */
-const TAB_CATEGORY: Record<string, string> = {
-  all: 'ALL',
-  approval: 'APPROVAL',
-  governance: 'GOVERNANCE',
-  returned: 'RETURNED',
-  done: 'DONE'
-};
 
 const kpis = ref<ApprovalKpiVO[]>([]);
 /** 当前页签的任务（服务端分页，与该页签的 total 严格一致） */
@@ -328,6 +330,11 @@ const total = ref(0);
 const filter = reactive({ taskType: '', bu: '', sla: '', risk: '', keyword: '' });
 
 const tabLabel = computed(() => TABS.find(t => t.key === activeTab.value)?.label ?? '全部待办');
+
+/** 当前页签对应的后端队列分类（页签与后端口径严格一致，前端不再做业务过滤） */
+const activeCategory = computed<ApprovalTaskCategory>(
+  () => (TABS.find(t => t.key === activeTab.value)?.category ?? 'ALL') as ApprovalTaskCategory
+);
 
 /**
  * 是否为批量导入确认（批次级审批）
@@ -465,12 +472,23 @@ const applyFilter = () => {
   /* 筛选已通过 visibleTasks 计算属性实时生效，这里仅用于「查询」按钮的点击反馈 */
 };
 
-/** 点行选中：右侧速览加载只读概要；审批意见与动作在「进入审批」弹窗中完成 */
+/**
+ * 点行选中：右侧速览加载只读概要；审批意见与动作在「进入审批」弹窗中完成。
+ *
+ * 这里必须 try/catch：取详情是异步请求，一旦后端报错，未捕获的 Promise 异常会让
+ * `detail` 一直停在 null，右侧面板保持「选择左侧任务查看概要」的空态，
+ * 表现为「点了行没反应」（测试报告 P1-7）。
+ */
 const onRowSelect = async (row: ApprovalTaskVO | null) => {
   if (!row) return;
   selectedId.value = row.taskId;
   selectedRow.value = row;
-  detail.value = await getApprovalTaskDetail(row.taskId);
+  detail.value = null;
+  try {
+    detail.value = await getApprovalTaskDetail(row.taskId);
+  } catch (error) {
+    ElMessage.error(`加载任务 ${row.taskId} 详情失败：${(error as Error)?.message ?? '未知错误'}`);
+  }
 };
 
 /** 进入审批：打开宽弹窗（完整治理证据 + 审批意见 + 动作按钮） */
@@ -519,12 +537,7 @@ const loadData = async () => {
   try {
     const [k, t] = await Promise.all([
       getApprovalKpis(scope.value),
-      listApprovalTasksByCategory(
-        scope.value,
-        TAB_CATEGORY[activeTab.value] ?? 'ALL',
-        pageNum.value,
-        pageSize.value
-      )
+      listApprovalTasksByCategory(scope.value, activeCategory.value, pageNum.value, pageSize.value)
     ]);
     kpis.value = k;
     allTasks.value = t.rows;

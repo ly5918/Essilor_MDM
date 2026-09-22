@@ -1,21 +1,27 @@
 <template>
   <section class="page list-page">
     <!-- 批次总览（对应设计「批次任务详情」：Completed / Partial / Failed、数量与分流待办） -->
-    <div class="kpi-row">
-      <div
-        v-for="item in kpis"
-        :key="item.label"
-        class="kpi"
-        :style="{ '--kpi-color': item.color }"
-      >
-        <b>{{ item.value }}</b>
-        <span>{{ item.label }}</span>
+      <div class="kpi-row" v-loading="statsLoading">
+        <div v-for="item in kpis" :key="item.label" class="kpi" :style="{ '--kpi-color': item.color }">
+          <b>{{ item.value }}</b>
+          <span>{{ item.label }}</span>
+        </div>
       </div>
-    </div>
 
     <!-- 导入任务列表（下载模板 / 新建导入任务按钮在页标题区，与原型一致） -->
     <el-card class="page-card" shadow="never" :body-style="{ padding: '0' }">
-      <template #header><span class="card-title">导入任务列表</span></template>
+      <template #header>
+        <div class="card-head">
+          <span class="card-title">导入任务列表</span>
+          <!--
+            默认只列「待处置」任务，与左侧菜单「批量治理」角标同一口径：
+            此前角标统计待处置、列表却展示全部任务，出现「角标 6、列表 0」的矛盾（测试报告 BUG-5）。
+          -->
+          <div class="card-toolbar-right">
+            <el-checkbox v-model="pendingOnly" @change="onTogglePending">仅看待处置（与菜单角标一致）</el-checkbox>
+          </div>
+        </div>
+      </template>
       <!-- 全列展示（业务上下文/总行数/待办/提交人/提交时间独立成列） -->
       <el-table
         ref="tableRef"
@@ -24,6 +30,7 @@
         :data="jobs"
         :height="tableHeight"
         class="data-table"
+        :empty-text="loading ? '加载中…' : '暂无数据'"
       >
         <el-table-column label="Job ID" prop="jobId" width="125" />
         <el-table-column label="文件" prop="fileName" min-width="180" show-overflow-tooltip />
@@ -84,8 +91,8 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { listImportJobs } from '@/api/demo/cmdPoc';
-import type { ImportJobVO, PageResult } from '@/api/demo/cmdPoc/types';
+import { getImportStats, listImportJobs } from '@/api/demo/cmdPoc';
+import type { ImportJobVO, ImportStatsVO, PageResult } from '@/api/demo/cmdPoc/types';
 import { useCmdPoc } from '../../composables/useCmdPoc';
 import { useListTableHeight } from '../../composables/useListTableHeight';
 import { IMPORT_STATUS_MAP } from '../../constants/options';
@@ -102,11 +109,40 @@ const jobs = ref<ImportJobVO[]>([]);
 const pageNum = ref(1);
 const pageSize = ref(10);
 const total = ref(0);
+/** 只看「待处置」任务（与菜单「批量治理」角标同口径，默认开启） */
+const pendingOnly = ref(true);
+/** 待处置任务总数（始终按角标口径统计，不受列表筛选影响） */
+const pendingTotal = ref(0);
+
+/** 全局统计（服务端全量口径）加载态：未到位时 KPI 显示占位，避免首屏「指标全 0」被误读为无数据 */
+const statsLoading = ref(false);
+const stats = ref<ImportStatsVO>({
+  jobCount: 0,
+  totalRows: 0,
+  exactCount: 0,
+  suspectedCount: 0,
+  newCount: 0,
+  reviewCount: 0,
+  invalidCount: 0
+});
+
+const loadStats = async () => {
+  statsLoading.value = true;
+  try {
+    stats.value = await getImportStats();
+  } catch {
+    /* 统计失败不阻断列表，KPI 保持 0 */
+  } finally {
+    statsLoading.value = false;
+  }
+};
 
 const loadJobs = async () => {
   loading.value = true;
   try {
-    const page: PageResult<ImportJobVO> = await listImportJobs(pageNum.value, pageSize.value);
+    const page: PageResult<ImportJobVO> = await listImportJobs(pageNum.value, pageSize.value, {
+      pendingOnly: pendingOnly.value
+    });
     jobs.value = page.rows;
     total.value = page.total;
   } finally {
@@ -115,7 +151,25 @@ const loadJobs = async () => {
   }
 };
 
-onMounted(loadJobs);
+/** 单独按角标口径统计待处置任务数，保证 KPI 与菜单角标一致 */
+const loadPendingTotal = async () => {
+  try {
+    const page = await listImportJobs(1, 1, { pendingOnly: true });
+    pendingTotal.value = page.total ?? 0;
+  } catch {
+    pendingTotal.value = 0;
+  }
+};
+
+const onTogglePending = () => {
+  pageNum.value = 1;
+  void loadJobs();
+};
+
+onMounted(async () => {
+  await loadJobs();
+  await loadPendingTotal();
+});
 
 // 上传成功 / 结果弹窗内治理动作后关闭，均触发一次重查
 watch(
@@ -124,18 +178,25 @@ watch(
     if (cur === '' && (prev === 'batchUpload' || prev === 'batchResult')) {
       pageNum.value = 1;
       void loadJobs();
+      void loadPendingTotal();
     }
   }
 );
 
-/** 批次总览：任务数 / 总行数 / 四类分流合计（当前页口径，演示足够） */
+/**
+ * 批次总览：待处置任务（菜单角标口径） + 全局四类分流合计
+ *
+ * 分流合计取服务端全量统计（/cmd/import/stats），不再对当前页 10 条任务累加：
+ * 后者翻页时数字会跳变，且首屏未加载完成时六张卡全部显示 0（测试报告「批量治理指标全 0」）。
+ */
 const kpis = computed(() => [
-  { label: '导入任务', value: total.value, color: '#176c9f' },
-  { label: '总行数', value: jobs.value.reduce((sum, j) => sum + (j.totalRows ?? 0), 0), color: '#547f9f' },
-  { label: 'Exact 关联', value: jobs.value.reduce((sum, j) => sum + (j.exactCount ?? 0), 0), color: '#2e8b57' },
-  { label: 'Suspected 待治理', value: jobs.value.reduce((sum, j) => sum + (j.suspectedCount ?? 0), 0), color: '#b8791a' },
-  { label: 'New 待审批', value: jobs.value.reduce((sum, j) => sum + (j.newCount ?? 0), 0), color: '#2f73ad' },
-  { label: 'Invalid 退回修复', value: jobs.value.reduce((sum, j) => sum + (j.invalidCount ?? 0), 0), color: '#b4392f' }
+  { label: '待处置任务', value: pendingTotal.value, color: '#b4392f' },
+  { label: '导入任务', value: stats.value.jobCount, color: '#176c9f' },
+  { label: '总行数', value: stats.value.totalRows, color: '#547f9f' },
+  { label: 'Exact 关联', value: stats.value.exactCount, color: '#2e8b57' },
+  { label: 'Suspected 待治理', value: stats.value.suspectedCount, color: '#b8791a' },
+  { label: 'New 待审批', value: stats.value.newCount, color: '#2f73ad' },
+  { label: 'Invalid 退回修复', value: stats.value.invalidCount, color: '#b4392f' }
 ]);
 
 /** 状态悬停提示：待办（设计「批次任务详情」要求给出原因与待办）+ 任务备注 */

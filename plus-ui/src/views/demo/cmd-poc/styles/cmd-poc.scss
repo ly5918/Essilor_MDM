@@ -523,6 +523,42 @@
       color: var(--g-text2);
       font-size: 12px;
     }
+
+    /* 待办节点级明细（可点下钻）：把「还有 N 条」拆到具体审批节点 */
+    .task-nodes {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 6px;
+    }
+
+    .task-node {
+      padding: 2px 8px;
+      border: 1px solid var(--el-border-color-lighter);
+      border-radius: 10px;
+      background: var(--el-fill-color-light);
+      color: var(--g-text2);
+      font-size: 11.5px;
+      line-height: 1.6;
+      cursor: pointer;
+      transition: all 0.15s;
+
+      b {
+        color: var(--el-color-primary);
+        font-weight: 700;
+      }
+
+      &:hover {
+        border-color: var(--el-color-primary);
+        color: var(--el-color-primary);
+      }
+    }
+  }
+
+  .task-drill {
+    margin-top: 10px;
+    padding-left: 42px;
+    font-size: 12.5px;
   }
 }
 

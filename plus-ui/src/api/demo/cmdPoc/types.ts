@@ -770,6 +770,17 @@ export interface CmdImportJobRow {
 }
 
 /** 后端导入结果行（对应 CmdImportResultVo） */
+/** 后端导入全局统计行（对应 CmdImportStatsVo） */
+export interface CmdImportStatsRow {
+  jobCount?: number;
+  totalRows?: number;
+  exactCount?: number;
+  suspectedCount?: number;
+  newCount?: number;
+  reviewCount?: number;
+  invalidCount?: number;
+}
+
 export interface CmdImportResultRow {
   jobCode?: string;
   exact?: number;
@@ -1557,6 +1568,34 @@ export interface ApprovalKpiVO {
 }
 
 /** 统一任务清单行（审批 / 治理复核 / 升级退回 / 已处理 共用） */
+/**
+ * 审批队列分类（后端 taskCategory 参数）
+ * - ALL        全部待办（PENDING + RETURNED）
+ * - APPROVAL   审批任务
+ * - GOVERNANCE 治理复核
+ * - RETURNED   升级与退回（按状态 RETURNED 取）
+ * - DONE       我已处理（终态）
+ */
+export type ApprovalTaskCategory = 'ALL' | 'APPROVAL' | 'GOVERNANCE' | 'RETURNED' | 'DONE';
+
+/** 导入中心全局统计（全量口径，与分页无关） */
+export interface ImportStatsVO {
+  /** 导入任务总数 */
+  jobCount: number;
+  /** 上传数据总行数 */
+  totalRows: number;
+  /** Exact 关联已有 One ID */
+  exactCount: number;
+  /** Suspected 待治理 */
+  suspectedCount: number;
+  /** New 待审批 */
+  newCount: number;
+  /** Review 待复核 */
+  reviewCount: number;
+  /** Invalid 退回修复 */
+  invalidCount: number;
+}
+
 export interface ApprovalTaskVO {
   /** 任务编号 */
   taskId: string;
@@ -2481,6 +2520,11 @@ export interface TodoVO {
   label: string;
   hint: string;
   tag: string;
+  /**
+   * 待办分布明细（如「BU Scope 初审 6 条 / GC Scope 决策 2 条」）。
+   * 只有总数时用户看不出申请卡在哪个节点（测试报告 BUG-10），这里带上节点级明细供下钻展示。
+   */
+  nodes?: { node: string; count: number }[];
 }
 
 export interface NotificationVO {

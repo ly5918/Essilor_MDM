@@ -89,8 +89,35 @@
             <div class="task-body">
               <b>{{ todo.label }}</b>
               <small>{{ todo.hint }}</small>
+              <!-- 节点级明细 + 下钻：只给总数时看不出申请卡在哪一步（测试报告 BUG-10） -->
+              <div v-if="todoNodes.length" class="task-nodes">
+                <button
+                  v-for="item in todoNodes"
+                  :key="item.node"
+                  type="button"
+                  class="task-node"
+                  @click="goTodoDetail"
+                >
+                  {{ item.node }} <b>{{ item.count }}</b>
+                </button>
+              </div>
             </div>
             <el-tag :type="todo.tag === '待处理' ? 'warning' : 'info'" size="small">{{ todo.tag }}</el-tag>
+          </div>
+          <el-button v-if="todo.count > 0" class="task-drill" link type="primary" @click="goTodoDetail">
+            查看待办详情 →
+          </el-button>
+        </el-card>
+        <!-- 只读角色：用只读说明替代待办卡片，保持页面结构完整（测试报告 BUG-8） -->
+        <el-card v-else class="todo-panel page-card" shadow="never" :body-style="{ padding: '20px' }">
+          <template #header><span class="card-title">只读说明</span></template>
+          <div class="task">
+            <span class="n" style="background: #909399">RO</span>
+            <div class="task-body">
+              <b>只读审计视图</b>
+              <small>审批与治理由 Business User / Data Steward 处理，Auditor 仅可查询、查看与导出</small>
+            </div>
+            <el-tag type="info" size="small">只读</el-tag>
           </div>
         </el-card>
       </div>
@@ -115,10 +142,20 @@ interface PriorityTask {
 
 defineOptions({ name: 'CmdPocDashPanel' });
 
-const { role, roleKey, goMenu } = useCmdPoc();
+const { role, roleKey, readOnly, goMenu } = useCmdPoc();
 
 const stats = ref<DashboardStatVO[]>([]);
 const todo = ref<TodoVO>({ count: 0, label: '待处理任务', hint: '点击菜单进入详情', tag: '待处理' });
+
+/** 待办节点级明细（节点名 + 条数），回答「申请卡在哪一步」 */
+const todoNodes = computed(() => todo.value.nodes ?? []);
+
+/**
+ * 待办下钻：Steward 进「治理与审批」看队列，其余角色进「流程中心 → 已激活工作流」追踪自己的申请。
+ */
+const goTodoDetail = () => {
+  goMenu(roleKey.value === 'bu' || roleKey.value === 'gc' ? 'approval' : 'flowWorkitem');
+};
 
 /** BU / GC 5 张 KPI 卡片 — 从后端 /cmd/approval/kpi 实时获取 */
 const apKpis = ref<{ value: number; label: string }[]>([]);

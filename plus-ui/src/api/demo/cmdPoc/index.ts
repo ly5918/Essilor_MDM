@@ -19,6 +19,7 @@ import type {
   ApprovalFlowVO,
   ApprovalInstanceVO,
   ApprovalKpiVO,
+  ApprovalTaskCategory,
   ApprovalTaskDetailVO,
   ApprovalTaskVO,
   ApprovalTrailVO,
@@ -90,6 +91,7 @@ import type {
   ImportJobStatus,
   ImportJobVO,
   ImportRowVO,
+  ImportStatsVO,
   ImportTemplateVO,
   ImportUploadForm,
   IntegrationConnForm,
@@ -224,11 +226,16 @@ export const getTodo = async (buScope?: string): Promise<TodoVO> => {
   if (!useLive('dashboard')) return delay(mock.mockTodo);
   const vo = await unwrap<CmdDashboardRow>(request({ url: '/cmd/dashboard/stats', method: 'get', params: { buScope } }));
   const count = Number(vo.customerPending ?? 0);
+  const nodes = Object.entries(vo.pendingByNode ?? {})
+    .map(([node, value]) => ({ node, count: Number(value ?? 0) }))
+    .filter(item => item.count > 0);
   return {
     count,
     label: '待处理任务',
-    hint: '客户创建 / 变更申请待审批',
-    tag: count > 0 ? '待处理' : '无'
+    // 带上节点级分布：总数之外明确告诉用户「申请现在卡在哪一步」（测试报告 BUG-10）
+    hint: nodes.length ? `当前节点：${nodes.map(item => `${item.node} ${item.count} 条`).join(' · ')}` : '客户创建 / 变更申请待审批',
+    tag: count > 0 ? '待处理' : '无',
+    nodes
   };
 };
 
@@ -749,10 +756,49 @@ function toImportJobVO(row: CmdImportJobRow): ImportJobVO {
   };
 }
 
-export const listImportJobs = async (pageNum = 1, pageSize = 10): Promise<PageResult<ImportJobVO>> => {
+/**
+ * 导入中心全局统计（全量口径，与分页无关）
+ *
+ * 页面顶部「批次总览」KPI 此前由前端对当前页任务累加得到：翻页数字会跳变，
+ * 且首屏未加载完成时六张卡全部显示 0（测试报告「批量治理指标全 0」）。
+ * 改为服务端全量聚合，与菜单角标口径一致。
+ */
+export const getImportStats = async (): Promise<ImportStatsVO> => {
+  if (!useLive('import')) return delay({ jobCount: 0, totalRows: 0, exactCount: 0, suspectedCount: 0, newCount: 0, reviewCount: 0, invalidCount: 0 });
+  const vo = await unwrap<CmdImportStatsRow>(request({ url: '/cmd/import/stats', method: 'get' }));
+  return {
+    jobCount: vo.jobCount ?? 0,
+    totalRows: vo.totalRows ?? 0,
+    exactCount: vo.exactCount ?? 0,
+    suspectedCount: vo.suspectedCount ?? 0,
+    newCount: vo.newCount ?? 0,
+    reviewCount: vo.reviewCount ?? 0,
+    invalidCount: vo.invalidCount ?? 0
+  };
+};
+
+/**
+ * 「待处置」导入任务状态：待复核 / 进行中 / 部分成功。
+ * 与后端 CmdNavServiceImpl 的批量治理角标口径完全一致，保证「角标数字 = 列表条数」（测试报告 BUG-5）。
+ */
+export const IMPORT_PENDING_STATUS = ['WAIT_REVIEW', 'RUNNING', 'PARTIAL_SUCCESS'];
+
+export const listImportJobs = async (
+  pageNum = 1,
+  pageSize = 10,
+  options: { pendingOnly?: boolean } = {}
+): Promise<PageResult<ImportJobVO>> => {
   if (!useLive('import')) return delay({ rows: mock.mockImportJobs, total: mock.mockImportJobs.length });
   const page = await unwrap<PageResult<CmdImportJobRow>>(
-    request({ url: '/cmd/import/job/list', method: 'get', params: { pageNum, pageSize } })
+    request({
+      url: '/cmd/import/job/list',
+      method: 'get',
+      params: {
+        pageNum,
+        pageSize,
+        jobStatusList: options.pendingOnly ? IMPORT_PENDING_STATUS.join(',') : undefined
+      }
+    })
   );
   return {
     rows: (page.rows ?? []).map(toImportJobVO),
@@ -1731,23 +1777,30 @@ export const getNavBadges = async (role: string): Promise<Record<string, number>
   return badges;
 };
 
-/**
- * 全部待办：走后端 ALL 聚合口径（待处理 + 退回待补充），服务端分页。
- *
- * 此前在前端把 APPROVAL / GOVERNANCE / RETURNED 三个分类各取一页再 `slice(0, pageSize)`，
- * 结果是：① 审批类任务一满页，治理复核 / 退回任务永远看不到；
- * ② 分页 total 是三类相加、rows 却只有一页，翻页会丢数据。
- * 现在改由后端按 status 聚合，保证「全部待办」与点进去的每个页签口径一致（测试报告 BUG-6）。
- */
+/** 全部待办（默认口径，供工作台等高优先级任务条使用） */
 export const listApprovalTasks = async (scope: 'bu' | 'gc', pageNum = 1, pageSize = 10): Promise<PageResult<ApprovalTaskVO>> => {
   if (!useLive('approval')) return delay({ rows: mock.mockApprovalTasks[scope], total: mock.mockApprovalTasks[scope].length });
   return fetchTasksByCategory(scope, 'ALL', pageNum, pageSize);
 };
 
-/** 按页签分类拉取待办（ALL / APPROVAL / GOVERNANCE / RETURNED / DONE），服务端分页 */
+/**
+ * 按页签分类拉取待办（ALL / APPROVAL / GOVERNANCE / RETURNED / DONE），服务端分页
+ *
+ * 分类口径：
+ * - ALL        全部待办：状态为 PENDING / RETURNED 的全部未闭环任务（不按建表分类过滤）
+ * - APPROVAL   审批任务
+ * - GOVERNANCE 治理复核
+ * - RETURNED   升级与退回：按「状态 = RETURNED」取（退回是状态，不是建表分类）
+ * - DONE       我已处理：终态
+ *
+ * 说明：最初前端把 APPROVAL / GOVERNANCE / RETURNED 三类各取一页再 `slice(0, pageSize)`，
+ * 导致审批类任务一满页时治理复核 / 退回任务永远看不到，且 total 是三类相加、rows 只有一页（翻页丢数据）；
+ * 也曾尝试在前端按中文 taskType 文本过滤，后端新增业务类型时任务会「静默消失」。
+ * 现在每个页签各查各的分类，前端不做业务过滤，口径与后端完全一致。
+ */
 export const listApprovalTasksByCategory = async (
   scope: 'bu' | 'gc',
-  category: string,
+  category: ApprovalTaskCategory,
   pageNum = 1,
   pageSize = 10
 ): Promise<PageResult<ApprovalTaskVO>> => {
