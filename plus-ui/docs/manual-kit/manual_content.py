@@ -27,8 +27,8 @@ SECTIONS = [
 ("p", "浏览器打开演示站地址（本机演示环境为 <code>http://localhost/cmd-poc/login</code>）。登录页支持一键填入演示账号：点击对应角色按钮（Business User / Steward BU / Steward GC / Admin / Auditor）回填用户名，再点「使用 Microsoft 账号登录」跳过验证码即可进入。也可以直接访问 <code>http://localhost/cmd-poc/{角色}</code> 快速进入，例如 <code>/cmd-poc/bu</code>。"),
 ("img", "01_login", "图 1-1 登录页：点击演示账号按钮一键回填，再点右侧 SSO 登录按钮进入"),
 ("h3", "2. 准备测试资料包"),
-("p", "手册配套的 <code>manual-kit</code> 资料包里已备齐全部练习文件，跟练时直接取用："),
-("table", ["文件", "用途"], [
+("p", "手册配套的 <code>manual-kit</code> 资料包里已备齐全部练习文件，跟练时直接取用。下表已嵌入可下载附件，点击「⬇ 下载」即可将文件保存到本地，无需再去找资料包文件夹："),
+("files", [
 ["营业执照_示例_上海晨曦眼镜.png", "新建客户时上传做 OCR 识别练习的营业执照样图（1480×1050 PNG）"],
 ["系统下载_导入模板_Door_Mainstream.xlsx", "从系统「下载模板」功能导出的原始模板（表头：CustomerName、CreditCode、Address、City、ContactPhone、客户邮箱）"],
 ["手册演示_批量导入_四类分流.xlsx", "批量导入跟练文件：6 行数据覆盖 Exact 命中 / 疑似重复 / 批次内重复 / 新增 / Invalid"],

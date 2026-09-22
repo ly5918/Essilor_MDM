@@ -6,7 +6,7 @@
         <div class="toolbar m-b-12">
           <el-button type="primary" @click="openEndpointDialog()">新增端点</el-button>
           <div class="toolbar-right text-gray">
-            配置下游业务系统的集成端点；Mock 端点（mock:// 开头）可开箱演示成功通道
+            配置下游业务系统的集成端点；地址填 <b>local://deliver</b> 指向本机接收台（真实连通性测试 + 发布成功），<b>local://fail</b> 指向故障台（真实失败，用于演示 Retry）；也可填真实 http(s):// 地址做真实网络探活
           </div>
         </div>
         <el-card class="page-card" shadow="never" :body-style="{ padding: '0' }">

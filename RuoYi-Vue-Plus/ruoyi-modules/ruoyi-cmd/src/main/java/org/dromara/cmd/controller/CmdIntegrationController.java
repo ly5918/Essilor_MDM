@@ -1,6 +1,7 @@
 package org.dromara.cmd.controller;
 
 import cn.dev33.satoken.annotation.SaCheckLogin;
+import cn.dev33.satoken.annotation.SaIgnore;
 import lombok.RequiredArgsConstructor;
 import org.dromara.cmd.domain.bo.IntConnBo;
 import org.dromara.cmd.domain.bo.IntRunBo;
@@ -136,12 +137,15 @@ public class CmdIntegrationController extends BaseController {
     }
 
     /**
-     * 模拟下游接收台：真实 HTTP 对接点（POC 阶段作为"假下游系统"）。
-     * 端点地址配置为 {@code http://<host>:<port>/cmd/integration/mock/deliver} 即可闭环演示发布成功。
+     * 模拟下游接收台：真实 HTTP 对接点（POC 阶段作为"自测接收台"）。
+     * 端点地址配置为 {@code local://deliver}（回环到本应用）或
+     * {@code http://<host>:<port>/cmd/integration/mock/deliver} 即可闭环演示发布成功。
+     * 该接口放开登录校验，便于本应用回环调用与联调。
      *
      * @param body 收到的客户主数据报文
      * @return 成功应答
      */
+    @SaIgnore
     @PostMapping("/mock/deliver")
     public ResponseEntity<Map<String, Object>> mockDeliver(@RequestBody(required = false) String body) {
         Map<String, Object> res = new LinkedHashMap<>();
@@ -153,10 +157,13 @@ public class CmdIntegrationController extends BaseController {
 
     /**
      * 模拟下游故障台：用于演示失败 / Retry 场景。
-     * 端点地址配置为 {@code .../mock/deliver/fail} 时发布必然失败（HTTP 500）。
+     * 端点地址配置为 {@code local://fail}（回环到本应用）或
+     * {@code .../mock/deliver/fail} 时发布必然失败（HTTP 500）。
+     * 该接口放开登录校验，便于本应用回环调用与联调。
      *
      * @return 故障应答
      */
+    @SaIgnore
     @PostMapping("/mock/deliver/fail")
     public ResponseEntity<Map<String, Object>> mockDeliverFail(@RequestBody(required = false) String body) {
         Map<String, Object> res = new LinkedHashMap<>();

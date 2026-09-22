@@ -13,6 +13,11 @@
           <el-table-column label="层级" prop="scope" width="140" align="center" />
           <el-table-column label="类型" prop="type" width="110" align="center" />
           <el-table-column label="版本" prop="versionNo" width="110" align="center" />
+          <el-table-column label="状态" width="100" align="center">
+            <template #default="{ row }">
+              <el-tag :type="row.status === 'Published' ? 'success' : 'warning'" size="small">{{ row.status }}</el-tag>
+            </template>
+          </el-table-column>
           <el-table-column label="必填" width="90" align="center">
             <template #default="{ row }">
               <el-tag :type="row.required ? 'danger' : 'info'" size="small">{{ row.required ? '是' : '否' }}</el-tag>
@@ -239,7 +244,8 @@ const onValuesChange = async (arr: string[]) => {
 
 /** 工作版本：优先取最新的 Draft 版本，否则取当前生效（Current）版本；新字段默认归入工作版本 */
 const workingVersion = computed(() => {
-  const draft = [...versions.value].toReversed().find(v => v.status === 'Draft');
+  // 版本列表排序为 Current 优先 + 版本号倒序，第一个 Draft 即最新的 Draft（勿再反转，反转取到的是最老的）
+  const draft = versions.value.find(v => v.status === 'Draft');
   if (draft) return draft.version;
   return versions.value.find(v => v.status === 'Current')?.version;
 });
@@ -268,11 +274,12 @@ const onEditValueSet = (row: unknown) => {
 
 /**
  * DialogHost「确认」= 发布模型版本（真实动作，非模拟）：
- * 调用 publishMetadata 将当前版本全部 Draft 字段转为 Published，
- * 并刷新模型版本台账（新版本 Current、其余退役为 Draft）。
+ * 必须发布「工作版本」（最新的 Draft，新字段都在里面）。
+ * 若不带版本号，后端会发当前已发布的 Current 版本，Draft 字段反而被退役成 Draft，
+ * 导致「新建字段在业务表单里永远找不到」（历史 bug）。
  */
 const submit = async () => {
-  const message = await publishMetadata();
+  const message = await publishMetadata(workingVersion.value);
   versions.value = await listModelVersions();
   // 发布会退役其余版本（字段转 Draft），需重新拉取字段状态，本地乐观更新不准
   await loadMetadataFields();

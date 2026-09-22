@@ -20,6 +20,7 @@ import org.dromara.common.core.domain.PageResult;
 import org.dromara.common.core.exception.ServiceException;
 import org.dromara.common.core.utils.StringUtils;
 import org.dromara.common.mybatis.core.page.PageQuery;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -60,6 +61,13 @@ public class CmdIntegrationServiceImpl implements ICmdIntegrationService {
     private final IntEndpointMapper endpointMapper;
     private final CmdCustomerMapper customerMapper;
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    /**
+     * 本应用内置接收台基址（local://、mock:// 地址回环到此处做真实 HTTP 调用）。
+     * 可通过配置 {@code cmd.integration.receiver-base-url} 覆盖（默认本机 8080）。
+     */
+    @Value("${cmd.integration.receiver-base-url:http://localhost:8080}")
+    private String receiverBaseUrl;
 
     /**
      * {@inheritDoc}
@@ -209,19 +217,42 @@ public class CmdIntegrationServiceImpl implements ICmdIntegrationService {
         if (endpoint == null) {
             throw new ServiceException("端点不存在：{}", endpointId);
         }
-        String url = endpoint.getEndpointUrl();
-        if (StringUtils.isBlank(url) || url.startsWith("mock://")) {
-            return "Mock 下游连通性正常：" + StringUtils.blankToDefault(endpoint.getTargetSystem(), endpoint.getEndpointName());
+        String url = StringUtils.blankToDefault(endpoint.getEndpointUrl(), "");
+        String system = StringUtils.blankToDefault(endpoint.getTargetSystem(), endpoint.getEndpointName());
+        int timeout = timeoutOf(endpoint);
+        // local:// 或 mock:// → 回环到本应用内置接收台发送真实探活报文
+        if (url.startsWith("local://") || url.startsWith("mock://")) {
+            String receiver = localReceiverUrl(url);
+            Map<String, Object> probe = new HashMap<>();
+            probe.put("probe", true);
+            probe.put("endpointCode", endpoint.getEndpointCode());
+            probe.put("time", LocalDateTime.now().toString());
+            long start = System.currentTimeMillis();
+            try {
+                String resp = httpPost(receiver, objectMapper.writeValueAsString(probe), timeout);
+                long cost = System.currentTimeMillis() - start;
+                return "连通性测试通过（HTTP 200，耗时 " + cost + "ms）：" + system
+                    + " → " + receiver + "；应答 " + truncate(resp);
+            } catch (Exception e) {
+                long cost = System.currentTimeMillis() - start;
+                return "连通性测试失败（耗时 " + cost + "ms）：" + system
+                    + " → " + receiver + "；" + truncate(e.getMessage());
+            }
         }
-        Map<String, Object> probe = new HashMap<>();
-        probe.put("probe", true);
-        probe.put("time", LocalDateTime.now().toString());
-        try {
-            String resp = httpPost(url, objectMapper.writeValueAsString(probe), timeoutOf(endpoint));
-            return "连通性测试通过（HTTP 200）：" + truncate(resp);
-        } catch (Exception e) {
-            return "连通性测试失败：" + e.getMessage();
+        // http(s):// → 真实网络探活（GET），返回实际状态码与耗时
+        if (url.startsWith("http://") || url.startsWith("https://")) {
+            long start = System.currentTimeMillis();
+            try {
+                int code = httpGet(url, timeout);
+                long cost = System.currentTimeMillis() - start;
+                return "连通性测试通过（HTTP " + code + "，耗时 " + cost + "ms）：" + system + " → " + url;
+            } catch (Exception e) {
+                long cost = System.currentTimeMillis() - start;
+                return "连通性测试失败（耗时 " + cost + "ms）：" + system + " → " + url
+                    + "；" + truncate(e.getMessage());
+            }
         }
+        return "端点地址无法识别，无法执行连通性测试：" + url;
     }
 
     /**
@@ -261,12 +292,50 @@ public class CmdIntegrationServiceImpl implements ICmdIntegrationService {
         Map<String, Object> payload = buildPayload(count);
         payload.put("runCode", runCode);
         String json = objectMapper.writeValueAsString(payload);
-        String url = endpoint.getEndpointUrl();
-        // 未配置地址或 mock:// 前缀 → 本地模拟下游直接接收成功
-        if (StringUtils.isBlank(url) || url.startsWith("mock://")) {
-            return "MOCK-ACK received=true（本地模拟下游已接收 " + count + " 条）";
+        String url = StringUtils.blankToDefault(endpoint.getEndpointUrl(), "");
+        // local:// 或 mock:// → 回环到本应用内置接收台（真实 HTTP POST）
+        if (url.startsWith("local://") || url.startsWith("mock://")) {
+            return httpPost(localReceiverUrl(url), json, timeoutOf(endpoint));
         }
-        return httpPost(url, json, timeoutOf(endpoint));
+        // http(s):// → 真实网络推送
+        if (url.startsWith("http://") || url.startsWith("https://")) {
+            return httpPost(url, json, timeoutOf(endpoint));
+        }
+        throw new IOException("端点地址无法识别，无法发布：" + url);
+    }
+
+    /**
+     * 将 local:// / mock:// 地址解析为本应用内置接收台的真实 HTTP 地址（回环）。
+     * 含 "fail" 的地址指向故障台（HTTP 500），用于演示失败 / Retry。
+     */
+    private String localReceiverUrl(String url) {
+        String path = url.contains("fail") ? "cmd/integration/mock/deliver/fail" : "cmd/integration/mock/deliver";
+        return receiverBaseUrl + "/" + path;
+    }
+
+    /**
+     * 轻量 HTTP GET（JDK 原生），用于连通性探活；返回实际状态码。
+     */
+    private int httpGet(String url, int timeoutMs) throws IOException {
+        HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
+        try {
+            conn.setRequestMethod("GET");
+            conn.setConnectTimeout(timeoutMs);
+            conn.setReadTimeout(timeoutMs);
+            conn.setInstanceFollowRedirects(true);
+            int code = conn.getResponseCode();
+            try (InputStream in = (code >= 200 && code < 400) ? conn.getInputStream() : conn.getErrorStream()) {
+                if (in != null) {
+                    // 消费响应体，避免连接挂起
+                    //noinspection StatementWithEmptyBody
+                    while (in.read() != -1) {
+                    }
+                }
+            }
+            return code;
+        } finally {
+            conn.disconnect();
+        }
     }
 
     /**

@@ -84,7 +84,7 @@ export interface CmdPocContext {
   /** 新增 / 更新元数据字段（本地缓存 + 提示） */
   upsertMetadataField: (field: MetadataFieldVO) => void;
   /** 发布模型版本：Draft 字段全部转为 Published */
-  publishMetadata: () => Promise<string>;
+  publishMetadata: (version?: string) => Promise<string>;
   /** 按业务上下文过滤已发布字段（动态表单渲染依据） */
   publishedFields: ComputedRef<MetadataFieldVO[]>;
   /**
@@ -201,10 +201,18 @@ export function createCmdPoc(defaultRole: RoleKey): CmdPocContext {
     }
   };
 
-  const publishMetadata = async () => {
-    const message = await cmdPocApi.publishModelVersion();
-    metadataFields.value = metadataFields.value.map(field => ({ ...field, status: 'Published' }));
-    // 提示由调用方（DialogHost / 页头按钮）统一弹出，避免重复 toast
+  /**
+   * 发布模型版本。version 缺省时自动解析「最新的 Draft」版本（新字段都在 Draft 里）；
+   * 不再本地乐观翻转状态 —— 发布会退役其余版本，以重新拉取的 DB 状态为准。
+   */
+  const publishMetadata = async (version?: string) => {
+    let target = version;
+    if (!target) {
+      const versions = await cmdPocApi.listModelVersions();
+      target = versions.find(v => v.status === 'Draft')?.version ?? versions.find(v => v.status === 'Current')?.version;
+    }
+    const message = await cmdPocApi.publishModelVersion(target);
+    await loadMetadataFields();
     return message;
   };
 

@@ -277,11 +277,16 @@ const treeRef = ref<InstanceType<typeof ElTree>>();
 const treeBodyRef = ref<HTMLElement>();
 /** 当前正在执行的定位动作，用于按钮 loading 态 */
 const locating = ref<'' | 'root' | 'current' | 'collapse'>('');
-const treeData = ref<HierarchyNodeVO[]>([]);
+/**
+ * 原始层级树（后端一次性取回，永不改写，作为展示树的唯一数据源）。
+ * 展示层的截断 / 展开全部由 treeData 计算属性派生，绝不回写到这里，
+ * 否则 slice 会把未展示的子节点永久丢掉（历史 bug：点了「加载更多」却展开不出东西）。
+ */
+const rawTree = ref<HierarchyNodeVO[]>([]);
 const treeProps = { label: 'label', children: 'children' };
 
-/** 每个节点默认展示的直接子节点数（超出部分收进「展开全部子节点」占位行） */
-const CHILD_PAGE_SIZE = 5;
+/** 每个节点默认展示的直接子节点数（对齐原型「加载更多子节点 · 已显示 X / Y」的每批 3 个） */
+const CHILD_PAGE_SIZE = 3;
 /** 左侧结果区最多展示条数（超过提示细化关键字） */
 const searchResultLimit = 20;
 
@@ -315,23 +320,27 @@ const makeLoadMore = (parent: HierarchyNodeVO, shown: number, total: number): Hi
 });
 
 /**
- * 展示截断：每个节点默认只展示前 CHILD_PAGE_SIZE 个子节点，
- * 超出部分追加一个「展开全部子节点」占位行；每次都从原始子节点集合重建，
- * 保证同一父节点下最多只有一个占位行，不会出现重复或残留。
+ * 由原始树派生「展示树」：每个节点默认只展示前 CHILD_PAGE_SIZE 个子节点，
+ * 超出部分追加一个「展开全部子节点」占位行。
+ *
+ * - 每次都从原始树重新派生，同一父节点下最多只有一个占位行，不会重复或残留；
+ * - 总数取「实际子节点数」而非 childrenCount —— childrenCount 是数据库全量
+ *   （含 pending / 被筛选排除的行），直接用会导致「还有 N 个未显示」点了却展开不出东西；
+ * - 不修改入参，原始树始终完整。
  */
-const applyLazyChildren = (nodes: HierarchyNodeVO[]) => {
-  nodes.forEach(node => {
-    if (node.isLoadMore) return;
-    const kids = (node.children ?? []).filter(c => !c.isLoadMore);
-    applyLazyChildren(kids);
-    const total = Math.max(node.childrenCount || 0, kids.length);
-    if (showAllChildren.value.has(node.id) || kids.length <= CHILD_PAGE_SIZE) {
-      node.children = kids;
-    } else {
-      node.children = [...kids.slice(0, CHILD_PAGE_SIZE), makeLoadMore(node, CHILD_PAGE_SIZE, total)];
-    }
-  });
-};
+const buildDisplayTree = (nodes: HierarchyNodeVO[], showAll: Set<string>): HierarchyNodeVO[] =>
+  nodes
+    .filter(node => !node.isLoadMore)
+    .map(node => {
+      const kids = buildDisplayTree((node.children ?? []).filter(c => !c.isLoadMore), showAll);
+      const total = kids.length;
+      if (showAll.has(node.id) || total <= CHILD_PAGE_SIZE) {
+        return { ...node, children: kids };
+      }
+      return { ...node, children: [...kids.slice(0, CHILD_PAGE_SIZE), makeLoadMore(node, CHILD_PAGE_SIZE, total)] };
+    });
+
+const treeData = computed(() => buildDisplayTree(rawTree.value, showAllChildren.value));
 
 const searchKeyword = ref('');
 const searchResults = ref<HierarchyNodeVO[]>([]);
@@ -472,9 +481,9 @@ const onFilterChange = () => {
 const refreshTreeAndSearch = async () => {
   searching.value = true;
   try {
-    treeData.value = await getHierarchy(currentFilters.value);
-    // 首屏只展示每节点前 CHILD_PAGE_SIZE 个子节点，其余挂「加载更多」占位行
-    applyLazyChildren(treeData.value);
+    rawTree.value = await getHierarchy(currentFilters.value);
+    // 换筛选条件等于换了一棵树，之前「展开全部」的记录一并清空
+    showAllChildren.value = new Set();
     const firstLevel = treeData.value.map(n => n.id);
     const secondLevel = treeData.value.flatMap(n => n.children?.map(c => c.id) ?? []);
     expandedKeys.value = [...firstLevel, ...secondLevel];
@@ -605,23 +614,17 @@ const onLoadMore = (sentinel: HierarchyNodeVO) => {
     ElMessage.warning('未找到父节点，请刷新后重试');
     return;
   }
-  showAllChildren.value.add(parent.id);
-  applyLazyChildren(treeData.value);
+  showAllChildren.value = new Set([...showAllChildren.value, parent.id]);
 };
 
 /** 定位前确保目标节点可见：解除祖先链上的展示截断（纯前端操作，瞬时完成） */
 const ensureLoaded = (node: HierarchyNodeVO) => {
-  let changed = false;
-  (node.ancestorIds ?? []).forEach(pid => {
+  const need = (node.ancestorIds ?? []).filter(pid => {
     const parent = findNodeById(pid);
-    if (parent && (parent.children ?? []).some(c => c.isLoadMore)) {
-      showAllChildren.value.add(parent.id);
-      changed = true;
-    }
+    return parent && (parent.children ?? []).some(c => c.isLoadMore);
   });
-  if (changed) {
-    applyLazyChildren(treeData.value);
-  }
+  if (!need.length) return;
+  showAllChildren.value = new Set([...showAllChildren.value, ...need]);
 };
 
 /** 三 收起其他分支：仅保留当前节点所在路径，其余全部收起 */

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """渲染单文件 HTML 手册：左侧目录 + base64 内嵌截图"""
-import base64, html, os, sys
+import base64, html, mimetypes, os, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 WEB = os.path.join(HERE, 'web')
@@ -16,6 +16,17 @@ def img_data(name):
         with open(path, 'rb') as f:
             _img_cache[name] = base64.b64encode(f.read()).decode()
     return _img_cache[name]
+
+_file_cache = {}
+def file_data(fname):
+    if fname not in _file_cache:
+        path = os.path.join(HERE, fname)
+        mime = mimetypes.guess_type(fname)[0]
+        if not mime:
+            mime = 'application/octet-stream'
+        with open(path, 'rb') as f:
+            _file_cache[fname] = (mime, base64.b64encode(f.read()).decode())
+    return _file_cache[fname]
 
 def render_block(block, idx):
     kind = block[0]
@@ -39,6 +50,12 @@ def render_block(block, idx):
         th = ''.join(f"<th>{h}</th>" for h in head)
         trs = ''.join("<tr>" + ''.join(f"<td>{c}</td>" for c in r) + "</tr>" for r in rows)
         return f"<div class='tbl-wrap'><table><thead><tr>{th}</tr></thead><tbody>{trs}</tbody></table></div>"
+    if kind == 'files':
+        rows = []
+        for fname, desc in block[1]:
+            mime, b64 = file_data(fname)
+            rows.append(f"<tr><td><span class='fname'>{html.escape(fname)}</span><a class='file-dl' href='data:{mime};base64,{b64}' download='{html.escape(fname)}' title='点击下载 {html.escape(fname)}'>⬇ 下载</a></td><td>{desc}</td></tr>")
+        return f"<div class='tbl-wrap'><table class='file-table'><thead><tr><th>文件</th><th>用途</th></tr></thead><tbody>{''.join(rows)}</tbody></table></div>"
     return ''
 
 # ---------- 组装目录与正文 ----------
@@ -104,6 +121,10 @@ td{padding:9px 12px;border-top:1px solid var(--line);vertical-align:top}
 tbody tr:nth-child(even){background:#f7fafc}
 code{background:#eef2f6;border:1px solid var(--line);border-radius:4px;padding:1px 6px;font-size:13px;color:#a1481f;font-family:Consolas,monospace}
 b{color:#0f3f6e}
+.file-table td:first-child{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.fname{font-family:Consolas,monospace;font-size:13.5px;color:#0f3f6e;word-break:break-all}
+.file-dl{display:inline-flex;align-items:center;gap:4px;background:var(--brand2);color:#fff;padding:4px 12px;border-radius:6px;text-decoration:none;font-size:13px;white-space:nowrap;transition:background .2s}
+.file-dl:hover{background:#104a7d}
 .topbar{position:sticky;top:0;z-index:5;background:linear-gradient(90deg,var(--brand),var(--brand2));color:#fff;display:flex;align-items:center;gap:14px;padding:12px 28px}
 .topbar .t{font-size:17px;font-weight:700;letter-spacing:1px}
 .topbar .s{font-size:12.5px;opacity:.85}

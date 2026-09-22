@@ -184,6 +184,16 @@ async function unwrap<T>(promise: AxiosPromise<T>): Promise<T> {
 }
 
 /**
+ * 取 R.msg 文案（后端 R.ok(String) 单参重载会把提示文案放进 msg、data 为 null）。
+ * 用于 test/publish/retry/delete 等以「结果文案」为返回值的集成接口。
+ */
+async function unwrapMsg(promise: AxiosPromise<unknown>): Promise<string> {
+  const res = (await promise) as unknown as { msg?: string; data?: unknown };
+  const msg = (res as { msg?: string })?.msg ?? '';
+  return msg || String((res as { data?: unknown })?.data ?? '');
+}
+
+/**
  * 后端 LocalDateTime → 页面展示串
  * 后端返回 'yyyy-MM-dd HH:mm:ss'（application.yml 已配置全局格式），
  * 也兼容 ISO 'yyyy-MM-ddTHH:mm:ss'，因此统一做一次归一化。
@@ -2102,7 +2112,7 @@ export const listIntegrationRuns = async (): Promise<IntegrationRunVO[]> => {
 
 export const retryIntegration = async (runId: string): Promise<string> => {
   if (!useLive('integration')) return delay(`已重试同步：${runId}`);
-  return unwrap(request({ url: `/cmd/integration/run/${runId}/retry`, method: 'put' }));
+  return unwrapMsg(request({ url: `/cmd/integration/run/${runId}/retry`, method: 'put' }));
 };
 
 export const saveIntegrationConn = async (data: IntegrationConnForm): Promise<string> => {
@@ -2153,19 +2163,19 @@ export const saveIntegrationEndpoint = async (data: IntegrationConnForm): Promis
 /** 删除端点 */
 export const deleteIntegrationEndpoint = async (id: number): Promise<string> => {
   if (!useLive('integration')) return delay('端点已删除');
-  return unwrap(request({ url: `/cmd/integration/endpoint/${id}`, method: 'delete' }));
+  return unwrapMsg(request({ url: `/cmd/integration/endpoint/${id}`, method: 'delete' }));
 };
 
 /** 连通性测试 */
 export const testIntegrationConn = async (id: number): Promise<string> => {
   if (!useLive('integration')) return delay('连通性测试成功：HTTP 200');
-  return unwrap(request({ url: `/cmd/integration/endpoint/${id}/test`, method: 'post' }));
+  return unwrapMsg(request({ url: `/cmd/integration/endpoint/${id}/test`, method: 'post' }));
 };
 
 /** 手动发布到端点 */
 export const publishIntegration = async (id: number, count?: number): Promise<string> => {
   if (!useLive('integration')) return delay('已触发发布，请到运行监控查看结果');
-  return unwrap(request({ url: `/cmd/integration/endpoint/${id}/publish`, method: 'post', params: count ? { count } : undefined }));
+  return unwrapMsg(request({ url: `/cmd/integration/endpoint/${id}/publish`, method: 'post', params: count ? { count } : undefined }));
 };
 
 /* ============================== 12. 审计 / 权限 / 覆盖 ============================== */

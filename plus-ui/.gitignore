@@ -46,6 +46,7 @@ tpl*.xlsx
 tpl*.png
 tpl.json
 lint.exit
+_inspect_*
 
 # Excel 模板调试件
 tpl_*.xlsx

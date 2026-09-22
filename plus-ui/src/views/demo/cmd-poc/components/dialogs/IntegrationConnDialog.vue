@@ -39,7 +39,8 @@
       </el-row>
 
       <el-form-item label="端点地址" prop="url">
-        <el-input v-model="form.url" placeholder="如 http://host:port/path 或 mock://local/deliver" />
+        <el-input v-model="form.url" placeholder="如 local://deliver、local://fail 或 http(s)://host:port/path" />
+        <div class="form-tip text-gray">local://deliver 指向本机接收台（真实连通性测试 + 发布成功）；local://fail 指向故障台（真实失败，用于演示 Retry）；http(s):// 做真实网络探活</div>
       </el-form-item>
 
       <el-row :gutter="16">
@@ -187,3 +188,11 @@ onMounted(() => {
 
 defineExpose({ submit });
 </script>
+
+<style scoped>
+.form-tip {
+  font-size: 12px;
+  line-height: 1.5;
+  margin-top: 4px;
+}
+</style>

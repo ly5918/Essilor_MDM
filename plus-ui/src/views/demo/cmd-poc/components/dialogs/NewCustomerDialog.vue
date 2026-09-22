@@ -4,7 +4,7 @@
     <div class="meta-banner">
       <b>动态元数据表单</b>
       <span>根据 {{ contextText }} 加载字段（{{ dynamicFields.length }} 个）</span>
-      <el-tag type="success" size="small" effect="plain">模型版本 v1.5</el-tag>
+      <el-tag type="success" size="small" effect="plain">模型版本 {{ currentVersion }}</el-tag>
       <el-button link type="primary" @click="onReload">刷新字段</el-button>
     </div>
 
@@ -106,7 +106,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus';
-import { submitCustomer } from '@/api/demo/cmdPoc';
+import { submitCustomer, listModelVersions } from '@/api/demo/cmdPoc';
 import type { CustomerForm, OcrResultVO } from '@/api/demo/cmdPoc/types';
 import { useCmdPoc } from '../../composables/useCmdPoc';
 import {
@@ -143,6 +143,17 @@ const ocrDialogRef = ref<InstanceType<typeof OcrDialog>>();
 const ocrVisible = ref(false);
 /** 本次 OCR 回填命中的字段编码（用于打「OCR回填」标签，让回填结果可见） */
 const ocrFieldCodes = ref<string[]>([]);
+
+/** 当前生效的元数据模型版本（打开弹窗时实时读取，替代早期硬编码的假版本号） */
+const currentVersion = ref('…');
+onMounted(async () => {
+  try {
+    const versions = await listModelVersions();
+    currentVersion.value = versions.find(v => v.status === 'Current')?.version ?? versions[0]?.version ?? currentVersion.value;
+  } catch {
+    /* 版本号读取失败不打断表单，保持占位 */
+  }
+});
 
 const form = reactive<CustomerForm & { dynamicValues: Record<string, string> }>({
   legalName: '',
