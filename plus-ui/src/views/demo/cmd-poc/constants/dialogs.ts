@@ -63,7 +63,13 @@ const define = (key: DialogKey, title: DialogTitle, wide = false, confirmText: D
 });
 
 export const DIALOG_MAP: Record<DialogKey, DialogMeta> = {
-  fields: define('fields', '字段与值集管理', true, '发布模型版本'),
+  /**
+   * 字段与值集管理
+   * 宽度 min(1180px, 94vw)：字段目录共 8 列（编码/名称/层级/类型/版本/状态/必填/操作），
+   * 900px 下最右侧的「操作」列（编辑 / 删除按钮）会被 .el-dialog__body 的 overflow 截断，
+   * 导致用户看不到删除入口。
+   */
+  fields: { ...define('fields', '字段与值集管理', true, '发布模型版本'), width: 'min(1180px, 94vw)' },
   newFieldForm: define('newFieldForm', '新建元数据字段', true, '保存为Draft'),
   newCustomer: define('newCustomer', '新建客户申请', true, '提交申请'),
   dq: { ...define('dq', 'DQ规则管理', true, '开始测试'), width: 'min(1240px, 94vw)' },

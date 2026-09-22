@@ -82,7 +82,7 @@
           </div>
         </el-card>
 
-        <el-card class="todo-panel page-card" shadow="never" :body-style="{ padding: '20px' }">
+        <el-card v-if="roleKey !== 'audit'" class="todo-panel page-card" shadow="never" :body-style="{ padding: '20px' }">
           <template #header><span class="card-title">待办事项</span></template>
           <div class="task">
             <span class="n" :style="{ background: role.color }">{{ todo.count }}</span>

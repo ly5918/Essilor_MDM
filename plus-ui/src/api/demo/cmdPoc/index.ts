@@ -491,38 +491,82 @@ const FIELD_TYPE_TEXT: Record<string, MetadataFieldVO['type']> = {
   REFERENCE: 'Reference'
 };
 
+/** 后端行 → 前端字段 VO（id / deleteGuard 用于字段目录的删除操作与删除保护） */
+/**
+ * 版本号比较（用于「当前生效版本 / 工作版本」判定）。
+ * 按数字段逐位比较，保证 v1.10 > v1.9（字符串比较会判反）。
+ */
+export const compareVersion = (a: string, b: string): number => {
+  const seg = (v: string) => v.replace(/^v/i, '').split('.').map(n => Number(n) || 0);
+  const pa = seg(a);
+  const pb = seg(b);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (d !== 0) return d;
+  }
+  return 0;
+};
+
+const toMetadataFieldVO = (row: CmdMdFieldRow): MetadataFieldVO => ({
+  id: row.id,
+  code: row.fieldCode ?? '',
+  label: row.fieldName ?? '',
+  scope: FIELD_SCOPE_TEXT[row.scopeType ?? ''] ?? 'GC Core',
+  type: FIELD_TYPE_TEXT[(row.dataType ?? '').toUpperCase()] ?? 'Text',
+  required: row.isRequired === 'Y',
+  bu: row.ownerBu ?? 'All',
+  customerType: 'All',
+  versionNo: row.versionNo,
+  status: row.status === '0' ? 'Published' : 'Draft',
+  deleteGuard: row.deleteGuard
+});
+
 export const listMetadataFields = async (): Promise<MetadataFieldVO[]> => {
   if (!useLive('metadata')) return delay(mock.mockMetadataFields);
   const rows = await unwrap<CmdMdFieldRow[]>(request({ url: '/cmd/metadata/field/list', method: 'get' }));
-  // md_field 里同一 field_code 可能有多条（种子数据 model_code 分别是 All / CUSTOMER / Door），
-  // 直接平铺会让业务表单出现重复字段（如「客户法定名称」出现两次）→ 按 field_code 去重，保留首条。
+  const all = (rows ?? []).filter(row => !!row.fieldCode);
+  // md_field 是「按版本快照」存储的：同一 field_code 会在 v1 / v1.1 / … / 当前版本各有一行。
+  // 业务表单只应加载「当前生效版本」的已发布字段，否则：
+  //   ① 平铺会让表单出现重复字段（如「客户法定名称」出现 5 次）；
+  //   ② 早期实现「按 field_code 去重保留首条」，而建字段时 order_num 落 0，会排到最前面，
+  //      结果保留下来的是已退役（status=1）的历史行 → 所有字段都被判成 Draft → 动态字段区渲染 0 个（历史 bug）。
+  // 现改为：先定位当前生效版本（存活行中版本号最大的、存在 status='0' 行的版本），再只取该版本的已发布字段。
+  const published = all.filter(row => row.status === '0');
+  const currentVersion = published
+    .map(row => row.versionNo ?? '')
+    .filter(Boolean)
+    .toSorted((a, b) => compareVersion(b, a))[0];
+  const scoped = currentVersion ? published.filter(row => (row.versionNo ?? '') === currentVersion) : published;
+  // 同版本内同编码仍可能有多行（历史测试数据）→ 按 field_code 去重，保留首条
   const seen = new Set<string>();
-  return (rows ?? [])
+  return scoped
     .filter(row => {
       const code = row.fieldCode ?? '';
       if (!code || seen.has(code)) return false;
       seen.add(code);
       return true;
     })
-    .map(row => ({
-      code: row.fieldCode ?? '',
-      label: row.fieldName ?? '',
-      scope: FIELD_SCOPE_TEXT[row.scopeType ?? ''] ?? 'GC Core',
-      type: FIELD_TYPE_TEXT[(row.dataType ?? '').toUpperCase()] ?? 'Text',
-      required: row.isRequired === 'Y',
-      bu: row.ownerBu ?? 'All',
-      // 说明：md_field.model_code 取值是 All / CUSTOMER / Door 混用（不是干净的「数据模型」维度），
-      // 早期实现把它当 customerType 过滤条件，导致动态字段被过滤为空。
-      // 字段按模型维度适用于全部客户类型，故统一取 All（与原型「根据业务上下文加载字段」一致）。
-      customerType: 'All',
-      // 字段所属模型版本号（新增字段时按目标版本落库，便于版本演进）
-      versionNo: row.versionNo,
-      // 说明：后端 MdField.status 的语义是「0 正常 / 1 停用」（RuoYi 惯例），不是 Draft/Published。
-      // 早期实现按 status==='1' ? Published : Draft 映射，而种子数据全部为 '0'（正常），
-      // 结果所有字段被判成 Draft，动态客户字段区渲染为 0 个（表单空白）。
-      // 现按 0 → Published（可用于业务表单）、1 → Draft（已停用，不进表单）映射。
-      status: row.status === '0' ? 'Published' : 'Draft'
-    }));
+    .map(toMetadataFieldVO);
+};
+
+/**
+ * 字段目录专用：不做 field_code 去重，逐行返回（带 id）。
+ * 字段目录需要看见并管理每一条记录（含同编码的历史/重复行），
+ * 而业务表单渲染走 listMetadataFields（去重，避免重复字段）。
+ */
+export const listMetadataFieldRows = async (): Promise<MetadataFieldVO[]> => {
+  if (!useLive('metadata')) return delay(mock.mockMetadataFields);
+  const rows = await unwrap<CmdMdFieldRow[]>(request({ url: '/cmd/metadata/field/list', method: 'get' }));
+  return (rows ?? []).filter(row => !!row.fieldCode).map(toMetadataFieldVO);
+};
+
+/**
+ * 删除字段（逻辑删除：后端 UPDATE del_flag='1'，行与历史保留）。
+ * 总设计点名的核心主数据字段（匹配依据 / DQ 维度 / 生命周期状态）后端会拒绝删除并抛错。
+ */
+export const deleteMetadataField = async (id: number): Promise<string> => {
+  if (!useLive('metadata')) return delay('字段已删除（演示模式未落库）');
+  return unwrap<string>(request({ url: `/cmd/metadata/field/${id}`, method: 'delete' }));
 };
 
 export const saveMetadataField = async (data: MetadataFieldForm): Promise<string> => {
@@ -554,8 +598,9 @@ export const listModelVersions = async (): Promise<ModelVersionVO[]> => {
   const rows = await unwrap<CmdVersionRow[]>(request({ url: '/cmd/metadata/version/list', method: 'get' }));
   return (rows ?? []).map(row => ({
     version: row.version ?? '',
-    ruleCount: row.ruleCount ?? 0,
+    diff: row.diff ?? '—',
     status: row.status === 'Draft' ? 'Draft' : 'Current',
+    draftCreatedAt: row.draftCreatedAt,
     publishedAt: row.publishedAt
   }));
 };
@@ -596,7 +641,7 @@ export const saveValueSet = async (data: ValueSetForm): Promise<string> => {
 export const createModelVersion = async (): Promise<string> => {
   if (!useLive('metadata')) {
     const next = `v${(mock.mockModelVersions.length + 1)}.0`;
-    mock.mockModelVersions.push({ version: next, ruleCount: mock.mockModelVersions[0]?.ruleCount ?? 12, status: 'Draft' });
+    mock.mockModelVersions.push({ version: next, diff: '克隆基线', status: 'Draft' });
     return next;
   }
   return unwrap(request({ url: '/cmd/metadata/version', method: 'post' }));

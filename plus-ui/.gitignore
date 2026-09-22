@@ -50,3 +50,8 @@ _inspect_*
 
 # Excel 模板调试件
 tpl_*.xlsx
+
+# 临时截图/诊断产物（不入库）
+_probe_*
+diag_*
+proc_info.txt

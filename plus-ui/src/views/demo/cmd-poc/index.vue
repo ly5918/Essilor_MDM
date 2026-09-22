@@ -33,7 +33,7 @@
               {{ roleKey === 'gc' ? '进入待我决策' : '进入待我审批' }}
             </el-button>
           </div>
-          <div v-else-if="currentPage === 'customers' && !readOnly" class="page-title-actions">
+          <div v-else-if="currentPage === 'customers' && roleKey === 'business'" class="page-title-actions">
             <el-button plain @click="openDialog('ocr')">查看OCR识别结果</el-button>
             <el-button type="primary" plain icon="Plus" @click="openDialog('newCustomer')">新建客户</el-button>
           </div>

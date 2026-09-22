@@ -135,8 +135,8 @@ export const mockMetadataFields: MetadataFieldVO[] = [
 ];
 
 export const mockModelVersions: ModelVersionVO[] = [
-  { version: 'v1.4', ruleCount: 12, status: 'Current', publishedAt: '2026-08-01' },
-  { version: 'v1.5 Draft', ruleCount: 13, status: 'Draft' }
+  { version: 'v1.4', diff: '基线', status: 'Current', publishedAt: '2026-08-01' },
+  { version: 'v1.5', diff: '新增 1', status: 'Draft', draftCreatedAt: '2026-08-05' }
 ];
 
 /** 值集定义（字段与值集管理 · 值集页签） */

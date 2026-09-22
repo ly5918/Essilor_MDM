@@ -81,6 +81,11 @@ export interface CmdPocContext {
   /** 元数据字段缓存（Master Data Extension 演示核心） */
   metadataFields: Ref<MetadataFieldVO[]>;
   loadMetadataFields: () => Promise<void>;
+  /** 字段目录行（不去重、带 id，供平台管理表格逐条管理） */
+  fieldRows: Ref<MetadataFieldVO[]>;
+  loadFieldRows: () => Promise<void>;
+  /** 删除元数据字段（逻辑删除，核心字段后端拒绝） */
+  deleteMetadataField: (id: number) => Promise<string>;
   /** 新增 / 更新元数据字段（本地缓存 + 提示） */
   upsertMetadataField: (field: MetadataFieldVO) => void;
   /** 发布模型版本：Draft 字段全部转为 Published */
@@ -192,6 +197,23 @@ export function createCmdPoc(defaultRole: RoleKey): CmdPocContext {
     metadataFields.value = await cmdPocApi.listMetadataFields();
   };
 
+  /** 字段目录行：不做 field_code 去重、带 id，供平台管理「字段目录」表格逐条管理（含删除） */
+  const fieldRows = ref<MetadataFieldVO[]>([]);
+  const loadFieldRows = async () => {
+    fieldRows.value = await cmdPocApi.listMetadataFieldRows();
+  };
+
+  /**
+   * 删除字段（逻辑删除）。核心主数据字段由后端拒绝并在前端禁用按钮，这里只负责调用与刷新。
+   * 返回后端提示文案，由调用方统一 toast。
+   */
+  const deleteMetadataField = async (id: number) => {
+    const message = await cmdPocApi.deleteMetadataField(id);
+    await loadFieldRows();
+    await loadMetadataFields();
+    return message;
+  };
+
   const upsertMetadataField = (field: MetadataFieldVO) => {
     const index = metadataFields.value.findIndex(item => item.code === field.code);
     if (index >= 0) {
@@ -255,6 +277,9 @@ export function createCmdPoc(defaultRole: RoleKey): CmdPocContext {
     markChangeChanged,
     metadataFields,
     loadMetadataFields,
+    fieldRows,
+    loadFieldRows,
+    deleteMetadataField,
     upsertMetadataField,
     publishMetadata,
     publishedFields,

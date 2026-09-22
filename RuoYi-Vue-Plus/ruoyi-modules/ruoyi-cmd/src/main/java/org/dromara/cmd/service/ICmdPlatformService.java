@@ -32,12 +32,31 @@ public interface ICmdPlatformService {
     List<MdField> selectFieldList(String keyword, String modelCode);
 
     /**
+     * 查询「当前已发布版本」的元数据字段（业务表单渲染与提交校验的唯一口径）
+     * <p>
+     * md_field 按版本快照存储，同一 field_code 会在 v1 / v1.1 / … 各有一行；
+     * 这里只返回**当前生效版本**中 status='0'（已发布）的字段，并按 field_code 去重，
+     * 保证「平台管理看到的字段集」「新建客户动态表单」「提交必填校验」三者完全一致。
+     *
+     * @return 当前生效版本的已发布字段（按 order_num 升序）
+     */
+    List<MdField> selectPublishedFields();
+
+    /**
      * 新增或修改元数据字段
      *
      * @param field 字段信息
      * @return 字段编码
      */
     String saveField(MdField field);
+
+    /**
+     * 删除字段（逻辑删除，核心主数据字段不允许删除）
+     *
+     * @param id 字段主键
+     * @return 提示文案
+     */
+    String deleteField(Long id);
 
     /**
      * 查询值集列表

@@ -849,8 +849,10 @@ public class CmdApprovalServiceImpl implements ICmdApprovalService {
             }
             return actions;
         }
+        // 默认分支 = 非合并、非重复关联类审批（如客户新建 NEW / 变更 / 停用 / 层级 / 批量导入确认）。
+        // 无合并语义时不得使用「确认合并」字样（BUG-12）：NEW 场景明确为「批准新建」，其余为「批准」。
         actions.add(action(CmdConstants.ACTION_APPROVE,
-            gc ? "确认合并 / 批准" : "批准", "primary"));
+            CmdConstants.MATCH_NEW.equals(task.getDuplicateState()) ? "批准新建" : "批准", "primary"));
         actions.add(action(CmdConstants.ACTION_REJECT, "拒绝", "danger"));
         actions.add(action(CmdConstants.ACTION_RETURN, gc ? "退回BU" : "退回补充", "warning"));
         if (!gc) {

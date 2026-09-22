@@ -1,5 +1,6 @@
 package org.dromara.cmd.domain;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
@@ -99,4 +100,11 @@ public class MdField extends BaseEntity {
 
     @TableLogic
     private String delFlag;
+
+    /**
+     * 不可删除原因（非数据库列，查询时由服务层回填）。
+     * 非 null 即表示该字段受总设计 / 治理标记保护，前端应禁用删除按钮。
+     */
+    @TableField(exist = false)
+    private String deleteGuard;
 }

@@ -131,7 +131,8 @@ public class CmdChangeServiceImpl implements ICmdChangeService {
     public List<CmdChangeFieldVo> selectChangeableFields() {
         return mdFieldMapper.selectList(new LambdaQueryWrapper<MdField>()
                 .eq(MdField::getModelCode, MD_MODEL_CUSTOMER)
-                .eq(MdField::getStatus, CmdConstants.DEL_FLAG_NORMAL)
+                // 字段模型版本化后正式行(status=0)与草稿行(status=1)并存，以 physical_column 是否配置为准
+                .in(MdField::getStatus, "0", "1")
                 .isNotNull(MdField::getPhysicalColumn)
                 .ne(MdField::getPhysicalColumn, "")
                 .orderByAsc(MdField::getOrderNum))
@@ -907,7 +908,7 @@ public class CmdChangeServiceImpl implements ICmdChangeService {
         List<MdField> fields = mdFieldMapper.selectList(new LambdaQueryWrapper<MdField>()
             .eq(MdField::getModelCode, MD_MODEL_CUSTOMER)
             .in(MdField::getFieldCode, fieldCodes)
-            .eq(MdField::getStatus, CmdConstants.DEL_FLAG_NORMAL)
+            .in(MdField::getStatus, "0", "1")
             .orderByAsc(MdField::getOrderNum));
         fields.forEach(f -> map.putIfAbsent(f.getFieldCode(), f));
         return map;

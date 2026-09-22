@@ -5,9 +5,23 @@
       <el-tab-pane label="字段目录" name="fields">
         <div class="d-toolbar">
           <el-button type="primary" plain size="small" icon="Plus" @click="onNewField">新建字段</el-button>
+          <!-- 字段按版本快照存储：同一编码在多个版本各有一行，故提供版本筛选（默认当前工作版本） -->
+          <el-select v-model="fieldVersionFilter" size="small" class="fd-version-filter" placeholder="版本">
+            <el-option label="全部版本" value="" />
+            <el-option v-for="v in fieldVersionOptions" :key="v" :label="v" :value="v" />
+          </el-select>
+          <el-input
+            v-model="fieldKeyword"
+            size="small"
+            class="fd-keyword"
+            clearable
+            placeholder="搜索字段编码 / 名称"
+            prefix-icon="Search"
+          />
+          <span class="fd-count">共 {{ displayFieldRows.length }} 行</span>
           <el-tag type="success" size="small" effect="plain">发布后动态进入Business User表单</el-tag>
         </div>
-        <el-table border :data="metadataFields" class="data-table" max-height="360">
+        <el-table border :data="displayFieldRows" class="data-table" max-height="360">
           <el-table-column label="字段编码" prop="code" min-width="150" />
           <el-table-column label="显示名称" prop="label" min-width="160" />
           <el-table-column label="层级" prop="scope" width="140" align="center" />
@@ -23,9 +37,17 @@
               <el-tag :type="row.required ? 'danger' : 'info'" size="small">{{ row.required ? '是' : '否' }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="90" align="center">
+          <el-table-column label="操作" width="130" align="center">
           <template #default="{ row }">
             <el-button link type="primary" @click="onEditField(row)">编辑</el-button>
+            <el-tooltip
+              v-if="row.deleteGuard"
+              :content="`核心主数据字段不可删除：${row.deleteGuard}`"
+              placement="top"
+            >
+              <span><el-button link type="info" disabled>删除</el-button></span>
+            </el-tooltip>
+            <el-button v-else link type="danger" @click="onDeleteField(row)">删除</el-button>
           </template>
           </el-table-column>
         </el-table>
@@ -65,14 +87,25 @@
           <el-tag type="info" size="small" effect="plain">基于当前已发布版本克隆为 Draft，可编辑后发布演进</el-tag>
         </div>
         <el-table border :data="versions" class="data-table" max-height="360">
-          <el-table-column label="版本" prop="version" min-width="140" />
-          <el-table-column label="规则数" prop="ruleCount" width="100" align="center" />
-          <el-table-column label="状态" width="120" align="center">
+          <el-table-column label="版本" prop="version" min-width="90" />
+          <el-table-column label="差异（较上一版本）" prop="diff" min-width="130" align="center">
+            <template #default="{ row }">
+              <span v-if="row.diff === '基线'" class="vd-diff vd-diff-base">{{ row.diff }}</span>
+              <span v-else-if="row.diff && row.diff !== '无变更'" class="vd-diff vd-diff-chg">{{ row.diff }}</span>
+              <span v-else class="vd-diff">{{ row.diff || '—' }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="状态" width="90" align="center">
             <template #default="{ row }">
               <el-tag :type="row.status === 'Current' ? 'success' : 'warning'" size="small">{{ row.status }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="发布时间" prop="publishedAt" min-width="160" align="center" />
+          <el-table-column label="草稿创建时间" prop="draftCreatedAt" min-width="160" align="center">
+            <template #default="{ row }">{{ row.draftCreatedAt || '—' }}</template>
+          </el-table-column>
+          <el-table-column label="发布时间" prop="publishedAt" min-width="160" align="center">
+            <template #default="{ row }">{{ row.publishedAt || '—' }}</template>
+          </el-table-column>
           <el-table-column label="操作" width="100" align="center">
             <template #default="{ row }">
               <el-button
@@ -171,6 +204,7 @@ import { computed, onMounted, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import type { FormInstance, FormRules } from 'element-plus';
 import {
+  compareVersion,
   createModelVersion,
   listModelVersions,
   listValueSets,
@@ -185,11 +219,29 @@ defineOptions({ name: 'CmdPocFieldsDialog' });
 
 defineProps<{ payload?: Record<string, unknown> }>();
 
-const { metadataFields, upsertMetadataField, loadMetadataFields, publishMetadata } = useCmdPoc();
+const { metadataFields, upsertMetadataField, loadMetadataFields, publishMetadata, fieldRows, loadFieldRows, deleteMetadataField } =
+  useCmdPoc();
 
 const activeTab = ref('fields');
 const valueSets = ref<Awaited<ReturnType<typeof listValueSets>>>([]);
 const versions = ref<ModelVersionVO[]>([]);
+
+/* -------- 字段目录筛选：版本 + 关键字 -------- */
+/** 版本筛选（'' = 全部版本）；首次加载后默认落到当前工作版本，避免历史版本快照把目录刷成上百行 */
+const fieldVersionFilter = ref<string>('');
+const fieldKeyword = ref('');
+/** 目录中出现过的版本号（倒序），供筛选下拉使用 */
+const fieldVersionOptions = computed(() =>
+  Array.from(new Set(fieldRows.value.map(r => r.versionNo || '').filter(Boolean))).toSorted((a, b) => b.localeCompare(a))
+);
+const displayFieldRows = computed(() => {
+  const kw = fieldKeyword.value.trim().toLowerCase();
+  return fieldRows.value.filter(r => {
+    if (fieldVersionFilter.value && r.versionNo !== fieldVersionFilter.value) return false;
+    if (kw && !`${r.code ?? ''}${r.label ?? ''}`.toLowerCase().includes(kw)) return false;
+    return true;
+  });
+});
 
 const fieldDialogVisible = ref(false);
 const editingField = ref<MetadataFieldVO | undefined>();
@@ -242,12 +294,17 @@ const onValuesChange = async (arr: string[]) => {
   }
 };
 
-/** 工作版本：优先取最新的 Draft 版本，否则取当前生效（Current）版本；新字段默认归入工作版本 */
+/**
+ * 工作版本：新字段默认归入的版本 = 版本号最大的那个版本。
+ * <p>
+ * 不能用「第一个 Draft」来判定：发布 v1.4 时后端会把旧版本字段一并退役为 status=1，
+ * 前端映射后 v1/v1.1/v1.2/v1.3 全都显示成 Draft，`find(Draft)` 会命中已退役的 v1.3，
+ * 于是「默认视图」指向了一个历史版本（v1.4 才是 Current）。
+ * 新草稿版本的版本号必然大于 Current（v1.5 > v1.4），故取版本号最大者即可同时覆盖「有待发布草稿」与「无草稿」两种情况。
+ */
 const workingVersion = computed(() => {
-  // 版本列表排序为 Current 优先 + 版本号倒序，第一个 Draft 即最新的 Draft（勿再反转，反转取到的是最老的）
-  const draft = versions.value.find(v => v.status === 'Draft');
-  if (draft) return draft.version;
-  return versions.value.find(v => v.status === 'Current')?.version;
+  if (!versions.value.length) return undefined;
+  return versions.value.toSorted((a, b) => compareVersion(b.version, a.version))[0]?.version;
 });
 
 const onNewField = () => {
@@ -260,6 +317,40 @@ const onEditField = (row: unknown) => {
   editingField.value = { ...field };
   fieldDialogVisible.value = true;
   ElMessage.info(`已打开字段：${field.label}`);
+};
+
+/**
+ * 删除字段（逻辑删除，行与历史保留）。
+ * 核心主数据字段（总设计点名的匹配依据 / DQ 维度 / 生命周期状态）后端 deleteGuard 有值，
+ * 前端按钮已禁用；此处再兜底拦截一次，防止绕过。
+ */
+const onDeleteField = async (row: unknown) => {
+  const field = row as MetadataFieldVO;
+  if (field.deleteGuard) {
+    ElMessage.warning(`「${field.label}」是核心主数据字段（${field.deleteGuard}），不允许删除`);
+    return;
+  }
+  if (!field.id) {
+    ElMessage.warning('该字段缺少主键，无法删除，请刷新后重试');
+    return;
+  }
+  try {
+    await ElMessageBox.confirm(
+      `确认删除字段「${field.label}（${field.code}）」？\n删除为逻辑删除（历史保留），发布后不再进入业务表单。`,
+      '删除字段',
+      { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' }
+    );
+  } catch {
+    return;
+  }
+  try {
+    const message = await deleteMetadataField(field.id);
+    ElMessage.success(message);
+    // 逻辑删除后重新拉取：目录行与业务表单字段列表都要同步
+    await refreshFields();
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '字段删除失败');
+  }
 };
 
 const onEditValueSet = (row: unknown) => {
@@ -278,11 +369,19 @@ const onEditValueSet = (row: unknown) => {
  * 若不带版本号，后端会发当前已发布的 Current 版本，Draft 字段反而被退役成 Draft，
  * 导致「新建字段在业务表单里永远找不到」（历史 bug）。
  */
+/**
+ * 刷新字段数据：业务表单用的去重列表 + 字段目录用的逐行列表（带 id，供删除）。
+ * 任何字段变更（保存 / 发布 / 创建版本 / 删除）后都要同时刷新两者，否则目录会残留已删行。
+ */
+const refreshFields = async () => {
+  await Promise.all([loadMetadataFields(), loadFieldRows()]);
+};
+
 const submit = async () => {
   const message = await publishMetadata(workingVersion.value);
   versions.value = await listModelVersions();
   // 发布会退役其余版本（字段转 Draft），需重新拉取字段状态，本地乐观更新不准
-  await loadMetadataFields();
+  await refreshFields();
   return message;
 };
 defineExpose({ submit });
@@ -292,7 +391,7 @@ const onSubmitField = async () => {
   try {
     const message = await fieldFormRef.value?.submit();
     ElMessage.success(message || '字段已保存为Draft');
-    await loadMetadataFields();
+    await refreshFields();
     fieldDialogVisible.value = false;
   } finally {
     saving.value = false;
@@ -323,7 +422,7 @@ const onCreateVersion = async () => {
   try {
     const next = await createModelVersion();
     versions.value = await listModelVersions();
-    await loadMetadataFields();
+    await refreshFields();
     ElMessage.success(`已创建新版本 ${next}（Draft），可在字段目录中为其新增/调整字段后发布`);
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : '创建版本失败');
@@ -336,7 +435,7 @@ const onPublishVersion = async (row: unknown) => {
   try {
     const message = await publishModelVersion(version);
     versions.value = await listModelVersions();
-    await loadMetadataFields();
+    await refreshFields();
     ElMessage.success(message);
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : '发布版本失败');
@@ -345,14 +444,46 @@ const onPublishVersion = async (row: unknown) => {
 
 onMounted(async () => {
   [valueSets.value, versions.value] = await Promise.all([listValueSets(), listModelVersions()]);
+  // 字段目录按行展示（含同编码的历史/重复行），需单独加载带 id 的逐行数据
+  await loadFieldRows();
+  // 默认只看当前工作版本（最新 Draft，无 Draft 则 Current）：新建的字段就落在这里，便于直接删除
+  fieldVersionFilter.value = workingVersion.value ?? '';
 });
 </script>
 
 <style lang="scss" scoped>
+/* 版本差异摘要：基线灰色、有变更橙色提示 */
+.vd-diff {
+  font-size: 12px;
+
+  &.vd-diff-base {
+    color: var(--el-text-color-secondary);
+  }
+
+  &.vd-diff-chg {
+    color: var(--el-color-warning);
+    font-weight: 600;
+  }
+}
+
 /* 「+ 新增取值」哨兵项：主色 + 前缀加号区分普通选项 */
 .vs-add-option {
   color: var(--el-color-primary);
   font-weight: 600;
+}
+
+/* 字段目录筛选：版本下拉 / 关键字 / 计数 */
+.fd-version-filter {
+  width: 130px;
+}
+
+.fd-keyword {
+  width: 220px;
+}
+
+.fd-count {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
 }
 
 /* 多选标签较多时允许换行撑高，不截断 */

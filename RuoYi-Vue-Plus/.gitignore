@@ -62,3 +62,8 @@ mvn-out.log
 compile.log
 backend*.log
 uploads/
+
+# IDE/Gitee 平台配置（不入库）
+.run/
+.gitee/
+proc_info.txt

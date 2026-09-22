@@ -435,6 +435,8 @@ export interface MetadataFieldVO {
   versionNo?: string;
   /** 发布状态：Draft / Published */
   status: 'Draft' | 'Published';
+  /** 不可删原因（核心主数据字段 / 治理标记字段）；有值时前端禁用删除按钮 */
+  deleteGuard?: string;
 }
 
 export interface MetadataFieldForm extends Omit<MetadataFieldVO, 'status'> {
@@ -459,8 +461,11 @@ export interface ValueSetForm {
 /** 模型版本 */
 export interface ModelVersionVO {
   version: string;
-  ruleCount: number;
+  /** 较上一版本的差异摘要（基线 / 新增 N · 变更 M / 无变更） */
+  diff: string;
   status: 'Current' | 'Draft';
+  /** 草稿创建时间 */
+  draftCreatedAt?: string;
   publishedAt?: string;
 }
 
@@ -2016,12 +2021,20 @@ export interface CmdMdFieldRow {
   dataType?: string;
   valueSetCode?: string;
   isRequired?: string;
+  /** 主键字段标记 Y/N */
+  isKeyField?: string;
+  /** 匹配字段标记 Y/N */
+  isMatchField?: string;
+  /** DQ 评分字段标记 Y/N */
+  isDqField?: string;
   scopeType?: string;
   ownerBu?: string;
   versionNo?: string;
   status?: string;
   orderNum?: number;
   remark?: string;
+  /** 不可删原因（后端回填，非数据库列）；有值即表示受保护，不允许删除 */
+  deleteGuard?: string;
 }
 
 /** 后端值集行（对应 md_value_set） */
@@ -2037,8 +2050,9 @@ export interface CmdValueSetRow {
 /** 后端模型版本行（对应 PlatformVersionVo） */
 export interface CmdVersionRow {
   version?: string;
-  ruleCount?: number;
+  diff?: string;
   status?: string;
+  draftCreatedAt?: string;
   publishedAt?: string;
 }
 

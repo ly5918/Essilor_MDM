@@ -11,7 +11,9 @@ import org.dromara.common.log.annotation.Log;
 import org.dromara.common.log.enums.BusinessType;
 import org.dromara.common.web.core.BaseController;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -60,6 +62,18 @@ public class CmdMetadataController extends BaseController {
     @PostMapping("/field")
     public R<String> saveField(@Validated @RequestBody MdField field) {
         return R.ok("字段已保存", platformService.saveField(field));
+    }
+
+    /**
+     * 删除字段（逻辑删除；总设计点名的核心主数据字段会拒绝删除）
+     *
+     * @param id 字段主键
+     * @return 提示文案
+     */
+    @Log(title = "平台管理", businessType = BusinessType.DELETE)
+    @DeleteMapping("/field/{id}")
+    public R<String> deleteField(@PathVariable Long id) {
+        return R.ok(platformService.deleteField(id));
     }
 
     /**

@@ -12,6 +12,7 @@ import org.dromara.cmd.domain.AuditEvent;
 import org.dromara.cmd.domain.CmdCustomer;
 import org.dromara.cmd.domain.CmdCustomerVersion;
 import org.dromara.cmd.domain.CmdWorkflowStepLog;
+import org.dromara.cmd.domain.MdField;
 import org.dromara.cmd.domain.bo.CmdCustomerBo;
 import org.dromara.cmd.domain.vo.CmdCustomerStatsVo;
 import org.dromara.cmd.domain.vo.CmdCustomerSubmitVo;
@@ -181,6 +182,95 @@ public class CmdCustomerServiceImpl implements ICmdCustomerService {
     }
 
     /**
+     * 提交前必填校验（配置驱动）
+     * <p>
+     * 必填口径来自「当前已发布元数据版本」的 is_required='Y' 字段，而不是写死在代码里：
+     * 管理员在「字段与值集」新增必填字段并发布后，新建客户提交会自动要求填写，
+     * 不需要改任何业务代码（总设计 Configuration-first / Master Data Extension）。
+     * <p>
+     * 修复目标（测试报告 BUG-2）：此前缺失必填字段会一路走到 INSERT，
+     * 由 cmd_customer.legal_name 的 NOT NULL 约束抛出未捕获异常（页面提示「发生未知异常」）；
+     * 现在在事务开始前拦截，返回可读的字段清单，HTTP 仍是 200 + 业务失败码。
+     *
+     * @param bo 提交入参
+     */
+    private void validateRequiredFields(CmdCustomerBo bo) {
+        if (bo == null) {
+            throw new ServiceException("提交内容为空，请填写客户信息后重试");
+        }
+        Map<String, String> values = resolveFieldValues(bo);
+        List<String> missing = new java.util.ArrayList<>();
+        for (MdField field : platformService.selectPublishedFields()) {
+            if (!CmdConstants.YES.equalsIgnoreCase(field.getIsRequired())) {
+                continue;
+            }
+            String code = field.getFieldCode();
+            // 由系统托管、不出现在动态表单里的字段（生命周期状态）不参与人工必填校验
+            if ("status".equals(code)) {
+                continue;
+            }
+            if (StringUtils.isBlank(values.get(code))) {
+                missing.add(StringUtils.blankToDefault(field.getFieldName(), code));
+            }
+        }
+        if (!missing.isEmpty()) {
+            throw new ServiceException("提交失败：以下必填字段尚未填写 —— " + String.join("、", missing)
+                + "。请在表单中补齐（字段旁红字标注）或先通过 OCR 识别回填。");
+        }
+    }
+
+    /**
+     * 把提交入参摊平成「元数据字段编码 → 取值」，供必填校验使用。
+     * <p>
+     * 核心字段落在主档实体列上（前端已映射），其余动态字段整体以 extJson 透传，
+     * 两边都要读，否则动态必填字段永远校验不到。
+     *
+     * @param bo 提交入参
+     * @return 字段编码到取值的映射
+     */
+    private Map<String, String> resolveFieldValues(CmdCustomerBo bo) {
+        Map<String, String> values = new java.util.HashMap<>();
+        putValue(values, "legal_name", bo.getLegalName());
+        putValue(values, "legal_name_en", bo.getLegalNameEn());
+        putValue(values, "short_name", bo.getShortName());
+        putValue(values, "credit_code", bo.getCreditCode());
+        putValue(values, "tax_no", bo.getTaxNo());
+        putValue(values, "customer_type", bo.getCustomerType());
+        putValue(values, "customer_level", bo.getCustomerLevel());
+        putValue(values, "product_line", bo.getProductLine());
+        putValue(values, "bu_scope", bo.getBuScope());
+        putValue(values, "country", bo.getCountry());
+        putValue(values, "province", bo.getProvince());
+        putValue(values, "city", bo.getCity());
+        putValue(values, "address", bo.getAddress());
+        putValue(values, "payer_id", bo.getPayerId());
+        putValue(values, "postal_code", bo.getPostalCode());
+        putValue(values, "contact_name", bo.getContactName());
+        putValue(values, "contact_phone", bo.getContactPhone());
+        putValue(values, "contact_email", bo.getContactEmail());
+        putValue(values, "source_system", bo.getSourceSystem());
+        putValue(values, "status", bo.getStatus());
+        if (StringUtils.isNotBlank(bo.getExtJson())) {
+            try {
+                cn.hutool.json.JSONObject obj = cn.hutool.json.JSONUtil.parseObj(bo.getExtJson());
+                obj.forEach((key, value) -> putValue(values, key, value == null ? null : String.valueOf(value)));
+            } catch (Exception ignore) {
+                // 扩展属性不是合法 JSON 时忽略，不阻断提交（主档列校验仍然生效）
+            }
+        }
+        return values;
+    }
+
+    /**
+     * 写入字段取值映射（空串按未填写处理）
+     */
+    private void putValue(Map<String, String> values, String code, String value) {
+        if (StringUtils.isNotBlank(value)) {
+            values.put(code, value.trim());
+        }
+    }
+
+    /**
      * {@inheritDoc}
      */
     @Override
@@ -195,8 +285,16 @@ public class CmdCustomerServiceImpl implements ICmdCustomerService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public CmdCustomerSubmitVo submitApplication(CmdCustomerBo bo) {
+        // 0) 提交前业务校验：按「当前已发布元数据版本」的必填字段逐项检查，
+        //    缺失时直接抛业务异常（前端按字段名红字标注），而不是让 NOT NULL 列抛出 500。
+        validateRequiredFields(bo);
         // 1) 主档落库（One ID 服务端生成 + 首版本快照）
         CmdCustomer customer = insertCustomerEntity(bo);
+
+        // 1.1) 必填校验：法定名称为客户主数据核心标识，缺失直接业务报错（返回规范错误而非 500，BUG-05）
+        if (StringUtils.isBlank(customer.getLegalName())) {
+            throw new ServiceException("客户法定名称不能为空");
+        }
 
         // 2) 自动检查（对应泳道图「技术/业务 DQ」与「Duplicate Check」两个自动阶段）：
         //    POC 阶段用确定性规则替代独立校验引擎，接入规则引擎后此处改为调用其接口，落库字段不变。
@@ -612,7 +710,18 @@ public class CmdCustomerServiceImpl implements ICmdCustomerService {
      * @param customer 新申请客户
      * @return 命中的存量主档候选，未命中返回 null
      */
+    /**
+     * Duplicate Check：与存量 active 主档比对（总设计「匹配分流」网关的 POC 确定性实现）。
+     * <p>信用代码（主依据）同值 → 返回候选（EXACT）；否则客户名称（辅助线索）规范化相等或高相似度
+     * → 返回候选（SUSPECTED）。已合并 / 草稿 / 待审中的主档不参与比对。
+     * 名称匹配采用「去法律后缀 + 去括号内容」规范化，并辅以 bigram Dice 相似度，
+     * 以解决「上海清视眼镜有限公司」与「上海清视眼镜」因名称不完全一致而漏判跨 BU 同名重复的问题（BUG-02）。
+     *
+     * @param customer 新申请客户
+     * @return 命中的存量主档候选，未命中返回 null
+     */
     private CmdCustomer matchExistingCustomer(CmdCustomer customer) {
+        // 主依据：统一社会信用代码（精确匹配，命中即 EXACT）
         if (StringUtils.isNotBlank(customer.getCreditCode())) {
             List<CmdCustomer> byCredit = customerMapper.selectList(new LambdaQueryWrapper<CmdCustomer>()
                 .eq(CmdCustomer::getCreditCode, customer.getCreditCode())
@@ -624,18 +733,67 @@ public class CmdCustomerServiceImpl implements ICmdCustomerService {
                 return byCredit.get(0);
             }
         }
+        // 辅助线索：客户名称（总设计「名称仅作为辅助线索」）。规范化相等或相似度 ≥ 0.85 即视为疑似同名。
         if (StringUtils.isNotBlank(customer.getLegalName())) {
-            List<CmdCustomer> byName = customerMapper.selectList(new LambdaQueryWrapper<CmdCustomer>()
-                .eq(CmdCustomer::getLegalName, customer.getLegalName())
+            final String normNew = normalizeCustomerName(customer.getLegalName());
+            List<CmdCustomer> active = customerMapper.selectList(new LambdaQueryWrapper<CmdCustomer>()
                 .eq(CmdCustomer::getStatus, CmdConstants.CUST_STATUS_ACTIVE)
                 .ne(customer.getId() != null, CmdCustomer::getId, customer.getId())
-                .orderByDesc(CmdCustomer::getCreateTime)
-                .last("LIMIT 1"));
-            if (!byName.isEmpty()) {
-                return byName.get(0);
+                .orderByDesc(CmdCustomer::getCreateTime));
+            for (CmdCustomer c : active) {
+                if (StringUtils.isBlank(c.getLegalName())) {
+                    continue;
+                }
+                final String normExist = normalizeCustomerName(c.getLegalName());
+                if (normNew.equals(normExist) || diceSimilarity(normNew, normExist) >= 0.85) {
+                    return c;
+                }
             }
         }
         return null;
+    }
+
+    /** 客户名称规范化：去括号内容 + 去常见法律后缀，用于同名重复比对（BUG-02） */
+    private String normalizeCustomerName(String name) {
+        String s = name == null ? "" : name.trim();
+        // 去括号及其中内容：（上海）(浦东)【】[] 等
+        s = s.replaceAll("[（(【\\[].*?[）)】\\]]", "");
+        // 去常见法律 / 组织后缀（长后缀优先，避免「有限公司」误切「公司」）
+        String[] suffixes = {"股份有限公司", "有限责任公司", "有限公司", "集团公司", "集团", "分公司", "分店", "总部", "中心", "工厂", "公司"};
+        for (String suf : suffixes) {
+            if (s.endsWith(suf)) {
+                s = s.substring(0, s.length() - suf.length());
+                break;
+            }
+        }
+        return s.trim();
+    }
+
+    /** bigram Dice 相似度（0~1），用于名称模糊比对兜底（BUG-02） */
+    private double diceSimilarity(String a, String b) {
+        if (a.equals(b)) {
+            return 1.0;
+        }
+        if (a.isEmpty() || b.isEmpty()) {
+            return 0.0;
+        }
+        java.util.Set<String> ba = bigrams(a);
+        java.util.Set<String> bb = bigrams(b);
+        int overlap = 0;
+        for (String g : ba) {
+            if (bb.contains(g)) {
+                overlap++;
+            }
+        }
+        return (2.0 * overlap) / (ba.size() + bb.size());
+    }
+
+    private java.util.Set<String> bigrams(String s) {
+        java.util.Set<String> set = new java.util.HashSet<>();
+        for (int i = 0; i < s.length() - 1; i++) {
+            set.add(s.substring(i, i + 2));
+        }
+        return set;
     }
 
     /** 申请人（登录人 / 演示账号） */

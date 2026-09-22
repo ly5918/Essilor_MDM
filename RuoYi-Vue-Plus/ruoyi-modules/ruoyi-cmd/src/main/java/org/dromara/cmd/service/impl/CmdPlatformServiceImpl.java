@@ -58,11 +58,36 @@ public class CmdPlatformServiceImpl implements ICmdPlatformService {
     private final AuditEventMapper auditEventMapper;
 
     /**
+     * 总设计 V6.1 点名的核心主数据字段（字段编码 → 不可删原因），删除会破坏匹配 / DQ / 主档完整性。
+     * <ul>
+     *   <li>credit_code / address：DESIGN BOUNDARIES「信用代码与经营地址为主要匹配依据」</li>
+     *   <li>province / city / contact_name / contact_phone：DQ Scorecard 必评维度</li>
+     *   <li>legal_name / customer_type / bu_scope / country：主档必填属性与数据权限维度</li>
+     *   <li>status：生命周期状态（总设计「逻辑停用」依赖该字段）</li>
+     * </ul>
+     */
+    private static final java.util.Map<String, String> PROTECTED_FIELDS = java.util.Map.ofEntries(
+        java.util.Map.entry("legal_name", "客户法定名称，主档主键属性"),
+        java.util.Map.entry("credit_code", "总设计 DESIGN BOUNDARIES：主要匹配依据"),
+        java.util.Map.entry("address", "总设计 DESIGN BOUNDARIES：主要匹配依据 + DQ 必评项"),
+        java.util.Map.entry("province", "DQ 必评维度（地址）"),
+        java.util.Map.entry("city", "DQ 必评维度（地址）"),
+        java.util.Map.entry("contact_name", "DQ 必评维度（联系人）"),
+        java.util.Map.entry("contact_phone", "DQ 必评维度（联系电话）"),
+        java.util.Map.entry("customer_type", "主档必填属性（客户分层维度）"),
+        java.util.Map.entry("bu_scope", "主档必填属性（数据权限维度）"),
+        java.util.Map.entry("country", "主档必填属性"),
+        java.util.Map.entry("status", "生命周期状态，逻辑停用依赖")
+    );
+
+    /**
      * {@inheritDoc}
      */
     @Override
     public List<MdField> selectFieldList(String keyword, String modelCode) {
         LambdaQueryWrapper<MdField> lqw = Wrappers.lambdaQuery();
+        // 已删除（del_flag='1'）的字段不进字段目录与业务表单
+        lqw.eq(MdField::getDelFlag, "0");
         if (StringUtils.isNotBlank(modelCode)) {
             lqw.eq(MdField::getModelCode, modelCode);
         }
@@ -71,7 +96,134 @@ public class CmdPlatformServiceImpl implements ICmdPlatformService {
                 .or().like(MdField::getFieldName, keyword));
         }
         lqw.orderByAsc(MdField::getOrderNum);
-        return fieldMapper.selectList(lqw);
+        List<MdField> list = fieldMapper.selectList(lqw);
+        // 回填「不可删原因」，供前端禁用删除按钮（规则集中在后端，避免前后端漂移）
+        list.forEach(field -> field.setDeleteGuard(protectedReason(field)));
+        return list;
+    }
+
+    /**
+     * {@inheritDoc}
+     * <p>
+     * 口径与前端 listMetadataFields 完全一致（已发布 → 当前版本 → 按 field_code 去重）：
+     * 后端提交校验与前端动态表单必须读同一套字段，否则会出现「表单没这个字段、
+     * 后端却判必填缺失」或「表单有这个字段、后端不校验」的漂移。
+     */
+    @Override
+    public List<MdField> selectPublishedFields() {
+        List<MdField> all = fieldMapper.selectList(
+            Wrappers.<MdField>lambdaQuery().orderByAsc(MdField::getOrderNum).orderByAsc(MdField::getId));
+        List<MdField> published = all.stream()
+            .filter(f -> "0".equals(f.getStatus()) && StringUtils.isNotBlank(f.getFieldCode()))
+            .toList();
+        String current = published.stream()
+            .map(f -> StringUtils.blankToDefault(f.getVersionNo(), ""))
+            .filter(StringUtils::isNotBlank)
+            .max(CmdPlatformServiceImpl::compareVersion)
+            .orElse("");
+        List<MdField> scoped = StringUtils.isBlank(current)
+            ? published
+            : published.stream().filter(f -> current.equals(StringUtils.blankToDefault(f.getVersionNo(), ""))).toList();
+        // 同版本内同 field_code 仍可能有多行（历史测试数据）→ 保留排序后的首条
+        java.util.Set<String> seen = new java.util.LinkedHashSet<>();
+        List<MdField> result = new ArrayList<>();
+        for (MdField field : scoped) {
+            if (seen.add(field.getFieldCode())) {
+                result.add(field);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * 版本号比较（v1.10 &gt; v1.9，字符串比较会判反）
+     *
+     * @param a 版本号
+     * @param b 版本号
+     * @return 比较结果
+     */
+    private static int compareVersion(String a, String b) {
+        int[] pa = versionSegments(a);
+        int[] pb = versionSegments(b);
+        for (int i = 0; i < Math.max(pa.length, pb.length); i++) {
+            int d = (i < pa.length ? pa[i] : 0) - (i < pb.length ? pb[i] : 0);
+            if (d != 0) {
+                return d;
+            }
+        }
+        return 0;
+    }
+
+    /**
+     * 版本号拆分为数字段（去掉前导 v，按 . 切分）
+     */
+    private static int[] versionSegments(String version) {
+        String[] parts = StringUtils.blankToDefault(version, "0").replaceFirst("^[vV]", "").split("\\.");
+        int[] seg = new int[parts.length];
+        for (int i = 0; i < parts.length; i++) {
+            try {
+                seg[i] = Integer.parseInt(parts[i].trim());
+            } catch (NumberFormatException e) {
+                seg[i] = 0;
+            }
+        }
+        return seg;
+    }
+
+    /**
+     * 字段删除（逻辑删除，不做物理删除）。
+     * <p>
+     * 总设计 V6.1「DESIGN BOUNDARIES」的「无物理删除」约束针对客户主档（应逻辑停用并保留历史），
+     * 并未禁止元数据字段删除；但总设计点名的核心主数据字段（匹配依据 / DQ 必评项 / 生命周期状态）
+     * 属于治理基线，不允许删除，否则匹配与 DQ 规则将失去依据。
+     *
+     * @param id 字段主键
+     * @return 提示文案
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public String deleteField(Long id) {
+        if (id == null) {
+            throw new ServiceException("字段 id 不能为空");
+        }
+        MdField field = fieldMapper.selectById(id);
+        if (field == null) {
+            throw new ServiceException("字段不存在或已被删除");
+        }
+        String guard = protectedReason(field);
+        if (guard != null) {
+            throw new ServiceException("「" + field.getFieldName() + "」是核心主数据字段（" + guard + "），不允许删除");
+        }
+        // @TableLogic：deleteById 实际执行 UPDATE md_field SET del_flag='1'，行与历史保留
+        fieldMapper.deleteById(id);
+        return "字段「" + field.getFieldName() + "」已删除（逻辑删除，历史保留）；发布后不再进入业务表单";
+    }
+
+    /**
+     * 判断字段是否受保护（不可删除），返回不可删原因；可删除时返回 null。
+     * <p>
+     * 三条判定依据：
+     * <ol>
+     *   <li>总设计 DESIGN BOUNDARIES 点名的匹配依据与 DQ 维度字段（按 field_code 白名单）</li>
+     *   <li>治理标记 is_key_field / is_match_field / is_dq_field = Y</li>
+     *   <li>必填主数据属性（客户类型 / BU / 国家 / 状态）——删除会破坏主档完整性</li>
+     * </ol>
+     */
+    private String protectedReason(MdField field) {
+        String byCode = PROTECTED_FIELDS.get(field.getFieldCode());
+        if (byCode != null) {
+            return byCode;
+        }
+        if ("Y".equals(field.getIsKeyField())) {
+            return "已标记为主键字段 is_key_field=Y";
+        }
+        if ("Y".equals(field.getIsMatchField())) {
+            return "已标记为匹配字段 is_match_field=Y";
+        }
+        if ("Y".equals(field.getIsDqField())) {
+            return "已标记为 DQ 评分字段 is_dq_field=Y";
+        }
+        return null;
     }
 
     /**
@@ -135,34 +287,66 @@ public class CmdPlatformServiceImpl implements ICmdPlatformService {
 
     /**
      * {@inheritDoc}
+     * <p>
+     * 版本列表按 md_field.version_no 聚合：
+     * <ul>
+     *   <li>状态：本版本存在已发布字段（status='0'）即 Current，否则 Draft</li>
+     *   <li>差异：与版本号顺序上的上一版本对比字段集（编码新增 / 属性变更），呼应总设计「形成状态、版本、差异和审计证据」</li>
+     *   <li>草稿创建时间：该版本字段最早的 create_time（克隆/新建版本线的时间）</li>
+     *   <li>发布时间：该版本已发布字段最新的 update_time</li>
+     * </ul>
      */
     @Override
     public List<PlatformVersionVo> selectVersionList() {
         List<MdField> fields = fieldMapper.selectList(Wrappers.lambdaQuery());
-        Map<String, Long> counter = new LinkedHashMap<>();
-        Map<String, Boolean> publishedFlag = new LinkedHashMap<>();
-        Map<String, java.time.LocalDateTime> publishedTime = new LinkedHashMap<>();
+        Map<String, List<MdField>> byVersion = new LinkedHashMap<>();
         for (MdField field : fields) {
             String version = StringUtils.blankToDefault(field.getVersionNo(), "v1.0");
-            counter.merge(version, 1L, Long::sum);
-            boolean isPublished = "0".equals(field.getStatus());
-            publishedFlag.merge(version, isPublished, Boolean::logicalOr);
-            if (isPublished && field.getUpdateTime() != null) {
-                publishedTime.merge(version, field.getUpdateTime(),
-                    (a, b) -> a.isAfter(b) ? a : b);
-            }
+            byVersion.computeIfAbsent(version, k -> new ArrayList<>()).add(field);
         }
+        // 按版本号升序计算差异（第一个版本为基线）
+        List<String> ordered = new ArrayList<>(byVersion.keySet());
+        ordered.sort(String::compareTo);
+        Map<String, String> diffText = new LinkedHashMap<>();
+        for (int i = 0; i < ordered.size(); i++) {
+            String version = ordered.get(i);
+            if (i == 0) {
+                diffText.put(version, "基线");
+                continue;
+            }
+            Map<String, String> prevSig = fieldSignatures(byVersion.get(ordered.get(i - 1)));
+            int added = 0;
+            int changed = 0;
+            for (Map.Entry<String, String> entry : fieldSignatures(byVersion.get(version)).entrySet()) {
+                String prev = prevSig.get(entry.getKey());
+                if (prev == null) {
+                    added++;
+                } else if (!prev.equals(entry.getValue())) {
+                    changed++;
+                }
+            }
+            diffText.put(version, added == 0 && changed == 0 ? "无变更"
+                : (added > 0 ? "新增 " + added : "") + (added > 0 && changed > 0 ? " · " : "") + (changed > 0 ? "变更 " + changed : ""));
+        }
+        java.time.format.DateTimeFormatter fmt = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
         List<PlatformVersionVo> list = new ArrayList<>();
-        counter.forEach((version, count) -> {
+        byVersion.forEach((version, versionFields) -> {
             PlatformVersionVo vo = new PlatformVersionVo();
             vo.setVersion(version);
-            vo.setRuleCount(count);
             // 状态由实际字段状态推导：本版本存在已发布字段即视为 Current，否则 Draft
-            vo.setStatus(Boolean.TRUE.equals(publishedFlag.get(version)) ? "Current" : "Draft");
-            if (publishedTime.get(version) != null) {
-                vo.setPublishedAt(publishedTime.get(version)
-                    .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
-            }
+            boolean hasPublished = versionFields.stream().anyMatch(f -> "0".equals(f.getStatus()));
+            vo.setStatus(hasPublished ? "Current" : "Draft");
+            vo.setDiff(diffText.getOrDefault(version, "—"));
+            // 草稿创建时间 = 本版本字段最早的 create_time
+            versionFields.stream().map(MdField::getCreateTime)
+                .filter(java.util.Objects::nonNull)
+                .min(java.time.LocalDateTime::compareTo)
+                .ifPresent(t -> vo.setDraftCreatedAt(t.format(fmt)));
+            // 发布时间 = 本版本已发布字段最新的 update_time
+            versionFields.stream().filter(f -> "0".equals(f.getStatus()))
+                .map(MdField::getUpdateTime).filter(java.util.Objects::nonNull)
+                .max(java.time.LocalDateTime::compareTo)
+                .ifPresent(t -> vo.setPublishedAt(t.format(fmt)));
             list.add(vo);
         });
         // 稳定排序：Current 优先、其次版本号倒序，便于演示阅读
@@ -173,6 +357,25 @@ public class CmdPlatformServiceImpl implements ICmdPlatformService {
             return b.getVersion().compareTo(a.getVersion());
         });
         return list;
+    }
+
+    /**
+     * 字段签名表：fieldCode → 属性摘要（名称/类型/必填/值集/层级/归属BU），用于版本差异对比
+     *
+     * @param fields 字段列表
+     * @return 编码到签名的映射
+     */
+    private Map<String, String> fieldSignatures(List<MdField> fields) {
+        Map<String, String> sig = new LinkedHashMap<>();
+        for (MdField f : fields) {
+            sig.put(f.getFieldCode(), StringUtils.blankToDefault(f.getFieldName(), "")
+                + "|" + StringUtils.blankToDefault(f.getDataType(), "")
+                + "|" + StringUtils.blankToDefault(f.getIsRequired(), "")
+                + "|" + StringUtils.blankToDefault(f.getValueSetCode(), "")
+                + "|" + StringUtils.blankToDefault(f.getScopeType(), "")
+                + "|" + StringUtils.blankToDefault(f.getOwnerBu(), ""));
+        }
+        return sig;
     }
 
     /**
