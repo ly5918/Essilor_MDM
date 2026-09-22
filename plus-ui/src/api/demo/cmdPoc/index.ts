@@ -54,6 +54,7 @@ import type {
   CmdIntegrationEndpointRow,
   IntegrationEndpointVO,
   CmdImportJobRow,
+  CmdImportStatsRow,
   CmdImportResultRow,
   CmdImportTemplateRow,
   CmdTemplateMappingRow,
